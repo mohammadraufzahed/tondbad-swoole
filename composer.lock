@@ -160,7 +160,8 @@
     "aliases": [],
     "minimum-stability": "dev",
     "stability-flags": {
-        "swoole/ide-helper": 20
+        "swoole/ide-helper": 20,
+        "nikic/fast-route": 20
     },
     "prefer-stable": false,
     "prefer-lowest": false,
