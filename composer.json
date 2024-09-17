@@ -32,6 +32,7 @@
     "php": ">=8.2",
     "ext-swoole": "*",
     "swoole/ide-helper": "dev-master",
-    "nikic/fast-route": "^2.0@dev"
+    "nikic/fast-route": "^2.0@dev",
+    "monolog/monolog": "^3.0@dev"
   }
 }
