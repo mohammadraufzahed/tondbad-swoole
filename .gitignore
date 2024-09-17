@@ -1,3 +1,20 @@
 composer.phar
 /vendor/
 *.log
+.vscode
+.idea
+
+# Ignore everything in the /generated directory
+/generated/*
+
+# Exclude (do not ignore) the TondbadSwoole and GPBMetadata/Internal directories
+!/generated/TondbadSwoole/
+!/generated/GPBMetadata/Internal/
+
+# Ensure all contents inside TondbadSwoole and GPBMetadata/Internal directories are not ignored
+/generated/TondbadSwoole/**
+/generated/GPBMetadata/Internal/**
+
+# Explicitly unignore all the files in these directories
+!/generated/TondbadSwoole/**/*
+!/generated/GPBMetadata/Internal/**/*
