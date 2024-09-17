@@ -1,0 +1,35 @@
+{
+  "name": "mohammadraufzahed/tondbad-swoole",
+  "description": "Tondbād - A lightweight and high-performance PHP framework built on OpenSwoole with routing, job workers, queue management, and gRPC support.",
+  "type": "library",
+  "keywords": [
+    "openswoole",
+    "php",
+    "framework",
+    "routing",
+    "job workers",
+    "queue",
+    "grpc",
+    "performance"
+  ],
+  "license": "MIT",
+  "autoload": {
+    "psr-4": {
+      "TondbadSwoole\\": "src/"
+    }
+  },
+  "authors": [
+    {
+      "name": "Mohammad Raufzahed",
+      "email": "mohammadraufzahed@protonmail.com"
+    }
+  ],
+  "scripts": {
+    "start": "php public/index.php"
+  },
+  "minimum-stability": "dev",
+  "require": {
+    "php": ">=8.2",
+    "ext-swoole": "*"
+  }
+}
