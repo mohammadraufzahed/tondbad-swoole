@@ -33,11 +33,9 @@ class App
         $this->container->singleton(Logger::class, function () {
             $logger = new Logger('swoole-app');
 
-            // Log to console using ConsoleHandler
             $logger->pushHandler(new StreamHandler('php://stdout', Logger::DEBUG));
 
-            // Additionally, log to a file
-            $logger->pushHandler(new StreamHandler(__DIR__ . '/../logs/app.log', Logger::DEBUG));
+            $logger->pushHandler(new StreamHandler('php://stderr', Logger::ERROR));
 
             return $logger;
         });
