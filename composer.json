@@ -30,6 +30,8 @@
   "minimum-stability": "dev",
   "require": {
     "php": ">=8.2",
-    "ext-swoole": "*"
+    "ext-swoole": "*",
+    "swoole/ide-helper": "dev-master",
+    "nikic/fast-route": "^2.0@dev"
   }
 }
