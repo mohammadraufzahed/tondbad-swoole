@@ -6,17 +6,21 @@ use FastRoute\RouteCollector;
 use FastRoute\DataGenerator\GroupCountBased as DataGenerator;
 use FastRoute\RouteParser\Std as RouteParser;
 use FastRoute\Dispatcher\GroupCountBased as Dispatcher;
+use Monolog\Logger;
 use Swoole\Http\Request;
 use Swoole\Http\Response;
+use Throwable;
 
 class Route
 {
     protected array $routes = [];
     protected Dispatcher $dispatcher;
+    protected readonly Logger $logger;
 
     public function __construct(
         protected readonly Container $container
     ) {
+        $this->logger = $this->container->make(Logger::class);
     }
 
     public function get(string $path, callable $handler)
@@ -70,21 +74,35 @@ class Route
 
     protected function callHandler(callable $handler, array $parameters)
     {
-        $reflection = new \ReflectionFunction($handler);
-        $dependencies = [];
+        try {
+            $reflection = new \ReflectionFunction($handler);
+            $dependencies = [];
 
 
-        foreach ($reflection->getParameters() as $param) {
-            $name = $param->getName();
-            $type = $param->getType();
-            if ($type && !$type->isBuiltin() && !in_array($name, ['request', 'response'])) {
-                $dependencies[] = $this->container->make($param->getType());
-            } else {
-                $dependencies[] = array_shift($parameters);
+            foreach ($reflection->getParameters() as $param) {
+                $name = $param->getName();
+                $type = $param->getType();
+                if ($type && !$type->isBuiltin() && !in_array($name, ['request', 'response'])) {
+                    $dependencies[] = $this->container->make($param->getType());
+                } else {
+                    $dependencies[] = array_shift($parameters);
+                }
             }
+
+
+            call_user_func_array($handler, $dependencies);
+        } catch (Throwable $e) {
+            $this->handleError($e, $dependencies[1]);
         }
+    }
 
+    protected function handleError(Throwable $e, Response $response)
+    {
+        // Log the error (could be logged to a file or monitoring system)
+        $this->logger->error($e);
 
-        call_user_func_array($handler, $dependencies);
+        // Respond with a 500 Internal Server Error message
+        $response->status(500);
+        $response->end('500 Internal Server Error: ' . $e->getMessage());
     }
 }
