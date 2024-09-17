@@ -12,9 +12,8 @@ require __DIR__ . '/../vendor/autoload.php';
 // Create the application with the container
 $app = App::create();
 
-// Create the container and bind services
-$app->container->singleton(ExampleService::class, function () {
-    return new ExampleService();
+$app->get('/throw_error', function (Request $request, Response $response) {
+    throw new Exception('Failed');
 });
 
 $app->get('/sum', function (Request $request, Response $response, SumService $sumService) {
