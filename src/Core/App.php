@@ -2,7 +2,8 @@
 
 namespace TondbadSwoole\Core;
 
-use OpenSwoole\Http\{Request, Response, Server};
+use OpenSwoole\Http\{Request, Response};
+use OpenSwoole\WebSocket\Server;
 use OpenSwoole\Process;
 use Monolog\Logger;
 use Monolog\Handler\StreamHandler;
@@ -128,6 +129,7 @@ class App
         $this->server->on('request', function (Request $request, Response $response) {
             $this->router->dispatch($request, $response);
         });
+        $this->server->on('message', function () {});
 
         // Start the Swoole server
         $this->logger->log('debug', "Server started on port: $port");
