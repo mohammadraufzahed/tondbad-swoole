@@ -15,7 +15,9 @@
   "license": "MIT",
   "autoload": {
     "psr-4": {
-      "TondbadSwoole\\": "src/"
+      "TondbadSwoole\\": "src/",
+      "TondbadExample\\": "generated/TondbadExample/",
+      "GPBMetadata\\": "generated/GPBMetadata/"
     }
   },
   "authors": [
@@ -25,14 +27,22 @@
     }
   ],
   "scripts": {
-    "start": "php public/index.php"
+    "server": "php public/server.php",
+    "grpc": "php public/grpc.php",
+    "compile-proto": [
+      "sh -c 'protoc $(find ./protos -name \"*.proto\") --proto_path=./protos --php_out=./generated --openswoole-grpc_out=./generated --plugin=protoc-gen-grpc=$(which protoc-gen-openswoole-grpc)'"
+    ]
   },
   "minimum-stability": "dev",
   "require": {
     "php": ">=8.2",
-    "ext-swoole": "*",
-    "swoole/ide-helper": "dev-master",
+    "ext-openswoole": "*",
     "nikic/fast-route": "^2.0@dev",
-    "monolog/monolog": "^3.0@dev"
+    "monolog/monolog": "^3.0@dev",
+    "grpc/grpc": "dev-master",
+    "google/protobuf": "dev-master",
+    "openswoole/core": "22.1.5",
+    "openswoole/grpc": "dev-master",
+    "openswoole/ide-helper": "dev-master"
   }
 }
