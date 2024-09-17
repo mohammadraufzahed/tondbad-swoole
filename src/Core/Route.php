@@ -2,6 +2,7 @@
 
 namespace TondbadSwoole\Core;
 
+use Exception;
 use FastRoute\RouteCollector;
 use FastRoute\DataGenerator\GroupCountBased as DataGenerator;
 use FastRoute\RouteParser\Std as RouteParser;
@@ -13,6 +14,18 @@ use Throwable;
 
 class Route
 {
+    private const ALLOWED_METHODS = [
+        'GET',
+        'POST',
+        'PUT',
+        'DELETE',
+        'PATCH',
+        'OPTIONS',
+        'HEAD',
+        'CONNECT',
+        'TRACE'
+    ];
+
     protected array $routes = [];
     protected Dispatcher $dispatcher;
     protected readonly Logger $logger;
@@ -23,14 +36,11 @@ class Route
         $this->logger = $this->container->make(Logger::class);
     }
 
-    public function get(string $path, callable $handler)
+    public function addRoute(string $method, string $path, callable $handler)
     {
-        $this->routes[] = ['GET', $path, $handler];
-    }
-
-    public function post(string $path, callable $handler)
-    {
-        $this->routes[] = ['POST', $path, $handler];
+        if (!in_array($method, self::ALLOWED_METHODS))
+            throw new Exception("$method method is not supported");
+        $this->routes[] = [$method, $path, $handler];
     }
 
     public function dispatch(Request $request, Response $response)

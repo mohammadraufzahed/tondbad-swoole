@@ -2,11 +2,10 @@
 
 namespace TondbadSwoole\Core;
 
-use Swoole\Http\{Request, Response, Server};
-use Swoole\Process;
+use OpenSwoole\Http\{Request, Response, Server};
+use OpenSwoole\Process;
 use Monolog\Logger;
 use Monolog\Handler\StreamHandler;
-use Monolog\Handler\ConsoleHandler;
 
 class App
 {
@@ -62,14 +61,33 @@ class App
 
     public function get(string $path, callable $handler)
     {
-        $this->router->get($path, $handler);
+        $this->router->addRoute('GET', $path, $handler);
     }
 
     public function post(string $path, callable $handler)
     {
-        $this->router->post($path, $handler);
+        $this->router->addRoute('POST', $path, $handler);
     }
-
+    public function put(string $path, callable $handler)
+    {
+        $this->router->addRoute('PUT', $path, $handler);
+    }
+    public function delete(string $path, callable $handler)
+    {
+        $this->router->addRoute('DELETE', $path, $handler);
+    }
+    public function patch(string $path, callable $handler)
+    {
+        $this->router->addRoute('PATCH', $path, $handler);
+    }
+    public function options(string $path, callable $handler)
+    {
+        $this->router->addRoute('OPTIONS', $path, $handler);
+    }
+    public function addRoute(string $method, string $path, callable $handler)
+    {
+        $this->router->addRoute($method, $path, $handler);
+    }
     /**
      * Gracefully shutdown the server on system signals.
      */

@@ -1,38 +1,43 @@
 <?php
 
-use TondbadSwoole\Core\App;
-use TondbadSwoole\Core\Container;
-use TondbadSwoole\Services\ExampleService;
-use Swoole\Http\Request;
-use Swoole\Http\Response;
-use TondbadSwoole\Services\SumService;
+use OpenSwoole\Process;
 
-require __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 
-// Create the application with the container
-$app = App::create();
+// Function to start a server in a separate process
+function startServer($script)
+{
+    $process = new Process(function (Process $worker) use ($script) {
+        // Execute the PHP script for the server
+        $worker->exec('/usr/bin/php', [$script]);
+    }, false, false); // Set redirect_stdin_stdout and create_pipe to false
+    $process->start();
+    return $process;
+}
 
-$app->get('/throw_error', function (Request $request, Response $response) {
-    throw new Exception('Failed');
+// Start the HTTP server (server.php)
+$process1 = startServer(__DIR__ . '/server.php');
+
+// Start the gRPC server (grpc.php)
+$process2 = startServer(__DIR__ . '/grpc.php');
+
+// Array to hold the processes
+$processes = [$process1, $process2];
+
+// Handle signals for graceful shutdown
+Process::signal(SIGTERM, function () use ($processes) {
+    foreach ($processes as $process) {
+        Process::kill($process->pid, SIGTERM);
+    }
+    exit;
 });
 
-$app->get('/sum', function (Request $request, Response $response, SumService $sumService) {
-    $a = (int) $request->get['a'];
-    $b = (int) $request->get['b'];
-    return $response->end($sumService->sum($a, $b));
-});
-
-// Define a GET route that injects ExampleService automatically
-$app->get('/hello/{name}', function (Request $request, Response $response, string $name, ExampleService $exampleService) {
-    // Use ExampleService to generate the greeting
-    $greeting = $exampleService->getGreeting($name);
-    $response->end($greeting);
-});
-
-// Define a POST route
-$app->post('/submit', function (Request $request, Response $response) {
-    $response->end("Form Submitted!");
-});
-
-// Run the application
-$app->run();
+// Keep the main script running and wait for child processes
+while (true) {
+    $ret = Process::wait(true);
+    if ($ret) {
+        // One of the child processes has exited
+        echo "Process {$ret['pid']} exited with code {$ret['code']}\n";
+        // Optionally, restart the process or handle the exit
+    }
+}
