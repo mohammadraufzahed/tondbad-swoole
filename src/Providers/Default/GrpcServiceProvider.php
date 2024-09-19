@@ -15,7 +15,7 @@ class GrpcServiceProvider extends ServiceProvider
         if (Config::get('app.type', 'http') !== 'grpc')
             return;
         $container->singleton(GrpcServer::class, function () {
-            $server = new GrpcServer('0.0.0.0', Config::get('app.port', 8001));
+            $server = new GrpcServer('0.0.0.0', Config::get('app.grpc.port', 8001));
 
             // Register middlewares
             $server->addMiddleware(new LoggingMiddleware());

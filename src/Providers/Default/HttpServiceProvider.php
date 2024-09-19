@@ -17,7 +17,7 @@ class HttpServiceProvider extends ServiceProvider
         if (Config::get('app.type', 'http') !== 'http')
             return;
         $container->singleton(HttpServer::class, function () use ($container) {
-            $server = new HttpServer('0.0.0.0', (int) Config::get('app.port', 8000));
+            $server = new HttpServer('0.0.0.0', (int) Config::get('app.http.port', 8000));
 
             $this->setupRouter($server, $container);
 
