@@ -14,8 +14,10 @@ class HttpServiceProvider extends ServiceProvider
 {
     public function register(Container $container): void
     {
+        if (Config::get('app.type', 'http') !== 'http')
+            return;
         $container->singleton(HttpServer::class, function () use ($container) {
-            $server = new HttpServer('0.0.0.0', (int)Config::get('app.port', 8000));
+            $server = new HttpServer('0.0.0.0', (int) Config::get('app.port', 8000));
 
             $this->setupRouter($server, $container);
 
@@ -39,6 +41,8 @@ class HttpServiceProvider extends ServiceProvider
 
     public function boot(Container $container): void
     {
+        if (Config::get('app.type', 'http') !== 'http')
+            return;
         $server = $container->make(HttpServer::class);
         $logger = $container->make(Logger::class);
 

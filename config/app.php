@@ -2,7 +2,7 @@
 
 return [
     'name' => 'Tondbad Framework',
-    'type' => 'http',
+    'type' => 'grpc',
     'http' => [
         'port' => 9501,
     ],
