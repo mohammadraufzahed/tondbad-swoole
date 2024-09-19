@@ -12,6 +12,7 @@ use OpenSwoole\Http\Request;
 use OpenSwoole\Http\Response;
 use ReflectionClass;
 use ReflectionFunction;
+use ReflectionFunctionAbstract;
 use ReflectionMethod;
 use Throwable;
 use TondbadSwoole\Core\Container;
@@ -102,7 +103,7 @@ class Route implements RouteInterface
         }
     }
 
-    public static function addRoute(string $method, string $path, callable $handler): void
+    public static function addRoute(string $method, string $path, array|callable $handler): void
     {
         if (!in_array($method, self::ALLOWED_METHODS)) {
             throw new Exception("$method method is not supported");
@@ -110,26 +111,41 @@ class Route implements RouteInterface
         self::$routes[] = [$method, $path, $handler];
     }
 
-    protected function callHandler(callable $handler, array $parameters): void
+    protected function callHandler(array|callable $handler, array $parameters): void
     {
         try {
-            $reflection = new ReflectionFunction($handler);
-            $dependencies = [];
+            if (is_array($handler) && count($handler) === 2) {
+                [$class, $method] = $handler;
+                $instance = $this->container->make($class);
+                $reflection = new ReflectionMethod($class, $method);
+                $dependencies = $this->resolveDependencies($reflection, $parameters);
+                $reflection->invokeArgs($instance, $dependencies);
+            } else {
+                $reflection = new ReflectionFunction($handler);
+                $dependencies = $this->resolveDependencies($reflection, $parameters);
 
-            foreach ($reflection->getParameters() as $param) {
-                $name = $param->getName();
-                $type = $param->getType();
-                if ($type && !$type->isBuiltin() && !in_array($name, ['request', 'response'])) {
-                    $dependencies[] = $this->container->make($param->getType());
-                } else {
-                    $dependencies[] = array_shift($parameters);
-                }
+                $reflection->invokeArgs($dependencies);
             }
-
-            call_user_func_array($handler, $dependencies);
         } catch (Throwable $e) {
             $this->handleError($e, $dependencies[1]);
         }
+    }
+
+    protected function resolveDependencies(ReflectionFunctionAbstract $reflection, array $parameters): array
+    {
+        $dependencies = [];
+
+        foreach ($reflection->getParameters() as $param) {
+            $name = $param->getName();
+            $type = $param->getType();
+            if (!$type?->isBuiltin() && !in_array($name, ['request', 'response'])) {
+                echo $type . "\n";
+                $dependencies[$name] = $this->container->make($type);
+            } else
+                $dependencies[$name] = array_shift($parameters);
+        }
+
+        return $dependencies;
     }
 
     protected function handleError(Throwable $e, Response $response): void
