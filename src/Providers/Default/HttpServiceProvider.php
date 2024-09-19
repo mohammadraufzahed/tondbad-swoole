@@ -7,7 +7,7 @@ use OpenSwoole\Http\{Request, Response};
 use OpenSwoole\WebSocket\Server as HttpServer;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
-use TondbadSwoole\Core\Route;
+use TondbadSwoole\Core\Route\Route;
 use TondbadSwoole\Providers\Contracts\ServiceProvider;
 
 class HttpServiceProvider extends ServiceProvider

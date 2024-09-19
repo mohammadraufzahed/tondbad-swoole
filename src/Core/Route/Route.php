@@ -1,18 +1,24 @@
 <?php
 
-namespace TondbadSwoole\Core;
+namespace TondbadSwoole\Core\Route;
 
 use Exception;
-use FastRoute\RouteCollector;
 use FastRoute\DataGenerator\GroupCountBased as DataGenerator;
-use FastRoute\RouteParser\Std as RouteParser;
 use FastRoute\Dispatcher\GroupCountBased as Dispatcher;
+use FastRoute\RouteCollector;
+use FastRoute\RouteParser\Std as RouteParser;
 use Monolog\Logger;
 use OpenSwoole\Http\Request;
 use OpenSwoole\Http\Response;
+use ReflectionClass;
+use ReflectionFunction;
+use ReflectionMethod;
 use Throwable;
+use TondbadSwoole\Core\Container;
+use TondbadSwoole\Core\Route\Attributes\Endpoint;
+use TondbadSwoole\Core\Route\Contracts\RouteInterface;
 
-class Route
+class Route implements RouteInterface
 {
     private const ALLOWED_METHODS = [
         'GET',
@@ -26,25 +32,38 @@ class Route
         'TRACE'
     ];
 
-    protected array $routes = [];
+    protected static array $routes = [];
     protected Dispatcher $dispatcher;
     protected readonly ?Logger $logger;
     protected readonly Container $container;
 
-    public function __construct(
-    ) {
-        $this->container = Container::create();
-        // $this->logger = $this->container->make(Logger::class);
-    }
-
-    public function addRoute(string $method, string $path, callable $handler)
+    public function __construct()
     {
-        if (!in_array($method, self::ALLOWED_METHODS))
-            throw new Exception("$method method is not supported");
-        $this->routes[] = [$method, $path, $handler];
+        $this->container = Container::create();
+        $this->logger = $this->container->make(Logger::class);
     }
 
-    public function dispatch(Request $request, Response $response)
+    public static function registerAnnotatedRoutes(array $classNames): void
+    {
+        foreach ($classNames as $className) {
+            $reflection = new ReflectionClass($className);
+
+            foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+                $attributes = $method->getAttributes(Endpoint::class);
+
+                foreach ($attributes as $attribute) {
+                    $instance = $attribute->newInstance();
+                    self::addRoute(
+                        $instance->method,
+                        $instance->path,
+                        [$className, $method->getName()]
+                    );
+                }
+            }
+        }
+    }
+
+    public function dispatch(Request $request, Response $response): void
     {
         $httpMethod = strtoupper($request->server['request_method']);
         $uri = $request->server['request_uri'];
@@ -56,7 +75,7 @@ class Route
 
         $routeCollector = new RouteCollector(new RouteParser(), new DataGenerator());
 
-        foreach ($this->routes as $route) {
+        foreach (self::$routes as $route) {
             [$method, $path, $handler] = $route;
             $routeCollector->addRoute($method, $path, $handler);
         }
@@ -83,12 +102,19 @@ class Route
         }
     }
 
-    protected function callHandler(callable $handler, array $parameters)
+    public static function addRoute(string $method, string $path, callable $handler): void
+    {
+        if (!in_array($method, self::ALLOWED_METHODS)) {
+            throw new Exception("$method method is not supported");
+        }
+        self::$routes[] = [$method, $path, $handler];
+    }
+
+    protected function callHandler(callable $handler, array $parameters): void
     {
         try {
-            $reflection = new \ReflectionFunction($handler);
+            $reflection = new ReflectionFunction($handler);
             $dependencies = [];
-
 
             foreach ($reflection->getParameters() as $param) {
                 $name = $param->getName();
@@ -100,19 +126,16 @@ class Route
                 }
             }
 
-
             call_user_func_array($handler, $dependencies);
         } catch (Throwable $e) {
             $this->handleError($e, $dependencies[1]);
         }
     }
 
-    protected function handleError(Throwable $e, Response $response)
+    protected function handleError(Throwable $e, Response $response): void
     {
-        // Log the error (could be logged to a file or monitoring system)
         $this->logger?->error($e);
 
-        // Respond with a 500 Internal Server Error message
         $response->status(500);
         $response->end('500 Internal Server Error: ' . $e->getMessage());
     }

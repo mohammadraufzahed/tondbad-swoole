@@ -18,3 +18,11 @@ composer.phar
 # Explicitly unignore all the files in these directories
 !/generated/TondbadSwoole/**/*
 !/generated/GPBMetadata/Internal/**/*
+
+/public export-ignore
+/protos export-ignore
+/generated export-ignore
+/tests export-ignore
+/.gitignore export-ignore
+/.gitattributes export-ignore
+/phpunit.xml export-ignore

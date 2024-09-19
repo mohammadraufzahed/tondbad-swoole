@@ -2,12 +2,16 @@
 
 namespace TondbadSwoole\Core;
 
-use ReflectionClass;
 use Exception;
+use ReflectionClass;
 use ReflectionParameter;
 
 class Container
 {
+    /**
+     * @var Container|null
+     */
+    private static ?Container $instance = null;
     /**
      * @var array<string, mixed>
      */
@@ -16,10 +20,13 @@ class Container
      * @var array<string, mixed>
      */
     protected array $instances = [];
-    /**
-     * @var Container|null 
-     */
-    private static ?Container $instance = null;
+
+    public static function create(): self
+    {
+        if (!self::$instance)
+            self::$instance = new self;
+        return self::$instance;
+    }
 
     /**
      * Bind a service or class into the container.
@@ -40,7 +47,7 @@ class Container
      * @param callable|string $concrete
      * @return void
      */
-    public function singleton(string $abstract, $concrete)
+    public function singleton(string $abstract, callable|string $concrete)
     {
         $this->bindings[$abstract] = function () use ($concrete) {
             static $instance;
@@ -49,22 +56,6 @@ class Container
             }
             return $instance;
         };
-    }
-
-    /**
-     * Resolve a service or class from the container.
-     * @template T
-     * @param class-string<T> $abstract
-     * @return T
-     * @throws Exception
-     */
-    public function make(string $abstract)
-    {
-        if (isset($this->bindings[$abstract])) {
-            return is_callable($this->bindings[$abstract]) ? ($this->bindings[$abstract])() : $this->bindings[$abstract];
-        }
-
-        return $this->resolve($abstract);
     }
 
     /**
@@ -103,10 +94,19 @@ class Container
         return $reflector->newInstanceArgs($dependencies);
     }
 
-    public static function create(): self
+    /**
+     * Resolve a service or class from the container.
+     * @template T
+     * @param class-string<T> $abstract
+     * @return T
+     * @throws Exception
+     */
+    public function make(string $abstract)
     {
-        if (!self::$instance)
-            self::$instance = new self;
-        return self::$instance;
+        if (isset($this->bindings[$abstract])) {
+            return is_callable($this->bindings[$abstract]) ? ($this->bindings[$abstract])() : $this->bindings[$abstract];
+        }
+
+        return $this->resolve($abstract);
     }
 }
