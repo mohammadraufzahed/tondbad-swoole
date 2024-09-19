@@ -1,12 +1,9 @@
 <?php
-use TondbadSwoole\Providers\Default\{
-    GrpcServiceProvider,
-    HttpServiceProvider,
-    LoggerServiceProvider
-};
+
+use TondbadSwoole\Providers\Default\{HttpServiceProvider, LoggerServiceProvider};
 
 return [
     LoggerServiceProvider::class,
     HttpServiceProvider::class,
-    GrpcServiceProvider::class
+//    GrpcServiceProvider::class
 ];

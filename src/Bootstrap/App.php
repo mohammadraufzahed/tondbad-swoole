@@ -6,13 +6,13 @@ use OpenSwoole\GRPC\Server as GrpcServer;
 use OpenSwoole\WebSocket\Server as HttpServer;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
-use TondbadSwoole\Providers\Contracts\ServiceProviderInterface;
+use TondbadSwoole\Providers\Contracts\ServiceProvider;
 
 class App
 {
     private readonly Container $container;
     /**
-     * @var ServiceProviderInterface[]
+     * @var ServiceProvider[]
      */
     private readonly array $providers;
 
@@ -53,5 +53,6 @@ class App
             $grpcServer = $this->container->make(GrpcServer::class);
             $grpcServer->start();
         }
+
     }
 }

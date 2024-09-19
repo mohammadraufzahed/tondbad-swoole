@@ -1,10 +1,20 @@
 <?php
 
-namespace TondbadSwoole\Traits;
+namespace TondbadSwoole\Providers\Contracts;
+
 use TondbadSwoole\Core\Container;
 
-trait ServiceProviderEventsTrait
+class ServiceProvider
 {
+
+    public function register(Container $container): void
+    {
+    }
+
+    public function boot(Container $container): void
+    {
+    }
+
     public function beforeRegister(Container $container)
     {
     }

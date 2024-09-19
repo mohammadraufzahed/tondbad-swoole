@@ -5,9 +5,9 @@ namespace TondbadSwoole\Providers\Default;
 use OpenSwoole\GRPC\Middleware\{LoggingMiddleware, TraceMiddleware};
 use OpenSwoole\GRPC\Server as GrpcServer;
 use TondbadSwoole\Core\{Config, Container};
-use TondbadSwoole\Providers\Contracts\ServiceProviderInterface;
+use TondbadSwoole\Providers\Contracts\ServiceProvider;
 
-class GrpcServiceProvider implements ServiceProviderInterface
+class GrpcServiceProvider extends ServiceProvider
 {
 
     public function register(Container $container): void

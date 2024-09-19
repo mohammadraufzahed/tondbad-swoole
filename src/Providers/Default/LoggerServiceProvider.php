@@ -1,14 +1,15 @@
 <?php
 
 namespace TondbadSwoole\Providers\Default;
+
 use Monolog\Handler\StreamHandler;
 use Monolog\Level;
 use Monolog\Logger;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
-use TondbadSwoole\Providers\Contracts\ServiceProviderInterface;
+use TondbadSwoole\Providers\Contracts\ServiceProvider;
 
-class LoggerServiceProvider implements ServiceProviderInterface
+class LoggerServiceProvider extends ServiceProvider
 {
     public function register(Container $container): void
     {
@@ -21,9 +22,5 @@ class LoggerServiceProvider implements ServiceProviderInterface
             $logger->pushHandler(new StreamHandler('php://stderr', Level::Error));
             return $logger;
         });
-    }
-
-    public function boot(Container $container): void
-    {
     }
 }
