@@ -41,7 +41,7 @@
     "monolog/monolog": "^3.0@dev",
     "grpc/grpc": "dev-master",
     "google/protobuf": "dev-master",
-    "openswoole/core": "22.1.5",
+    "openswoole/core": "^22.1.5",
     "openswoole/grpc": "dev-master",
     "openswoole/ide-helper": "dev-master"
   }
