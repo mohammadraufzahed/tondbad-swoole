@@ -81,7 +81,7 @@ class Route implements RouteInterface
             $routeCollector->addRoute($method, $path, $handler);
         }
 
-        $this->dispatcher = new Dispatcher($routeCollector->getData());
+        $this->dispatcher = new Dispatcher($routeCollector->processedRoutes());
         $routeInfo = $this->dispatcher->dispatch($httpMethod, $uri);
 
         switch ($routeInfo[0]) {
