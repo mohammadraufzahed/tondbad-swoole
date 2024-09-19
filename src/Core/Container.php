@@ -4,17 +4,29 @@ namespace TondbadSwoole\Core;
 
 use ReflectionClass;
 use Exception;
+use ReflectionParameter;
 
 class Container
 {
+    /**
+     * @var array<string, mixed>
+     */
     protected array $bindings = [];
+    /**
+     * @var array<string, mixed>
+     */
     protected array $instances = [];
+    /**
+     * @var Container|null 
+     */
+    private static ?Container $instance = null;
 
     /**
      * Bind a service or class into the container.
      *
      * @param string $abstract
      * @param mixed $concrete
+     * @return void
      */
     public function bind(string $abstract, $concrete)
     {
@@ -26,6 +38,7 @@ class Container
      *
      * @param string $abstract
      * @param callable|string $concrete
+     * @return void
      */
     public function singleton(string $abstract, $concrete)
     {
@@ -40,9 +53,10 @@ class Container
 
     /**
      * Resolve a service or class from the container.
-     *
-     * @param string $abstract
-     * @return mixed
+     * @template T
+     * @param class-string<T> $abstract
+     * @return T
+     * @throws Exception
      */
     public function make(string $abstract)
     {
@@ -55,9 +69,9 @@ class Container
 
     /**
      * Automatically resolve a class's dependencies using reflection.
-     *
-     * @param string $class
-     * @return mixed
+     * @template T
+     * @param class-string<T> $class
+     * @return T
      * @throws Exception
      */
     protected function resolve(string $class)
@@ -78,10 +92,21 @@ class Container
 
         // Otherwise, resolve all dependencies recursively
         $parameters = $constructor->getParameters();
-        $dependencies = array_map(function ($parameter) {
-            return $this->make($parameter->getType()->getName());
+        $dependencies = array_map(function (ReflectionParameter $parameter) {
+            $type = $parameter->getType();
+            if (!$type || $type->isBuiltin()) {
+                throw new Exception("Cannot resolve non-class type: " . $parameter->getName());
+            }
+            return $this->make($type->getName());
         }, $parameters);
 
         return $reflector->newInstanceArgs($dependencies);
+    }
+
+    public static function create(): self
+    {
+        if (!self::$instance)
+            self::$instance = new self;
+        return self::$instance;
     }
 }

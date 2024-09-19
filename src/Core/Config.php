@@ -10,17 +10,33 @@ class Config
     protected static array $config = [];
 
     /**
-     * Load configuration values into the static config array.
-     *
-     * @param array $config Optional array of default config values
+     * @var array $loadedFiles Keeps track of loaded configuration files
      */
-    public static function load(array $config = [])
+    protected static array $loadedFiles = [];
+
+    /**
+     * Load configuration values from files or arrays into the static config array.
+     * This function merges both framework and project config files.
+     *
+     * @param string $file The config file name (e.g., 'app')
+     */
+    protected static function load(string $file)
     {
-        self::$config = array_merge(self::$config, $config);
+        // Load framework config
+        $frameworkConfigPath = __DIR__ . "/../../config/{$file}.php";
+        $projectConfigPath = __DIR__ . "/../../../../config/{$file}.php"; // Assuming the project config is in a higher directory
+
+        $frameworkConfig = file_exists($frameworkConfigPath) ? require $frameworkConfigPath : [];
+        $projectConfig = file_exists($projectConfigPath) ? require $projectConfigPath : [];
+
+        // Merge project config to override framework defaults
+        self::$config[$file] = array_merge($frameworkConfig, $projectConfig);
+        self::$loadedFiles[] = $file; // Mark file as loaded
     }
 
     /**
      * Get a configuration value. If it doesn't exist, return the default value.
+     * Automatically loads the config file if it hasn't been loaded yet.
      *
      * @param string $key The configuration key (e.g., 'app.name')
      * @param mixed $default The default value if the key doesn't exist
@@ -28,12 +44,21 @@ class Config
      */
     public static function get(string $key, $default = null)
     {
+        // Split the key by dot notation (e.g., 'app.name' -> 'app', 'name')
+        $segments = explode('.', $key);
+        $file = $segments[0]; // The first part of the key is the file name (e.g., 'app')
+
+        // Check if the config file has been loaded, if not, load it
+        if (!in_array($file, self::$loadedFiles)) {
+            self::load($file);
+        }
+
         // Check if the config key exists in environment variables first
-        if ($envValue = getenv($key)) {
+        if ($envValue = getenv(self::convertDotNotationToEnvKey($key))) {
             return $envValue;
         }
 
-        // Otherwise, fallback to config array
+        // Fallback to config array
         return self::getFromArray($key, self::$config, $default);
     }
 
@@ -45,6 +70,14 @@ class Config
      */
     public static function set(string $key, $value)
     {
+        $segments = explode('.', $key);
+        $file = $segments[0]; // First part is the file name (e.g., 'app')
+
+        // Ensure the file is loaded first
+        if (!in_array($file, self::$loadedFiles)) {
+            self::load($file);
+        }
+
         self::setInArray($key, $value, self::$config);
     }
 
@@ -95,5 +128,16 @@ class Config
         }
 
         $array[array_shift($keys)] = $value;
+    }
+
+    /**
+     * Convert dot notation config key to environment variable format.
+     *
+     * @param string $key
+     * @return string
+     */
+    protected static function convertDotNotationToEnvKey(string $key): string
+    {
+        return strtoupper(str_replace('.', '_', $key));
     }
 }

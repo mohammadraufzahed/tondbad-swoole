@@ -28,12 +28,13 @@ class Route
 
     protected array $routes = [];
     protected Dispatcher $dispatcher;
-    protected readonly Logger $logger;
+    protected readonly ?Logger $logger;
+    protected readonly Container $container;
 
     public function __construct(
-        protected readonly Container $container
     ) {
-        $this->logger = $this->container->make(Logger::class);
+        $this->container = Container::create();
+        // $this->logger = $this->container->make(Logger::class);
     }
 
     public function addRoute(string $method, string $path, callable $handler)
@@ -109,7 +110,7 @@ class Route
     protected function handleError(Throwable $e, Response $response)
     {
         // Log the error (could be logged to a file or monitoring system)
-        $this->logger->error($e);
+        $this->logger?->error($e);
 
         // Respond with a 500 Internal Server Error message
         $response->status(500);
