@@ -127,7 +127,7 @@ class Route implements RouteInterface
                 $reflection->invokeArgs($dependencies);
             }
         } catch (Throwable $e) {
-            $this->handleError($e, $dependencies[1]);
+            $this->handleError($e, $dependencies['response']);
         }
     }
 
