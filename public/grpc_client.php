@@ -5,12 +5,13 @@ use OpenSwoole\Constant;
 use OpenSwoole\GRPC\Client;
 use TondbadExample\GreetingServiceClient;
 use TondbadExample\HelloRequest;
+use OpenSwoole\Coroutine;
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-co::set(['log_level' => Constant::LOG_ERROR]);
+Coroutine::set(['log_level' => Constant::LOG_ERROR]);
 
-co::run(function () {
+Coroutine::run(function () {
     $conn = (new Client('127.0.0.1', port: 8080))->connect();
     $client = new GreetingServiceClient($conn);
     $message = new HelloRequest();
