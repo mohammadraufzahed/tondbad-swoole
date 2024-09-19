@@ -1,104 +1,150 @@
-
 # TondbadSwoole
 
-**TondbadSwoole** is a custom PHP framework built on **Swoole** to create high-performance asynchronous web applications. It includes routing, dependency injection, graceful shutdowns, and logging using **Monolog** for both console and file outputs.
+**TondbadSwoole** is a high-performance, lightweight PHP framework built on **OpenSwoole** for creating asynchronous web
+applications, microservices, and gRPC servers. It offers a robust routing system, dependency injection, and support for
+gRPC, making it an ideal choice for modern PHP applications.
 
 ## Features
 
-- **Asynchronous HTTP Server** powered by Swoole
-- **FastRoute** based routing system
-- **Dependency Injection** through a custom container
-- **Graceful Shutdown** for handling system signals (SIGTERM, SIGINT)
-- **Monolog Integration** for logging to both console and log files
+- Asynchronous HTTP Server powered by OpenSwoole.
+- FastRoute based routing system with attribute-based route definitions.
+- Dependency Injection using a custom container for managing services and configurations.
+- gRPC Support for building high-performance microservices.
+- Monolog Integration for comprehensive logging to console and files.
+- Graceful Shutdown to handle system signals (SIGTERM, SIGINT) and ensure smooth termination.
 
 ## Requirements
 
 - PHP 8.2 or higher
-- Swoole extension
+- OpenSwoole extension
 - Composer
 
 ## Installation
 
-1. Clone the repository:
+1. **Clone the repository**:
 
    ```bash
-   git clone https://github.com/yourusername/tondbadswoole.git
-   cd tondbadswoole
+   git clone https://github.com/yourusername/tondbad-swoole.git
+   cd tondbad-swoole
    ```
 
-2. Install dependencies using **Composer**:
+2. **Install dependencies using Composer**:
 
    ```bash
    composer install
    ```
 
-3. Make sure **Swoole** is installed:
+3. **Install OpenSwoole**:
 
    ```bash
-   pecl install swoole
+   pecl install openswoole
    ```
 
-4. Configure the environment:
-   - By default, the server runs on port `8000`. You can configure the port by setting the `PORT` environment variable in a `.env` file.
+4. **Configure the environment**:
+    - Create a `.env` file in the root directory and configure necessary settings. For example:
 
-   Example `.env`:
    ```bash
    PORT=8000
+   APP_ENV=local
+   APP_DEBUG=true
    ```
 
 ## Usage
 
-To start the Swoole server, run the following command:
+### Running the HTTP Server
+
+To start the HTTP server, run the following command:
 
 ```bash
-php public/index.php
+composer server
 ```
 
-Once the server starts, it will listen on the configured port (default: `8000`).
+This will start the OpenSwoole server on the configured port (default: `8000`).
 
-### Available Routes
+### Running the gRPC Server
 
-You can define routes in `public/index.php` like this:
+To start the gRPC server, use the command:
+
+```bash
+composer grpc
+```
+
+This will start the gRPC server for handling gRPC requests.
+
+## Defining Routes
+
+Routes can be defined using PHP 8 attributes within your controllers. Here is an example of a route definition using the
+`#[Endpoint]` attribute:
 
 ```php
-$app = TondbadSwoole\Core\App::create();
+namespace App\Controllers;
 
-// Define a GET route
-$app->get('/hello/{name}', function (Request $request, Response $response, string $name, ExampleService $exampleService) {
-    $greeting = $exampleService->getGreeting($name);
-    $response->end($greeting);
-});
+use TondbadSwoole\Core\Route\Attributes\Endpoint;
+use OpenSwoole\Http\Request;
+use OpenSwoole\Http\Response;
 
-// Run the application
-$app->run();
+class HomeController
+{
+    #[Endpoint('GET', '/')]
+    public function index(Request $request, Response $response)
+    {
+        $response->end('Welcome to TondbadSwoole!');
+    }
+
+    #[Endpoint('POST', '/submit')]
+    public function submit(Request $request, Response $response)
+    {
+        $response->end('Form Submitted!');
+    }
+}
 ```
 
-In this example, a simple route `/hello/{name}` is defined, and a greeting message is returned based on the `name` parameter.
+### Registering Routes
 
-### Graceful Shutdown
+In your configuration file (`config/routes.php`), list the classes containing route definitions:
 
-The server gracefully shuts down when receiving `SIGINT` (`Ctrl+C`) or `SIGTERM` signals. This prevents abrupt termination of the application and allows ongoing requests to complete before stopping the server.
+```php
+return [
+    \App\Controllers\HomeController::class,
+    \App\Controllers\UserController::class,
+];
+```
 
 ## Logging
 
-This project uses **Monolog** for logging:
+TondbadSwoole uses **Monolog** for logging:
 
-- Logs are output to the console (`php://stdout`) and stored in a file (`logs/app.log`).
-- You can modify the logging configuration in the `App.php` file.
-
-Example log message when starting the server:
-
-```bash
-[2024-09-17 10:34:56] swoole-app.INFO: Starting Swoole server on port: 8000 [] []
-```
+- Logs are written to the console (`php://stdout`) and stored in a file (`logs/app.log`).
+- You can configure the logging settings in the `LoggerServiceProvider`.
 
 ### Log Levels
 
-The default log level is `DEBUG`, which captures all log levels. You can change the log level by modifying `StreamHandler` in the `setupLogger()` method.
+The default log level is `DEBUG`, capturing all levels of logs. You can change this level in the logger configuration.
+
+## Graceful Shutdown
+
+The server will gracefully shut down on receiving `SIGINT` (`Ctrl+C`) or `SIGTERM` signals, allowing ongoing requests to
+complete before stopping the server.
+
+## Compilation of Protocol Buffers (for gRPC)
+
+To compile `.proto` files, run the following command:
+
+```bash
+composer compile-proto
+```
+
+This command will generate the necessary PHP files for gRPC communication.
+
+## Coming Soon
+
+- Background Job Processing: The next version will include support for background job processing using OpenSwoole's
+  TaskWorker, allowing you to handle long-running tasks efficiently in the background.
+- Queue Management: Enhanced queue management for dispatching and handling background tasks.
 
 ## Contributing
 
-Feel free to submit issues or pull requests to improve this project.
+Feel free to submit issues or pull requests to improve this project. Contributions are welcome!
 
 ## License
 
