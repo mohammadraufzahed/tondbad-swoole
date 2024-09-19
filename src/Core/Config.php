@@ -24,7 +24,7 @@ class Config
     {
         // Load framework config
         $frameworkConfigPath = __DIR__ . "/../../config/{$file}.php";
-        $projectConfigPath = __DIR__ . "/../../../../config/{$file}.php"; // Assuming the project config is in a higher directory
+        $projectConfigPath = __DIR__ . "/../../../../../config/{$file}.php"; // Assuming the project config is in a higher directory
 
         $frameworkConfig = file_exists($frameworkConfigPath) ? require $frameworkConfigPath : [];
         $projectConfig = file_exists($projectConfigPath) ? require $projectConfigPath : [];
