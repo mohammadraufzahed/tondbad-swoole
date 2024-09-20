@@ -14,7 +14,7 @@ class GrpcServiceProvider extends ServiceProvider
     {
         if (Config::get('app.type', 'http') !== 'grpc')
             return;
-        $container->singleton(GrpcServer::class, function () {
+        $container->singleton(GrpcServer::class, function () use ($container) {
             $server = new GrpcServer('0.0.0.0', Config::get('app.grpc.port', 8001));
 
             // Register middlewares
@@ -23,7 +23,8 @@ class GrpcServiceProvider extends ServiceProvider
 
             $grpcServices = Config::get('grpc.services', []);
             foreach ($grpcServices as $service) {
-                $server->register($service);
+                $instance = $container->make($service);
+                $server->register($service, $instance);
             }
 
             return $server;
