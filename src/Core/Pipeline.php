@@ -3,53 +3,49 @@
 namespace TondbadSwoole\Core;
 
 use Closure;
+use InvalidArgumentException;
 
 class Pipeline
 {
-    protected array $pipes = [];
-    protected mixed $passable;
-    protected ?Closure $destination;
+    protected $passable;
+    protected $pipes = [];
+    protected $method = 'handle';
+    private readonly Container $container;
 
-    public function __construct(mixed $passable)
+    public function __construct()
     {
-        $this->passable = $passable;
+        $this->container = Container::create();
     }
 
-    /**
-     * Set the array of pipes
-     */
-    public function through(array $pipes): static
+    public static function send($passable): self
+    {
+        $pipeline = new static;
+        $pipeline->passable = $passable;
+        return $pipeline;
+    }
+
+    public function through(array $pipes): self
     {
         $this->pipes = $pipes;
         return $this;
     }
 
-    /**
-     * Set the final destination closure
-     */
-    public function then(Closure $destination): mixed
-    {
-        $this->destination = $destination;
-        return $this->processPipeline();
-    }
-
-    /**
-     * Process the pipeline
-     */
-    protected function processPipeline(): mixed
+    public function then(Closure $destination)
     {
         $pipeline = array_reduce(
             array_reverse($this->pipes),
             $this->carry(),
-            $this->destination ?: fn($passable) => $passable
+            fn($passable) => $destination($passable)
         );
 
         return $pipeline($this->passable);
     }
 
-    /**
-     * Get a closure that represents a single pipe segment
-     */
+    public function thenReturn()
+    {
+        return $this->then(fn($passable) => $passable);
+    }
+
     protected function carry(): Closure
     {
         return function ($stack, $pipe) {
@@ -58,11 +54,17 @@ class Pipeline
                     return $pipe($passable, $stack);
                 }
 
-                [$class, $method] = is_array($pipe) ? $pipe : [$pipe, 'handle'];
-                $instance = new $class();
-                return $instance->$method($passable, $stack);
+                if (is_object($pipe)) {
+                    return $pipe->{$this->method}($passable, $stack);
+                }
+
+                if (is_string($pipe) && class_exists($pipe)) {
+                    $pipeInstance = $this->container->make($pipe);
+                    return $pipeInstance->{$this->method}($passable, $stack);
+                }
+
+                throw new InvalidArgumentException('Invalid pipe type.');
             };
         };
     }
 }
-
