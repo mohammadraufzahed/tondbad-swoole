@@ -1,9 +1,10 @@
 <?php
 
-namespace TondbadSwoole\Core;
+namespace TondbadSwoole\Core\Pipeline;
 
 use Closure;
 use InvalidArgumentException;
+use TondbadSwoole\Core\Container;
 
 class Pipeline
 {
