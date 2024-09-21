@@ -49,12 +49,11 @@ class Container
      */
     public function singleton(string $abstract, callable|string $concrete)
     {
-        $this->bindings[$abstract] = function () use ($concrete) {
-            static $instance;
-            if (!$instance) {
-                $instance = is_callable($concrete) ? $concrete() : $this->resolve($concrete);
+        $this->bindings[$abstract] = function () use ($abstract, $concrete) {
+            if (!isset($this->instances[$abstract])) {
+                $this->instances[$abstract] = is_callable($concrete) ? $concrete() : $this->resolve($concrete);
             }
-            return $instance;
+            return $this->instances[$abstract];
         };
     }
 
@@ -69,19 +68,16 @@ class Container
     {
         $reflector = new ReflectionClass($class);
 
-        // Check if the class is instantiable
         if (!$reflector->isInstantiable()) {
             throw new Exception("Class {$class} is not instantiable.");
         }
 
         $constructor = $reflector->getConstructor();
 
-        // If the class has no constructor, create an instance without any arguments
         if (is_null($constructor)) {
             return new $class;
         }
 
-        // Otherwise, resolve all dependencies recursively
         $parameters = $constructor->getParameters();
         $dependencies = array_map(function (ReflectionParameter $parameter) {
             $type = $parameter->getType();
