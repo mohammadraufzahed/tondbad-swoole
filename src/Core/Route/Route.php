@@ -64,6 +64,14 @@ class Route implements RouteInterface
         }
     }
 
+    public static function addRoute(string $method, string $path, array|callable $handler): void
+    {
+        if (!in_array($method, self::ALLOWED_METHODS)) {
+            throw new Exception("$method method is not supported");
+        }
+        self::$routes[] = [$method, $path, $handler];
+    }
+
     public function dispatch(Request $request, Response $response): void
     {
         $httpMethod = strtoupper($request->server['request_method']);
@@ -103,14 +111,6 @@ class Route implements RouteInterface
         }
     }
 
-    public static function addRoute(string $method, string $path, array|callable $handler): void
-    {
-        if (!in_array($method, self::ALLOWED_METHODS)) {
-            throw new Exception("$method method is not supported");
-        }
-        self::$routes[] = [$method, $path, $handler];
-    }
-
     protected function callHandler(array|callable $handler, array $parameters): void
     {
         try {
@@ -127,7 +127,7 @@ class Route implements RouteInterface
                 $reflection->invokeArgs($dependencies);
             }
         } catch (Throwable $e) {
-            $this->handleError($e, $dependencies['response']);
+            $this->handleError($e, $parameters[1]);
         }
     }
 
