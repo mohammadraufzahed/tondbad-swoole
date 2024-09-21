@@ -5,6 +5,11 @@ namespace TondbadSwoole\Core;
 class Config
 {
     /**
+     * @var array $searchPaths
+     */
+    protected static array $searchPaths = [];
+
+    /**
      * @var array $config Static array to store all configuration values
      */
     protected static array $config = [];
@@ -13,26 +18,6 @@ class Config
      * @var array $loadedFiles Keeps track of loaded configuration files
      */
     protected static array $loadedFiles = [];
-
-    /**
-     * Load configuration values from files or arrays into the static config array.
-     * This function merges both framework and project config files.
-     *
-     * @param string $file The config file name (e.g., 'app')
-     */
-    protected static function load(string $file)
-    {
-        // Load framework config
-        $frameworkConfigPath = __DIR__ . "/../../config/{$file}.php";
-        $projectConfigPath = __DIR__ . "/../../../../../config/{$file}.php"; // Assuming the project config is in a higher directory
-
-        $frameworkConfig = file_exists($frameworkConfigPath) ? require $frameworkConfigPath : [];
-        $projectConfig = file_exists($projectConfigPath) ? require $projectConfigPath : [];
-
-        // Merge project config to override framework defaults
-        self::$config[$file] = array_merge($frameworkConfig, $projectConfig);
-        self::$loadedFiles[] = $file; // Mark file as loaded
-    }
 
     /**
      * Get a configuration value. If it doesn't exist, return the default value.
@@ -63,6 +48,90 @@ class Config
     }
 
     /**
+     * Load configuration values from files or arrays into the static config array.
+     * This function merges both framework and project config files.
+     *
+     * @param string $file The config file name (e.g., 'app')
+     */
+    protected static function load(string $file)
+    {
+        $configs = [];
+
+        foreach (self::getSearchPaths() as $path) {
+            $configPath = $path . "/$file.php";
+            $configs[] = file_exists($configPath) ? require $configPath : [];
+        }
+
+        // Merge project config to override framework defaults
+        self::$config[$file] = array_merge(...$configs);
+        self::$loadedFiles[] = $file; // Mark file as loaded
+    }
+
+    /**
+     * Returns the complete list of search paths, including the default paths and any additional paths added.
+     *
+     * @return array An array of all search paths, including default and user-added paths.
+     */
+    protected static function getSearchPaths(): array
+    {
+        return array_merge([
+            __DIR__ . "/../../config",
+            __DIR__ . "/../../../../../config"
+        ],
+            self::$searchPaths);
+    }
+
+    /**
+     * Convert dot notation config key to environment variable format.
+     *
+     * @param string $key
+     * @return string
+     */
+    protected static function convertDotNotationToEnvKey(string $key): string
+    {
+        return strtoupper(str_replace('.', '_', $key));
+    }
+
+    /**
+     * Helper function to get a config value from a nested array using dot notation.
+     *
+     * @param string $key
+     * @param array $array
+     * @param mixed $default
+     * @return mixed
+     */
+    protected static function getFromArray(string $key, array $array, $default): mixed
+    {
+        if (array_key_exists($key, $array)) {
+            return $array[$key];
+        }
+
+        $keys = explode('.', $key);
+        foreach ($keys as $segment) {
+            if (!isset($array[$segment])) {
+                return $default;
+            }
+            $array = $array[$segment];
+        }
+
+        return $array;
+    }
+
+    /**
+     * Adds a new path to the search paths array if it is not already present.
+     *
+     * @param string $path The path to be added to the search paths array.
+     * @return void
+     */
+    public static function addToSearchPaths(string $path): void
+    {
+        if (in_array($path, self::$searchPaths, true))
+            return;
+
+        self::$searchPaths[] = $path;
+    }
+
+    /**
      * Dynamically set a configuration value.
      *
      * @param string $key
@@ -79,31 +148,6 @@ class Config
         }
 
         self::setInArray($key, $value, self::$config);
-    }
-
-    /**
-     * Helper function to get a config value from a nested array using dot notation.
-     *
-     * @param string $key
-     * @param array $array
-     * @param mixed $default
-     * @return mixed
-     */
-    protected static function getFromArray(string $key, array $array, $default)
-    {
-        if (array_key_exists($key, $array)) {
-            return $array[$key];
-        }
-
-        $keys = explode('.', $key);
-        foreach ($keys as $segment) {
-            if (!isset($array[$segment])) {
-                return $default;
-            }
-            $array = $array[$segment];
-        }
-
-        return $array;
     }
 
     /**
@@ -128,16 +172,5 @@ class Config
         }
 
         $array[array_shift($keys)] = $value;
-    }
-
-    /**
-     * Convert dot notation config key to environment variable format.
-     *
-     * @param string $key
-     * @return string
-     */
-    protected static function convertDotNotationToEnvKey(string $key): string
-    {
-        return strtoupper(str_replace('.', '_', $key));
     }
 }
