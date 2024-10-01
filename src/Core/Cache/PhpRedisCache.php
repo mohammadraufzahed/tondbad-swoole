@@ -8,6 +8,7 @@ use Symfony\Component\Serializer\SerializerInterface;
 use Symfony\Component\Serializer\Serializer;
 use Symfony\Component\Serializer\Encoder\JsonEncoder;
 use Symfony\Component\Serializer\Normalizer\ObjectNormalizer;
+use TondbadSwoole\Core\Config;
 
 class PhpRedisCache implements CacheInterface
 {
@@ -27,8 +28,10 @@ class PhpRedisCache implements CacheInterface
      * @param array $config Redis client configuration.
      * @param SerializerInterface|null $serializer Optional serializer. If null, a default JSON serializer is used.
      */
-    public function __construct(array $config = [], ?SerializerInterface $serializer = null)
+    public function __construct()
     {
+        $config = Config::get('cache.redis', []);
+
         $this->redis = new Redis();
 
         $host = $config['host'] ?? '127.0.0.1';

@@ -47,6 +47,7 @@
     "openswoole/ide-helper": "dev-master",
     "symfony/serializer": "7.2.x-dev",
     "symfony/property-access": "7.2.x-dev",
-    "predis/predis": "^3.0@alpha"
+    "predis/predis": "^3.0@alpha",
+    "vlucas/phpdotenv": "^5.6@dev"
   }
 }

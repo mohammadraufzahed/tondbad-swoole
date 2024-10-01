@@ -1,4 +1,4 @@
-<?php 
+<?php
 
 namespace TondbadSwoole\Core\Cache;
 
@@ -8,6 +8,7 @@ use Symfony\Component\Serializer\SerializerInterface;
 use Symfony\Component\Serializer\Serializer;
 use Symfony\Component\Serializer\Encoder\JsonEncoder;
 use Symfony\Component\Serializer\Normalizer\ObjectNormalizer;
+use TondbadSwoole\Core\Config;
 
 class PredisCache implements CacheInterface
 {
@@ -27,9 +28,11 @@ class PredisCache implements CacheInterface
      * @param array $config Predis client configuration.
      * @param SerializerInterface|null $serializer Optional serializer. If null, a default JSON serializer is used.
      */
-    public function __construct(array $config = [], ?SerializerInterface $serializer = null)
+    public function __construct()
     {
-        $this->client = new PredisClient($config);
+        $this->client = new PredisClient(Config::get('cache.redis', []));
+        $this->client->connect();
+        echo $this->client->isConnected() ? 'Connected' : 'Not Connected';
         $this->serializer = $serializer ?? new Serializer([new ObjectNormalizer()], [new JsonEncoder()]);
     }
 
@@ -57,6 +60,7 @@ class PredisCache implements CacheInterface
             // Handle serialization errors (e.g., log the error)
             return false;
         }
+
 
         if ($ttl !== null) {
             return $this->client->setex($key, $ttl, $serializedValue) === 'OK';

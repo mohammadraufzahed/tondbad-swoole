@@ -9,4 +9,5 @@ return [
     RouteServiceProvider::class,
     HttpServiceProvider::class,
     GrpcServiceProvider::class,
+    EnvServiceProvider::class,
 ];
