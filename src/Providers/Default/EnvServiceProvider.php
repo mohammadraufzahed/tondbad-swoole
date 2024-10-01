@@ -1,4 +1,7 @@
 <?php
+
+namespace TondbadSwoole\Providers\Default;
+
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Env;
 use TondbadSwoole\Providers\Contracts\ServiceProvider;

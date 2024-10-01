@@ -1,6 +1,14 @@
 <?php
 
-use TondbadSwoole\Providers\Default\{HttpServiceProvider, LoggerServiceProvider, RouteServiceProvider, GrpcServiceProvider, PredisCacheProvider, PhpRedisCacheProvider};
+use TondbadSwoole\Providers\Default\{
+    HttpServiceProvider,
+    LoggerServiceProvider,
+    RouteServiceProvider,
+    GrpcServiceProvider,
+    PredisCacheProvider,
+    PhpRedisCacheProvider,
+    EnvServiceProvider
+};
 
 return [
     LoggerServiceProvider::class,
