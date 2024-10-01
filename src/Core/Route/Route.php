@@ -89,6 +89,7 @@ class Route implements RouteInterface
             $routeCollector->addRoute($method, $path, $handler);
         }
 
+
         $this->dispatcher = new Dispatcher($routeCollector->processedRoutes());
         $routeInfo = $this->dispatcher->dispatch($httpMethod, $uri);
 
@@ -123,7 +124,6 @@ class Route implements RouteInterface
             } else {
                 $reflection = new ReflectionFunction($handler);
                 $dependencies = $this->resolveDependencies($reflection, $parameters);
-
                 $reflection->invokeArgs($dependencies);
             }
         } catch (Throwable $e) {

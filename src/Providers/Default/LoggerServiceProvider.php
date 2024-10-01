@@ -17,8 +17,7 @@ class LoggerServiceProvider extends ServiceProvider
             $logger = new Logger(
                 Config::get('app.name', 'Tondbad Framework')
             );
-            $logger->pushHandler(new StreamHandler('php://stdout', Level::Debug));
-            $logger->pushHandler(new StreamHandler('php://stdout', Level::Info));
+            $logger->pushHandler(new StreamHandler('php://stdout'));
             $logger->pushHandler(new StreamHandler('php://stderr', Level::Error));
             return $logger;
         });

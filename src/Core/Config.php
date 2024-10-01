@@ -74,11 +74,13 @@ class Config
      */
     protected static function getSearchPaths(): array
     {
-        return array_merge([
-            __DIR__ . "/../../config",
-            __DIR__ . "/../../../../../config"
-        ],
-            self::$searchPaths);
+        return array_merge(
+            [
+                __DIR__ . "/../../config",
+                __DIR__ . "/../../../../../config"
+            ],
+            self::$searchPaths
+        );
     }
 
     /**
