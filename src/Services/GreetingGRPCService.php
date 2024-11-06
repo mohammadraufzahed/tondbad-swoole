@@ -1,6 +1,7 @@
 <?php
 
 namespace TondbadSwoole\Services;
+
 use TondbadExample\GreetingServiceInterface;
 use TondbadExample\HelloResponse;
 
@@ -11,7 +12,6 @@ class GreetingGRPCService implements GreetingServiceInterface
         $name = $request->getName();
         $out = new HelloResponse();
         $out->setMessage($name);
-        echo "Fuck";
         return $out;
     }
 }
