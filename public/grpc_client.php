@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 use OpenSwoole\Constant;
@@ -12,7 +13,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 Coroutine::set(['log_level' => Constant::LOG_ERROR]);
 
 Coroutine::run(function () {
-    $conn = (new Client('127.0.0.1', port: 8080))->connect();
+    $conn = (new Client('127.0.0.1', port: 9502))->connect();
     $client = new GreetingServiceClient($conn);
     $message = new HelloRequest();
     $message->setName(str_repeat('xp ', 10));
