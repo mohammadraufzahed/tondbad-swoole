@@ -50,5 +50,11 @@ return [
             'serializer' => Env::get('redis.options.serializer', 'php'), // Serializer for Redis (php, json, igbinary)
             'compression' => Env::get('redis.options.compression', null), // Compression (lzf, zstd)
         ],
+    ],
+    'memcached' => [
+        'host' => Env::get('memcached.host', '127.0.0.1'),
+        'port' => (int)Env::get('memcached.port', 11211),
+        'username' => Env::get('memcached.username', null),
+        'password' => Env::get('memcached.password', null)
     ]
 ];
