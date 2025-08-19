@@ -19,7 +19,7 @@ class RouteServiceProvider extends ServiceProvider
         $route = $container->make(Route::class);
 
         $routeClasses = Config::get('routes', []);
-
         $route::registerAnnotatedRoutes($routeClasses);
+        $route->setupDispatcher();
     }
 }

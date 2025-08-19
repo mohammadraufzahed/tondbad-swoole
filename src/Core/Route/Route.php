@@ -82,15 +82,6 @@ class Route implements RouteInterface
         }
         $uri = rawurldecode($uri);
 
-        $routeCollector = new RouteCollector(new RouteParser(), new DataGenerator());
-
-        foreach (self::$routes as $route) {
-            [$method, $path, $handler] = $route;
-            $routeCollector->addRoute($method, $path, $handler);
-        }
-
-
-        $this->dispatcher = new Dispatcher($routeCollector->processedRoutes());
         $routeInfo = $this->dispatcher->dispatch($httpMethod, $uri);
 
         switch ($routeInfo[0]) {
@@ -105,11 +96,22 @@ class Route implements RouteInterface
             case Dispatcher::FOUND:
                 $handler = $routeInfo[1];
                 $vars = $routeInfo[2]; // Extract route parameters
-
                 // Call the handler, passing in request, response, and resolved dependencies
                 $this->callHandler($handler, array_merge([$request, $response], $vars));
                 break;
         }
+    }
+
+    public function setupDispatcher()
+    {
+        $routeCollector = new RouteCollector(new RouteParser(), new DataGenerator());
+
+        foreach (self::$routes as $route) {
+            [$method, $path, $handler] = $route;
+            $routeCollector->addRoute($method, $path, $handler);
+        }
+
+        $this->dispatcher = new Dispatcher($routeCollector->processedRoutes());
     }
 
     protected function callHandler(array|callable $handler, array $parameters): void

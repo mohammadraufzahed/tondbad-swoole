@@ -39,7 +39,6 @@ class App
         $this->container = Container::create();
         $this->providers = $this->loadProviders();
         $this->registerProviders();
-        $this->bootProviders();
     }
 
     /**
@@ -98,6 +97,7 @@ class App
 
     public function run(): void
     {
+        $this->bootProviders();
         if (Config::get('app.type', 'http') === 'http') {
             $httpServer = $this->container->make(HttpServer::class);
             $httpServer->start();
