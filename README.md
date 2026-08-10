@@ -24,64 +24,76 @@
 
 ## Installation
 
-1. **Clone the repository**:
+Install the package with Composer:
 
-   ```bash
-   git clone https://github.com/mohammadraufzahed/tondbad-swoole.git
-   cd tondbad-swoole
-   ```
+```bash
+composer require mohammadraufzahed/tondbad-swoole
+```
 
-2. **Install dependencies**:
+The OpenSwoole extension is required at runtime:
 
-   ```bash
-   composer install
-   ```
+```bash
+pecl install openswoole
+```
 
-3. **Install the OpenSwoole extension** (if not already installed):
+## Bootstrapping
 
-   ```bash
-   pecl install openswoole
-   ```
+Create a minimal `public/server.php` in your project:
 
-4. **Configure the environment**:
+```php
+use TondbadSwoole\Bootstrap\AppFactory;
 
-   Copy the example environment file or create a `.env` in the project root:
+require_once __DIR__ . '/../vendor/autoload.php';
 
-   ```bash
-   APP_NAME="Tondbad Swoole"
-   APP_TYPE=http
-   APP_DEBUG=false
-   APP_HTTP_PORT=9501
-   APP_GRPC_PORT=9502
-   APP_LOGGING_PATH=/var/log/tondbad/app.log
-   APP_LOGGING_LEVEL=info
-   REDIS_HOST=127.0.0.1
-   REDIS_PORT=6379
-   ```
+AppFactory::create(dirname(__DIR__))->run();
+```
 
-   See `config/app.php`, `config/cache.php`, and `config/cors.php` for the full list of configurable values.
+`AppFactory::create($basePath)` discovers `config/`, `.env`, and `routes/` from your project root. You may also instantiate `App` directly:
+
+```php
+$app = new App(dirname(__DIR__));
+$app->run();
+```
+
+## Configuration
+
+Create a `.env` in your project root or set values there:
+
+```bash
+APP_NAME="Tondbad Swoole"
+APP_TYPE=http
+APP_DEBUG=false
+APP_HTTP_PORT=9501
+APP_GRPC_PORT=9502
+APP_LOGGING_PATH=/var/log/tondbad/app.log
+APP_LOGGING_LEVEL=info
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+```
+
+See `config/app.php`, `config/cache.php`, and `config/cors.php` for the full list of configurable values.
 
 ## Usage
 
 ### Running the HTTP Server
 
 ```bash
-composer server
+vendor/bin/tondbad serve
 # or directly
 php public/server.php
 ```
 
-The HTTP server listens on `0.0.0.0` using the port configured by `APP_HTTP_PORT` (default `9501`).
+The HTTP server listens on the host and port configured by `APP_HTTP_HOST` and `APP_HTTP_PORT` (defaults `0.0.0.0:9501`).
 
 ### Running the gRPC Server
 
 ```bash
-composer grpc
+vendor/bin/tondbad serve:grpc
 # or directly
 php public/grpc.php
 ```
 
-The gRPC server listens on `0.0.0.0` using the port configured by `APP_GRPC_PORT` (default `9502`).
+The gRPC server listens on the host and port configured by `APP_GRPC_HOST` and `APP_GRPC_PORT` (defaults `0.0.0.0:9502`).
 
 ### Running Tests
 
@@ -103,23 +115,21 @@ This command compiles `.proto` files in `protos/` and writes generated PHP class
 
 ### Programmatic Routes
 
-The simplest way to define routes is in `public/server.php`:
+Routes can be defined in `routes/http.php` (and `routes/grpc.php` for gRPC):
 
 ```php
-use TondbadSwoole\Bootstrap\App;
+use TondbadSwoole\Core\Route\Route;
 use TondbadSwoole\Http\Request;
 use TondbadSwoole\Http\Response;
 
-require_once __DIR__ . '/../vendor/autoload.php';
-
-$app = new App();
-
-$app->routes()->addRoute('GET', '/hello[/{name}]', function (Request $request, Response $response, ?string $name = '') {
-    $response->html('Hello ' . htmlspecialchars($name ?? ''));
-});
-
-$app->run();
+return function (Route $route) {
+    $route->addRoute('GET', '/hello[/{name}]', function (Request $request, Response $response, ?string $name = '') {
+        $response->html('Hello ' . htmlspecialchars($name ?? ''));
+    });
+};
 ```
+
+Alternatively, you can still register routes programmatically in `public/server.php` before calling `$app->run()`.
 
 ### Attribute-Based Routes
 
@@ -198,6 +208,12 @@ class LogMiddleware implements MiddlewareInterface
 }
 ```
 
+Use the CLI to generate a stub:
+
+```bash
+vendor/bin/tondbad make:middleware Log
+```
+
 ## Configuration
 
 Configuration files live in `config/` and are resolved with dot notation:
@@ -233,17 +249,20 @@ Drivers are bound through service providers and configured from `config/cache.ph
 ## Directory Structure
 
 ```
-config/           Configuration files
-public/           HTTP and gRPC entry points
-public/examples/  Example scripts for caches and gRPC client
-src/              Framework source
-src/Bootstrap/    Application bootstrap
-src/Core/         Core systems (Config, Env, Container, Route, Cache)
-src/Http/         Request/Response wrappers
-src/Providers/    Service providers
-tests/            PHPUnit test suite
-storage/cache/    Route cache and runtime cache files
-logs/             Application logs
+config/                Configuration files
+public/                HTTP and gRPC entry points
+public/examples/       Example scripts for caches and gRPC client
+src/                   Framework source
+src/Bootstrap/         Application bootstrap
+src/Console/           CLI commands
+src/Core/              Core systems (Config, Env, Container, Route, Cache)
+src/Http/              Request/Response wrappers
+src/Providers/         Service providers
+routes/                HTTP and gRPC route files
+tests/                 PHPUnit test suite
+storage/cache/         Route cache and runtime cache files
+storage/logs/          Application logs
+storage/framework/     Framework runtime files
 ```
 
 ## Contributing

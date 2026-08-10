@@ -1,0 +1,49 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use TondbadSwoole\Console\Application;
+use TondbadSwoole\Console\Commands\CacheClearCommand;
+use TondbadSwoole\Console\Commands\GrpcServeCommand;
+use TondbadSwoole\Console\Commands\MakeControllerCommand;
+use TondbadSwoole\Console\Commands\MakeMiddlewareCommand;
+use TondbadSwoole\Console\Commands\MakeProviderCommand;
+use TondbadSwoole\Console\Commands\RouteCacheCommand;
+use TondbadSwoole\Console\Commands\ServeCommand;
+
+$autoloadFiles = [
+    getcwd() . '/vendor/autoload.php',
+    __DIR__ . '/../vendor/autoload.php',
+    __DIR__ . '/../../../autoload.php',
+];
+
+$autoloadFound = false;
+
+foreach ($autoloadFiles as $file) {
+    if (file_exists($file)) {
+        require $file;
+        $autoloadFound = true;
+        break;
+    }
+}
+
+if (!$autoloadFound) {
+    fwrite(STDERR, "Could not locate vendor/autoload.php\n");
+    exit(1);
+}
+
+$basePath = getcwd() ?: dirname(__DIR__);
+
+$app = new Application($basePath);
+
+$app
+    ->register(new ServeCommand($basePath))
+    ->register(new GrpcServeCommand($basePath))
+    ->register(new RouteCacheCommand($basePath))
+    ->register(new CacheClearCommand($basePath))
+    ->register(new MakeControllerCommand($basePath))
+    ->register(new MakeMiddlewareCommand($basePath))
+    ->register(new MakeProviderCommand($basePath));
+
+exit($app->run($argv));
