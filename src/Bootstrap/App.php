@@ -17,6 +17,8 @@ use TondbadSwoole\Providers\Contracts\ServiceProvider;
 
 class App
 {
+    private static ?self $instance = null;
+
     public readonly Container $container;
     public readonly Env $env;
     public readonly Config $config;
@@ -28,11 +30,17 @@ class App
 
     private bool $booted = false;
 
+    public static function getInstance(): ?self
+    {
+        return self::$instance;
+    }
+
     /**
      * @throws Exception
      */
     public function __construct(private readonly string $basePath)
     {
+        self::$instance = $this;
         $this->env = new Env();
         $this->env->loadAll([$this->basePath]);
 

@@ -14,7 +14,13 @@ interface RouteInterface
      */
     public function registerAnnotatedRoutes(array $classNames): void;
 
-    public function addRoute(string $method, string $path, array|callable $handler): void;
+    public function addRoute(
+        string $method,
+        string $path,
+        array|callable $handler,
+        array $middlewares = [],
+        ?string $name = null
+    ): void;
 
     public function dispatch(Request $request, Response $response): void;
 }

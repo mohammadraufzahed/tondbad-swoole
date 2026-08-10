@@ -3,6 +3,11 @@
 declare(strict_types=1);
 
 return [
+    'default' => $env->get('cache.default', 'in-memory'),
+    'in_memory' => [
+        'size' => (int) $env->get('cache.in_memory.size', 1024),
+        'clean_interval' => (int) $env->get('cache.in_memory.clean_interval', 1000),
+    ],
     'redis' => [
         'scheme' => $env->get('redis.scheme', 'tcp'),
         'host' => $env->get('redis.host', '127.0.0.1'),

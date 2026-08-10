@@ -37,13 +37,18 @@ class RouteRegistrar
      */
     private array $handlers = [];
 
+    /**
+     * @var array<int, list<class-string>>
+     */
+    private array $middlewares = [];
+
     private ?Dispatcher $dispatcher = null;
 
     public function __construct(private readonly ?string $cacheFile = null)
     {
     }
 
-    public function addRoute(string $method, string $path, array|callable $handler): void
+    public function addRoute(string $method, string $path, array|callable $handler, array $middlewares = []): int
     {
         if (!in_array($method, self::ALLOWED_METHODS, true)) {
             throw new Exception("{$method} method is not supported");
@@ -51,8 +56,11 @@ class RouteRegistrar
 
         $id = count($this->handlers);
         $this->handlers[$id] = $handler;
+        $this->middlewares[$id] = $middlewares;
         $this->routes[] = [$method, $path, $id];
         $this->dispatcher = null;
+
+        return $id;
     }
 
     /**
@@ -109,6 +117,14 @@ class RouteRegistrar
         return $this->handlers[$id];
     }
 
+    /**
+     * @return list<class-string>
+     */
+    public function getMiddlewares(int $id): array
+    {
+        return $this->middlewares[$id] ?? [];
+    }
+
     private function ensureCacheDirectory(): void
     {
         if ($this->cacheFile === null) {
@@ -127,12 +143,12 @@ class RouteRegistrar
     }
 
     /**
-     * @return list<array{0: string, 1: string, 2: array|callable}>
+     * @return list<array{0: string, 1: string, 2: array|callable, 3: list<class-string>}>
      */
     public function getRoutes(): array
     {
         return array_map(
-            fn(array $route) => [$route[0], $route[1], $this->handlers[$route[2]]],
+            fn(array $route) => [$route[0], $route[1], $this->handlers[$route[2]], $this->middlewares[$route[2]] ?? []],
             $this->routes
         );
     }
