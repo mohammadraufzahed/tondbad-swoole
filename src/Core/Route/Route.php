@@ -24,7 +24,8 @@ class Route implements RouteInterface
         $this->registrar = new RouteRegistrar();
         $invoker = new HandlerInvoker($this->container);
         $errorHandler = new ErrorHandler($this->config, $this->logger);
-        $this->dispatcher = new RouteDispatcher($this->registrar, $invoker, $errorHandler);
+        $middlewares = $this->config->get('app.middlewares', []);
+        $this->dispatcher = new RouteDispatcher($this->registrar, $invoker, $errorHandler, $this->container, $middlewares);
     }
 
     public function addRoute(string $method, string $path, array|callable $handler): void

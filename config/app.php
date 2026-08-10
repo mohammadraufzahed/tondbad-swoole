@@ -4,6 +4,7 @@ return [
     'name' => $env->get('app.name', 'Tondbad Framework'),
     'type' => $env->get('app.type', 'http'),
     'debug' => $env->get('app.debug', false),
+    'middlewares' => [],
     'logging' => [
         'path' => $env->get('app.logging.path', dirname(__DIR__) . '/logs/app.log'),
         'level' => $env->get('app.logging.level', 'info'),
