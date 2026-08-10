@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use OpenSwoole\Coroutine;
 use TondbadSwoole\Core\Cache\PhpRedisCache;
 

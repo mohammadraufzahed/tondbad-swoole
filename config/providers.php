@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use TondbadSwoole\Providers\Default\{
     HttpServiceProvider,
     LoggerServiceProvider,

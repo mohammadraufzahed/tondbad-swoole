@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 return [
     'allowed_origins' => ['*'],
     'allowed_origins_patterns' => [],
