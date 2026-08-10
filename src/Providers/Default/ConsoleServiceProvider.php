@@ -33,7 +33,7 @@ class ConsoleServiceProvider extends ServiceProvider
             $console = new Application($basePath);
 
             $this->registerBuiltInCommands($console, $basePath);
-            $this->registerConfiguredCommands($console, $container, $config);
+            $this->registerConfiguredCommands($console, $container, $config, $basePath);
             $this->discoverCommands($console, $basePath, $container);
 
             return $console;
@@ -52,7 +52,7 @@ class ConsoleServiceProvider extends ServiceProvider
             ->register(new MakeProviderCommand($basePath));
     }
 
-    private function registerConfiguredCommands(Application $console, Container $container, Config $config): void
+    private function registerConfiguredCommands(Application $console, Container $container, Config $config, string $basePath): void
     {
         $commands = $config->get('app.commands', []);
 
