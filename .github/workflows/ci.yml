@@ -29,8 +29,7 @@ jobs:
 
       - name: Lint PHP files
         run: |
-          set -o pipefail
-          ! find . -path ./vendor -prune -o -name '*.php' -exec php -l {} \; 2>&1 | grep -qiE 'error|parse'
+          ! find . -path ./vendor -prune -o -name '*.php' -exec php -l {} \; 2>&1 | grep -qiE 'parse error|fatal error|errors parsing'
 
       - name: Run PHPUnit
         run: composer test
