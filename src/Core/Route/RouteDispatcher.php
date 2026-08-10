@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace TondbadSwoole\Core\Route;
 
 use FastRoute\Dispatcher\GroupCountBased as Dispatcher;
-use OpenSwoole\Http\Request;
-use OpenSwoole\Http\Response;
+use OpenSwoole\Http\Request as SwooleRequest;
+use OpenSwoole\Http\Response as SwooleResponse;
 use Throwable;
 use TondbadSwoole\Contracts\MiddlewareInterface;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Pipeline\Pipeline;
+use TondbadSwoole\Http\Request;
+use TondbadSwoole\Http\Response;
 
 class RouteDispatcher
 {
@@ -26,10 +28,14 @@ class RouteDispatcher
     ) {
     }
 
-    public function dispatch(Request $request, Response $response): void
+    public function dispatch(SwooleRequest $swooleRequest, SwooleResponse $swooleResponse): void
     {
         try {
-            $context = new HttpContext($request, $response);
+            $context = new HttpContext(
+                new Request($swooleRequest),
+                new Response($swooleResponse)
+            );
+
             $pipeline = new Pipeline($this->container);
 
             $pipeline
@@ -39,30 +45,23 @@ class RouteDispatcher
                     $this->handleRequest($context);
                 });
         } catch (Throwable $e) {
-            $this->errorHandler->handle($e, $response);
+            $this->errorHandler->handle($e, $swooleResponse);
         }
     }
 
     private function handleRequest(HttpContext $context): void
     {
-        $httpMethod = strtoupper($context->request->server['request_method']);
-        $uri = $context->request->server['request_uri'];
-
-        if (false !== $pos = strpos($uri, '?')) {
-            $uri = substr($uri, 0, $pos);
-        }
-        $uri = rawurldecode($uri);
+        $httpMethod = $context->request->method();
+        $uri = $context->request->path();
 
         $routeInfo = $this->registrar->getDispatcher()->dispatch($httpMethod, $uri);
 
         switch ($routeInfo[0]) {
             case Dispatcher::NOT_FOUND:
-                $context->response->status(404);
-                $context->response->end('404 Not Found');
+                $context->response->status(404)->end('404 Not Found');
                 break;
             case Dispatcher::METHOD_NOT_ALLOWED:
-                $context->response->status(405);
-                $context->response->end('405 Method Not Allowed');
+                $context->response->status(405)->end('405 Method Not Allowed');
                 break;
             case Dispatcher::FOUND:
                 $handler = $this->registrar->getHandler((int) $routeInfo[1]);

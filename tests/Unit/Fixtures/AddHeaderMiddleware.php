@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Tests\Unit\Fixtures;
 
-use OpenSwoole\Http\Request;
-use OpenSwoole\Http\Response;
 use TondbadSwoole\Contracts\MiddlewareInterface;
+use TondbadSwoole\Http\Request;
+use TondbadSwoole\Http\Response;
 
 class AddHeaderMiddleware implements MiddlewareInterface
 {

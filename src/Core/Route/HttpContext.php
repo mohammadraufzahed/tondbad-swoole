@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Core\Route;
 
-use OpenSwoole\Http\Request;
-use OpenSwoole\Http\Response;
+use TondbadSwoole\Http\Request;
+use TondbadSwoole\Http\Response;
 
 class HttpContext
 {

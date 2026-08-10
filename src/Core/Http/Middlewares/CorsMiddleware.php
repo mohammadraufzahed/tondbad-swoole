@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Core\Http\Middlewares;
 
-use OpenSwoole\Http\Request;
-use OpenSwoole\Http\Response;
 use TondbadSwoole\Contracts\MiddlewareInterface;
 use TondbadSwoole\Core\Config;
+use TondbadSwoole\Http\Request;
+use TondbadSwoole\Http\Response;
 
 class CorsMiddleware implements MiddlewareInterface
 {
@@ -34,15 +34,14 @@ class CorsMiddleware implements MiddlewareInterface
 
     public function process(Request $request, Response $response, callable $next): void
     {
-        $origin = $request->header['origin'] ?? '';
+        $origin = $request->header('origin');
 
         if ($this->isOriginAllowed($origin)) {
-            $this->setCorsHeaders($response, $origin);
+            $this->setCorsHeaders($response, $origin ?? '');
         }
 
-        if (strtoupper($request->server['request_method'] ?? '') === 'OPTIONS') {
-            $response->status(204);
-            $response->end();
+        if ($request->method() === 'OPTIONS') {
+            $response->status(204)->end();
 
             return;
         }
@@ -50,8 +49,12 @@ class CorsMiddleware implements MiddlewareInterface
         $next($request, $response);
     }
 
-    private function isOriginAllowed(string $origin): bool
+    private function isOriginAllowed(?string $origin): bool
     {
+        if ($origin === null || $origin === '') {
+            return in_array('*', $this->allowedOrigins, true);
+        }
+
         if (in_array('*', $this->allowedOrigins, true) || in_array($origin, $this->allowedOrigins, true)) {
             return true;
         }

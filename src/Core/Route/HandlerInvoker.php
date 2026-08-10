@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace TondbadSwoole\Core\Route;
 
 use Exception;
-use OpenSwoole\Http\Request;
-use OpenSwoole\Http\Response;
+use OpenSwoole\Http\Request as SwooleRequest;
+use OpenSwoole\Http\Response as SwooleResponse;
 use ReflectionFunction;
 use ReflectionFunctionAbstract;
 use ReflectionMethod;
@@ -15,6 +15,8 @@ use ReflectionParameter;
 use ReflectionUnionType;
 use Throwable;
 use TondbadSwoole\Core\Container;
+use TondbadSwoole\Http\Request;
+use TondbadSwoole\Http\Response;
 
 class HandlerInvoker
 {
@@ -63,51 +65,33 @@ class HandlerInvoker
         $name = $param->getName();
 
         if ($type instanceof ReflectionNamedType) {
-            $typeName = $type->getName();
+            $value = $this->tryResolveNamedType($param, $type, $request, $response, $vars);
 
-            if ($typeName === Request::class) {
-                return $request;
+            if ($value !== null || ($value === null && $type->allowsNull())) {
+                return $value;
             }
+        }
 
-            if ($typeName === Response::class) {
-                return $response;
-            }
-
-            if (array_key_exists($name, $vars)) {
-                return $this->castValue($vars[$name], $type);
-            }
-
-            if (!$type->isBuiltin()) {
-                return $this->container->make($typeName);
-            }
-        } elseif ($type instanceof ReflectionUnionType) {
+        if ($type instanceof ReflectionUnionType) {
             foreach ($type->getTypes() as $unionedType) {
                 if (!$unionedType instanceof ReflectionNamedType) {
                     continue;
                 }
 
-                $typeName = $unionedType->getName();
+                try {
+                    $value = $this->tryResolveNamedType($param, $unionedType, $request, $response, $vars);
 
-                if ($typeName === Request::class) {
-                    return $request;
-                }
-
-                if ($typeName === Response::class) {
-                    return $response;
-                }
-
-                if (array_key_exists($name, $vars) && $unionedType->isBuiltin()) {
-                    return $this->castValue($vars[$name], $unionedType);
-                }
-
-                if (!$unionedType->isBuiltin()) {
-                    try {
-                        return $this->container->make($typeName);
-                    } catch (Throwable $e) {
-                        continue;
+                    if ($value !== null || ($unionedType->getName() === 'null')) {
+                        return $value;
                     }
+                } catch (Throwable) {
+                    continue;
                 }
             }
+        }
+
+        if (array_key_exists($name, $vars)) {
+            return $vars[$name];
         }
 
         if ($param->isDefaultValueAvailable()) {
@@ -119,6 +103,43 @@ class HandlerInvoker
         }
 
         throw new Exception("Cannot resolve parameter '{$name}'");
+    }
+
+    private function tryResolveNamedType(
+        ReflectionParameter $param,
+        ReflectionNamedType $type,
+        Request $request,
+        Response $response,
+        array $vars
+    ): mixed {
+        $typeName = $type->getName();
+        $name = $param->getName();
+
+        if ($typeName === Request::class) {
+            return $request;
+        }
+
+        if ($typeName === Response::class) {
+            return $response;
+        }
+
+        if ($typeName === SwooleRequest::class) {
+            return $request->getSwooleRequest();
+        }
+
+        if ($typeName === SwooleResponse::class) {
+            return $response->getSwooleResponse();
+        }
+
+        if (array_key_exists($name, $vars)) {
+            return $this->castValue($vars[$name], $type);
+        }
+
+        if (!$type->isBuiltin()) {
+            return $this->container->make($typeName);
+        }
+
+        return null;
     }
 
     private function castValue(mixed $value, ReflectionNamedType $type): mixed
