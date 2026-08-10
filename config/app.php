@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 return [
     'name' => $env->get('app.name', 'Tondbad Framework'),
     'type' => $env->get('app.type', 'http'),
