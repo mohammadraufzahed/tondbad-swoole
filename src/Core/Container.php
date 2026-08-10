@@ -4,7 +4,10 @@ namespace TondbadSwoole\Core;
 
 use Exception;
 use ReflectionClass;
+use ReflectionNamedType;
 use ReflectionParameter;
+use ReflectionUnionType;
+use Throwable;
 
 class Container
 {
@@ -38,6 +41,17 @@ class Container
     public function bind(string $abstract, $concrete)
     {
         $this->bindings[$abstract] = $concrete;
+    }
+
+    /**
+     * Determine if the container has a binding for the given abstract.
+     *
+     * @param string $abstract
+     * @return bool
+     */
+    public function has(string $abstract): bool
+    {
+        return isset($this->bindings[$abstract]);
     }
 
     /**
@@ -79,15 +93,59 @@ class Container
         }
 
         $parameters = $constructor->getParameters();
-        $dependencies = array_map(function (ReflectionParameter $parameter) {
-            $type = $parameter->getType();
-            if (!$type || $type->isBuiltin()) {
-                throw new Exception("Cannot resolve non-class type: " . $parameter->getName());
-            }
-            return $this->make($type->getName());
-        }, $parameters);
+        $dependencies = array_map(fn(ReflectionParameter $parameter) => $this->resolveParameter($parameter), $parameters);
 
         return $reflector->newInstanceArgs($dependencies);
+    }
+
+    /**
+     * Resolve a single constructor parameter.
+     *
+     * @param ReflectionParameter $parameter
+     * @return mixed
+     * @throws Exception
+     */
+    protected function resolveParameter(ReflectionParameter $parameter): mixed
+    {
+        $type = $parameter->getType();
+
+        if ($type instanceof ReflectionUnionType) {
+            foreach ($type->getTypes() as $unionedType) {
+                if (!$unionedType instanceof ReflectionNamedType || $unionedType->isBuiltin()) {
+                    continue;
+                }
+
+                try {
+                    return $this->make($unionedType->getName());
+                } catch (Throwable $e) {
+                    continue;
+                }
+            }
+        } elseif ($type instanceof ReflectionNamedType && !$type->isBuiltin()) {
+            try {
+                return $this->make($type->getName());
+            } catch (Throwable $e) {
+                if ($parameter->isDefaultValueAvailable()) {
+                    return $parameter->getDefaultValue();
+                }
+
+                if ($parameter->allowsNull()) {
+                    return null;
+                }
+
+                throw $e;
+            }
+        }
+
+        if ($parameter->isDefaultValueAvailable()) {
+            return $parameter->getDefaultValue();
+        }
+
+        if ($parameter->allowsNull()) {
+            return null;
+        }
+
+        throw new Exception("Cannot resolve parameter '{$parameter->getName()}': unresolvable type.");
     }
 
     /**
@@ -100,7 +158,17 @@ class Container
     public function make(string $abstract)
     {
         if (isset($this->bindings[$abstract])) {
-            return is_callable($this->bindings[$abstract]) ? ($this->bindings[$abstract])() : $this->bindings[$abstract];
+            $binding = $this->bindings[$abstract];
+
+            if (is_callable($binding)) {
+                return $binding();
+            }
+
+            if (is_string($binding) && class_exists($binding)) {
+                return $this->resolve($binding);
+            }
+
+            return $binding;
         }
 
         return $this->resolve($abstract);

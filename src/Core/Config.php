@@ -39,8 +39,8 @@ class Config
         }
 
         // Check if the config key exists in environment variables first
-        if ($envValue = getenv(self::convertDotNotationToEnvKey($key))) {
-            return $envValue;
+        if (Env::has($key)) {
+            return Env::get($key);
         }
 
         // Fallback to config array
@@ -77,7 +77,7 @@ class Config
         return array_merge(
             [
                 __DIR__ . "/../../config",
-                __DIR__ . "/../../../../../config"
+                __DIR__ . "/../../../../config"
             ],
             self::$searchPaths
         );

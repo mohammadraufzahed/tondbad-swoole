@@ -34,7 +34,7 @@ class Env
                     $dotenv = Dotenv::createImmutable($path, $filename);
                     $dotenv->load();
                     self::$loadedFiles[] = $filePath;
-                    self::$envCache = array_merge($_ENV, $_SERVER, self::$envCache);
+                    self::$envCache = array_merge(self::$envCache, $_ENV, $_SERVER);
                 } catch (InvalidPathException $e) {
                     throw new \Exception("Environment file not found: {$filePath}");
                 }
@@ -59,7 +59,15 @@ class Env
             return self::parseValue(self::$envCache[$envKey]);
         }
 
-        // Fallback to getenv if the value is not cached
+        // Fallback to the environment super-globals and then getenv
+        if (isset($_ENV[$envKey])) {
+            return self::parseValue($_ENV[$envKey]);
+        }
+
+        if (isset($_SERVER[$envKey])) {
+            return self::parseValue($_SERVER[$envKey]);
+        }
+
         $value = getenv($envKey);
         return $value !== false ? self::parseValue($value) : $default;
     }
@@ -72,8 +80,8 @@ class Env
     public static function loadAll(array $paths = []): void
     {
         $defaultPaths = [
-            __DIR__ . '/../..',
-            __DIR__ . '/../../../../..'
+            __DIR__ . '/../../../..',
+            __DIR__ . '/../..'
         ];
 
         // Combine default and additional paths
@@ -92,6 +100,22 @@ class Env
     protected static function convertDotNotationToEnvKey(string $key): string
     {
         return strtoupper(str_replace('.', '_', $key));
+    }
+
+    /**
+     * Determine whether an environment variable exists.
+     *
+     * @param string $key The environment variable key (dot notation is supported)
+     * @return bool
+     */
+    public static function has(string $key): bool
+    {
+        $envKey = self::convertDotNotationToEnvKey($key);
+
+        return isset(self::$envCache[$envKey])
+            || isset($_ENV[$envKey])
+            || isset($_SERVER[$envKey])
+            || getenv($envKey) !== false;
     }
 
     /**

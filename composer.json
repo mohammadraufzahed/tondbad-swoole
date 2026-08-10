@@ -31,7 +31,7 @@
     "server": "php public/server.php",
     "grpc": "php public/grpc.php",
     "compile-proto": [
-      "sh -c 'protoc $(find ./protos -name \"*.proto\") --proto_path=./protos --php_out=./generated --openswoole-grpc_out=./generated --plugin=protoc-gen-grpc=$(which protoc-gen-openswoole-grpc)'"
+      "sh -c 'protoc $(find ./protos -name \"*.proto\") --proto_path=./protos --php_out=./generated --openswoole-grpc_out=./generated --plugin=protoc-gen-openswoole-grpc=$(which protoc-gen-openswoole-grpc)'"
     ]
   },
   "minimum-stability": "dev",

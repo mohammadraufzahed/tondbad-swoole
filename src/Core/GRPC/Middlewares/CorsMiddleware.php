@@ -27,8 +27,6 @@ class CorsMiddleware implements MiddlewareInterface
         // Get the host header from the raw HTTP request
         $host = $rawRequest->header['host'] ?? '';
 
-        echo print_r($rawRequest->header, true) . "\n";
-
         // Check if the host is allowed
         if (!$this->isHostAllowed($host)) {
             // Create a response with a gRPC status of PermissionDenied
@@ -43,7 +41,7 @@ class CorsMiddleware implements MiddlewareInterface
     private function isHostAllowed(string $host): bool
     {
         $host = explode(':', $host)[0];
-        echo $host . "\n";
+
         // Allow all hosts if '*' is in allowedHosts
         if (in_array('*', $this->allowedHosts, true)) {
             return true;

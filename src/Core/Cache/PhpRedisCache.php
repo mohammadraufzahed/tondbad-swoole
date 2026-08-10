@@ -12,23 +12,11 @@ use TondbadSwoole\Core\Config;
 
 class PhpRedisCache implements CacheInterface
 {
-    /**
-     * @var Redis
-     */
     private Redis $redis;
-
-    /**
-     * @var SerializerInterface
-     */
     private SerializerInterface $serializer;
+    private string $prefix;
 
-    /**
-     * Constructor
-     *
-     * @param array $config Redis client configuration.
-     * @param SerializerInterface|null $serializer Optional serializer. If null, a default JSON serializer is used.
-     */
-    public function __construct()
+    public function __construct(?SerializerInterface $serializer = null)
     {
         $config = Config::get('cache.redis', []);
 
@@ -40,34 +28,28 @@ class PhpRedisCache implements CacheInterface
         $password = $config['password'] ?? null;
         $database = $config['database'] ?? 0;
 
-        // Connect to Redis server
         $connected = $this->redis->connect($host, $port, $timeout);
         if (!$connected) {
             throw new \Exception("Could not connect to Redis at {$host}:{$port}");
         }
 
-        // Authenticate if password is provided
         if ($password !== null) {
             if (!$this->redis->auth($password)) {
                 throw new \Exception("Redis authentication failed.");
             }
         }
 
-        // Select the database
         if (!$this->redis->select($database)) {
             throw new \Exception("Could not select Redis database {$database}.");
         }
 
-        // Initialize Serializer
+        $this->prefix = Config::get('cache.redis.options.prefix', '');
         $this->serializer = $serializer ?? new Serializer([new ObjectNormalizer()], [new JsonEncoder()]);
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function get(string $key): mixed
     {
-        $value = $this->redis->get($key);
+        $value = $this->redis->get($this->prefixKey($key));
         if ($value === false) {
             return null;
         }
@@ -75,77 +57,85 @@ class PhpRedisCache implements CacheInterface
         return $this->serializer->decode($value, 'json');
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function set(string $key, mixed $value, ?int $ttl = null): bool
     {
         try {
             $serializedValue = $this->serializer->encode($value, 'json');
         } catch (\Exception $e) {
-            // Handle serialization errors (e.g., log the error)
             return false;
         }
+
+        $prefixedKey = $this->prefixKey($key);
 
         if ($ttl !== null) {
-            return $this->redis->setex($key, $ttl, $serializedValue);
+            return $this->redis->setex($prefixedKey, $ttl, $serializedValue);
         }
 
-        return $this->redis->set($key, $serializedValue);
+        return $this->redis->set($prefixedKey, $serializedValue);
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function delete(string $key): bool
     {
-        return $this->redis->del([$key]) > 0;
+        return $this->redis->del([$this->prefixKey($key)]) > 0;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function clear(): bool
     {
-        // WARNING: FLUSHDB removes all keys from the current database.
-        // Use with caution. Alternatively, implement a safer key iteration and deletion.
+        if ($this->prefix === '') {
+            try {
+                return $this->redis->flushDB();
+            } catch (\Exception $e) {
+                return false;
+            }
+        }
 
         try {
-            return $this->redis->flushDB();
+            $iterator = null;
+            do {
+                $keys = $this->redis->scan($iterator, $this->prefix . '*', 100);
+
+                if ($keys === false) {
+                    break;
+                }
+
+                if (!empty($keys)) {
+                    $this->redis->del($keys);
+                }
+            } while ($iterator !== 0);
+
+            return true;
         } catch (\Exception $e) {
-            // Handle exception (e.g., log the error)
             return false;
         }
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function has(string $key): bool
     {
-        return $this->redis->exists($key) > 0;
+        return $this->redis->exists($this->prefixKey($key)) > 0;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function getMultiple(iterable $keys): array
     {
         $keysArray = is_array($keys) ? $keys : iterator_to_array($keys);
-        $values = $this->redis->mget($keysArray);
+        $prefixedKeys = [];
+        $keyMap = [];
+        foreach ($keysArray as $key) {
+            $pk = $this->prefixKey((string) $key);
+            $prefixedKeys[] = $pk;
+            $keyMap[$pk] = (string) $key;
+        }
+
+        $values = $this->redis->mget($prefixedKeys);
 
         $results = [];
-        foreach ($keysArray as $index => $key) {
+        foreach ($prefixedKeys as $index => $pk) {
             $value = $values[$index];
-            $results[$key] = $value !== false ? $this->serializer->decode($value, 'json') : null;
+            $results[$keyMap[$pk]] = $value !== false ? $this->serializer->decode($value, 'json') : null;
         }
 
         return $results;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function setMultiple(iterable $items, ?int $ttl = null): bool
     {
         $pipeline = $this->redis->multi(Redis::PIPELINE);
@@ -154,22 +144,27 @@ class PhpRedisCache implements CacheInterface
             try {
                 $serializedValue = $this->serializer->encode($value, 'json');
             } catch (\Exception $e) {
-                // Handle serialization errors (e.g., log the error)
                 $this->redis->discard();
                 return false;
             }
 
+            $prefixedKey = $this->prefixKey((string) $key);
+
             if ($ttl !== null) {
-                $pipeline->setex($key, $ttl, $serializedValue);
+                $pipeline->setex($prefixedKey, $ttl, $serializedValue);
             } else {
-                $pipeline->set($key, $serializedValue);
+                $pipeline->set($prefixedKey, $serializedValue);
             }
         }
 
         $responses = $pipeline->exec();
 
+        if ($responses === false) {
+            return false;
+        }
+
         foreach ($responses as $response) {
-            if ($response !== true) {
+            if ($response !== true && $response !== 1 && $response !== 'OK') {
                 return false;
             }
         }
@@ -177,12 +172,15 @@ class PhpRedisCache implements CacheInterface
         return true;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function deleteMultiple(iterable $keys): bool
     {
         $keysArray = is_array($keys) ? $keys : iterator_to_array($keys);
-        return $this->redis->del($keysArray) > 0;
+        $prefixedKeys = array_map(fn($key) => $this->prefixKey((string) $key), $keysArray);
+        return $this->redis->del($prefixedKeys) > 0;
+    }
+
+    private function prefixKey(string $key): string
+    {
+        return $this->prefix . $key;
     }
 }

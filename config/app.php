@@ -5,6 +5,7 @@ use TondbadSwoole\Core\Env;
 return [
     'name' => Env::get('app.name', 'Tondbad Framework'),
     'type' => Env::get('app.type', 'http'),
+    'debug' => Env::get('app.debug', false),
     'http' => [
         'port' => Env::get('app.http.port', 9501),
     ],
