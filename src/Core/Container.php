@@ -24,6 +24,16 @@ class Container
     protected array $instances = [];
 
     /**
+     * @var array<class-string, ReflectionClass>
+     */
+    private array $reflectionCache = [];
+
+    /**
+     * @var array<class-string, list<ReflectionParameter>>
+     */
+    private array $constructorParametersCache = [];
+
+    /**
      * Bind a service or class into the container.
      */
     public function bind(string $abstract, mixed $concrete): void
@@ -90,7 +100,7 @@ class Container
      */
     protected function resolve(string $class)
     {
-        $reflector = new ReflectionClass($class);
+        $reflector = $this->reflectionCache[$class] ??= new ReflectionClass($class);
 
         if (!$reflector->isInstantiable()) {
             throw new Exception("Class {$class} is not instantiable.");
@@ -102,9 +112,9 @@ class Container
             return new $class();
         }
 
-        $parameters = $constructor->getParameters();
+        $parameters = $this->constructorParametersCache[$class] ??= $constructor->getParameters();
         $dependencies = array_map(
-            fn(ReflectionParameter $parameter) => $this->resolveParameter($parameter),
+            fn(ReflectionParameter $parameter) => $this->resolveParameter($parameter, $class),
             $parameters
         );
 
@@ -113,8 +123,10 @@ class Container
 
     /**
      * Resolve a single constructor parameter.
+     *
+     * @param class-string $class
      */
-    protected function resolveParameter(ReflectionParameter $parameter): mixed
+    protected function resolveParameter(ReflectionParameter $parameter, string $class): mixed
     {
         $type = $parameter->getType();
 
@@ -154,6 +166,6 @@ class Container
             return null;
         }
 
-        throw new Exception("Cannot resolve parameter '{$parameter->getName()}': unresolvable type.");
+        throw new Exception("Cannot resolve parameter '\${$parameter->getName()}' for class '{$class}': unresolvable type.");
     }
 }

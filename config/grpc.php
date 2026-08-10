@@ -1,7 +1,7 @@
 <?php
 
-use OpenSwoole\GRPC\Middleware\{TraceMiddleware, LoggingMiddleware};
-use TondbadSwoole\Core\GRPC\Middlewares\CorsMiddleware;
+use OpenSwoole\GRPC\Middleware\{LoggingMiddleware, TraceMiddleware};
+use TondbadSwoole\Core\GRPC\Middlewares\GrpcCorsMiddleware;
 
 return [
     'services' => [
@@ -9,6 +9,6 @@ return [
     'middlewares' => [
         LoggingMiddleware::class,
         TraceMiddleware::class,
-        CorsMiddleware::class,
-    ]
+        GrpcCorsMiddleware::class,
+    ],
 ];

@@ -1,0 +1,84 @@
+<?php
+
+declare(strict_types=1);
+
+namespace TondbadSwoole\Http;
+
+use OpenSwoole\Http\Response as SwooleResponse;
+
+class Response
+{
+    public function __construct(private readonly SwooleResponse $response)
+    {
+    }
+
+    public function getSwooleResponse(): SwooleResponse
+    {
+        return $this->response;
+    }
+
+    public function status(int $status): self
+    {
+        $this->response->status($status);
+
+        return $this;
+    }
+
+    public function header(string $key, string $value): self
+    {
+        $this->response->header($key, $value);
+
+        return $this;
+    }
+
+    public function write(string $content): self
+    {
+        $this->response->write($content);
+
+        return $this;
+    }
+
+    public function end(?string $content = null): void
+    {
+        $this->response->end($content);
+    }
+
+    public function redirect(string $url, int $status = 302): void
+    {
+        $this->response->redirect($url, $status);
+        $this->response->end();
+    }
+
+    public function json(mixed $data, int $status = 200): void
+    {
+        $this->status($status)
+            ->header('Content-Type', 'application/json')
+            ->end(json_encode($data, JSON_THROW_ON_ERROR));
+    }
+
+    public function html(string $html, int $status = 200): void
+    {
+        $this->status($status)
+            ->header('Content-Type', 'text/html; charset=utf-8')
+            ->end($html);
+    }
+
+    public function text(string $text, int $status = 200): void
+    {
+        $this->status($status)
+            ->header('Content-Type', 'text/plain; charset=utf-8')
+            ->end($text);
+    }
+
+    public function error(string $message, int $status = 500): void
+    {
+        $this->status($status)
+            ->header('Content-Type', 'application/json')
+            ->end(json_encode(['error' => $message], JSON_THROW_ON_ERROR));
+    }
+
+    public function __call(string $method, array $arguments): mixed
+    {
+        return $this->response->$method(...$arguments);
+    }
+}

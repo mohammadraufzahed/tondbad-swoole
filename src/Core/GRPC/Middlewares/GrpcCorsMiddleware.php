@@ -10,7 +10,7 @@ use OpenSwoole\GRPC\RequestHandlerInterface;
 use OpenSwoole\GRPC\Response;
 use TondbadSwoole\Core\Config;
 
-class CorsMiddleware implements MiddlewareInterface
+class GrpcCorsMiddleware implements MiddlewareInterface
 {
     private readonly array $allowedHosts;
 
