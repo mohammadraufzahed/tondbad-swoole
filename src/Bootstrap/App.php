@@ -11,6 +11,7 @@ use OpenSwoole\WebSocket\Server as HttpServer;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Env;
+use TondbadSwoole\Core\Exceptions\ConfigurationException;
 use TondbadSwoole\Core\Route\Route;
 use TondbadSwoole\Providers\Contracts\ServiceProvider;
 
@@ -34,6 +35,7 @@ class App
         $this->env->loadAll();
 
         $this->config = new Config($this->env, [dirname(__DIR__, 2) . '/config']);
+        $this->validateConfiguration();
 
         $this->container = new Container();
         $this->container->singleton(Container::class, fn() => $this->container);
@@ -42,6 +44,42 @@ class App
 
         $this->providers = $this->loadProviders();
         $this->registerProviders();
+    }
+
+    /**
+     * @throws ConfigurationException
+     */
+    private function validateConfiguration(): void
+    {
+        $rules = [
+            'app.name' => 'string',
+            'app.type' => 'string',
+            'app.debug' => 'bool',
+            'app.logging.path' => 'string',
+            'app.http.port' => 'int',
+            'app.grpc.port' => 'int',
+            'app.middlewares' => 'array',
+        ];
+
+        foreach ($rules as $key => $expected) {
+            $value = $this->config->get($key);
+            $valid = match ($expected) {
+                'string' => is_string($value) && $value !== '',
+                'bool' => is_bool($value),
+                'int' => is_int($value) && $value > 0 && $value <= 65535,
+                'array' => is_array($value),
+                default => true,
+            };
+
+            if (!$valid) {
+                throw new ConfigurationException("Configuration value '{$key}' must be a non-empty {$expected}.");
+            }
+        }
+
+        $appType = $this->config->get('app.type');
+        if (!in_array($appType, ['http', 'grpc'], true)) {
+            throw new ConfigurationException("Configuration 'app.type' must be 'http' or 'grpc', '{$appType}' given.");
+        }
     }
 
     public function routes(): Route

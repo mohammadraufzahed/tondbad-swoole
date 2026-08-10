@@ -21,7 +21,8 @@ class Route implements RouteInterface
         private readonly Config $config,
         private readonly Logger $logger
     ) {
-        $this->registrar = new RouteRegistrar();
+        $routeCacheFile = $this->config->get('app.route_cache_file');
+        $this->registrar = new RouteRegistrar($routeCacheFile);
         $invoker = new HandlerInvoker($this->container);
         $errorHandler = new ErrorHandler($this->config, $this->logger);
         $middlewares = $this->config->get('app.middlewares', []);

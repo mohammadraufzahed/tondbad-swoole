@@ -19,11 +19,20 @@ class ErrorHandler
 
     public function handle(Throwable $e, Response $response): void
     {
-        $this->logger->error($e->getMessage(), ['exception' => $e]);
+        $this->logger->error($e->getMessage(), [
+            'exception' => get_class($e),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+        ]);
 
         $isDebug = $this->config->get('app.debug', false);
 
+        $message = '500 Internal Server Error';
+        if ($isDebug) {
+            $message .= ': ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine();
+        }
+
         $response->status(500);
-        $response->end($isDebug ? '500 Internal Server Error: ' . $e->getMessage() : '500 Internal Server Error');
+        $response->end($message);
     }
 }

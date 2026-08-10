@@ -28,53 +28,56 @@ class RouteDispatcher
 
     public function dispatch(Request $request, Response $response): void
     {
-        $httpMethod = strtoupper($request->server['request_method']);
-        $uri = $request->server['request_uri'];
+        try {
+            $context = new HttpContext($request, $response);
+            $pipeline = new Pipeline($this->container);
+
+            $pipeline
+                ->send($context)
+                ->through($this->preparePipes($this->middlewares))
+                ->then(function (HttpContext $context): void {
+                    $this->handleRequest($context);
+                });
+        } catch (Throwable $e) {
+            $this->errorHandler->handle($e, $response);
+        }
+    }
+
+    private function handleRequest(HttpContext $context): void
+    {
+        $httpMethod = strtoupper($context->request->server['request_method']);
+        $uri = $context->request->server['request_uri'];
 
         if (false !== $pos = strpos($uri, '?')) {
             $uri = substr($uri, 0, $pos);
         }
         $uri = rawurldecode($uri);
 
-        try {
-            $routeInfo = $this->registrar->getDispatcher()->dispatch($httpMethod, $uri);
+        $routeInfo = $this->registrar->getDispatcher()->dispatch($httpMethod, $uri);
 
-            switch ($routeInfo[0]) {
-                case Dispatcher::NOT_FOUND:
-                    $response->status(404);
-                    $response->end('404 Not Found');
-                    break;
-                case Dispatcher::METHOD_NOT_ALLOWED:
-                    $response->status(405);
-                    $response->end('405 Method Not Allowed');
-                    break;
-                case Dispatcher::FOUND:
-                    $handler = $routeInfo[1];
-                    $vars = $routeInfo[2];
-                    $this->dispatchThroughPipeline($request, $response, $handler, $vars);
-                    break;
-            }
-        } catch (Throwable $e) {
-            $this->errorHandler->handle($e, $response);
+        switch ($routeInfo[0]) {
+            case Dispatcher::NOT_FOUND:
+                $context->response->status(404);
+                $context->response->end('404 Not Found');
+                break;
+            case Dispatcher::METHOD_NOT_ALLOWED:
+                $context->response->status(405);
+                $context->response->end('405 Method Not Allowed');
+                break;
+            case Dispatcher::FOUND:
+                $handler = $this->registrar->getHandler((int) $routeInfo[1]);
+                $vars = $routeInfo[2];
+                $this->invokeHandler($handler, $context, $vars);
+                break;
         }
     }
 
     /**
      * @param array<string, string> $vars
      */
-    private function dispatchThroughPipeline(Request $request, Response $response, array|callable $handler, array $vars): void
+    private function invokeHandler(array|callable $handler, HttpContext $context, array $vars): void
     {
-        $context = new HttpContext($request, $response);
-        $pipes = $this->preparePipes($this->middlewares);
-
-        $pipeline = new Pipeline($this->container);
-
-        $pipeline
-            ->send($context)
-            ->through($pipes)
-            ->then(function (HttpContext $context) use ($handler, $vars): void {
-                $this->invoker->invoke($handler, $context->request, $context->response, $vars);
-            });
+        $this->invoker->invoke($handler, $context->request, $context->response, $vars);
     }
 
     /**
