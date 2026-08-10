@@ -17,8 +17,27 @@ class LoggerServiceProvider extends ServiceProvider
             $logger = new Logger(
                 Config::get('app.name', 'Tondbad Framework')
             );
+
             $logger->pushHandler(new StreamHandler('php://stdout'));
             $logger->pushHandler(new StreamHandler('php://stderr', Level::Error));
+
+            $logPath = Config::get('app.logging.path');
+            if ($logPath !== null) {
+                $logDir = dirname($logPath);
+                if (!is_dir($logDir)) {
+                    mkdir($logDir, 0775, true);
+                }
+
+                $levelName = strtolower((string) Config::get('app.logging.level', 'info'));
+                try {
+                    $level = Level::fromName($levelName);
+                } catch (\Throwable $e) {
+                    $level = Level::Info;
+                }
+
+                $logger->pushHandler(new StreamHandler($logPath, $level));
+            }
+
             return $logger;
         });
     }

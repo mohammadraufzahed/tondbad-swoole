@@ -3,7 +3,10 @@
 namespace TondbadSwoole\Bootstrap;
 
 use Exception;
+use Monolog\Logger;
 use OpenSwoole\GRPC\Server as GrpcServer;
+use OpenSwoole\Process;
+use OpenSwoole\Server;
 use OpenSwoole\WebSocket\Server as HttpServer;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
@@ -115,13 +118,26 @@ class App
     public function run(): void
     {
         $this->bootProviders();
-        if (Config::get('app.type', 'http') === 'http') {
-            $httpServer = $this->container->make(HttpServer::class);
-            $httpServer->start();
-        } else {
-            $grpcServer = $this->container->make(GrpcServer::class);
-            $grpcServer->start();
-        }
 
+        $server = Config::get('app.type', 'http') === 'http'
+            ? $this->container->make(HttpServer::class)
+            : $this->container->make(GrpcServer::class);
+
+        $this->registerShutdownHandlers($server);
+
+        $server->start();
+    }
+
+    private function registerShutdownHandlers(Server $server): void
+    {
+        $server->on('Shutdown', function () {
+            $this->container->make(Logger::class)?->info('Server shutting down gracefully.');
+        });
+
+        $sigterm = defined('SIGTERM') ? SIGTERM : 15;
+        $sigint = defined('SIGINT') ? SIGINT : 2;
+
+        Process::signal($sigterm, fn() => $server->shutdown());
+        Process::signal($sigint, fn() => $server->shutdown());
     }
 }

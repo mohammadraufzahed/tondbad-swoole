@@ -2,7 +2,6 @@
   "name": "mohammadraufzahed/tondbad-swoole",
   "description": "Tondbād - A lightweight and high-performance PHP framework built on OpenSwoole with routing, job workers, queue management, and gRPC support.",
   "type": "library",
-  "version": "0.0.1",
   "keywords": [
     "openswoole",
     "php",
@@ -21,6 +20,11 @@
       "GPBMetadata\\": "generated/GPBMetadata/"
     }
   },
+  "autoload-dev": {
+    "psr-4": {
+      "TondbadSwoole\\Tests\\": "tests/"
+    }
+  },
   "authors": [
     {
       "name": "Mohammad Raufzahed",
@@ -30,24 +34,28 @@
   "scripts": {
     "server": "php public/server.php",
     "grpc": "php public/grpc.php",
+    "test": "phpunit",
     "compile-proto": [
       "sh -c 'protoc $(find ./protos -name \"*.proto\") --proto_path=./protos --php_out=./generated --openswoole-grpc_out=./generated --plugin=protoc-gen-openswoole-grpc=$(which protoc-gen-openswoole-grpc)'"
     ]
   },
   "minimum-stability": "dev",
+  "prefer-stable": true,
   "require": {
     "php": ">=8.2",
     "ext-openswoole": "*",
     "nikic/fast-route": "^2.0@dev",
-    "monolog/monolog": "^3.0@dev",
-    "grpc/grpc": "dev-master",
-    "google/protobuf": "dev-master",
+    "monolog/monolog": "^3.0",
+    "grpc/grpc": "^1.57",
+    "google/protobuf": "^3.25",
     "openswoole/core": "^22.1.5",
-    "openswoole/grpc": "dev-master",
-    "openswoole/ide-helper": "dev-master",
-    "symfony/serializer": "7.2.x-dev",
-    "symfony/property-access": "7.2.x-dev",
-    "predis/predis": "^3.0@alpha",
-    "vlucas/phpdotenv": "^5.6@dev"
+    "openswoole/grpc": "^22.1.5",
+    "symfony/serializer": "^7.2",
+    "symfony/property-access": "^7.2",
+    "predis/predis": "^2.3",
+    "vlucas/phpdotenv": "^5.6"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^11.0"
   }
 }
