@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace TondbadSwoole\Providers\Default;
 
 use Monolog\Logger;
-use OpenSwoole\Http\{Request, Response};
-use OpenSwoole\WebSocket\Server as HttpServer;
+use OpenSwoole\Http\Request;
+use OpenSwoole\Http\Response;
+use OpenSwoole\Http\Server as HttpServer;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Route\Route;
@@ -23,7 +24,10 @@ class HttpServiceProvider extends ServiceProvider
         }
 
         $container->singleton(HttpServer::class, function () use ($container, $config) {
-            $server = new HttpServer('0.0.0.0', (int) $config->get('app.http.port', 8000));
+            $server = new HttpServer(
+                (string) $config->get('app.http.host', '0.0.0.0'),
+                (int) $config->get('app.http.port', 9501)
+            );
 
             $this->setupRouter($server, $container);
 
@@ -34,9 +38,6 @@ class HttpServiceProvider extends ServiceProvider
     private function setupRouter(HttpServer $server, Container $container): void
     {
         $route = $container->make(Route::class);
-
-        $server->on('message', function () {
-        });
 
         $server->on(
             'request',

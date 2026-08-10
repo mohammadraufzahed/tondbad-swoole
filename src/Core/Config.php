@@ -9,7 +9,7 @@ class Config
     /**
      * @var list<string>
      */
-    private array $searchPaths;
+    private array $searchPaths = [];
 
     /**
      * @var array<string, mixed>
@@ -21,8 +21,15 @@ class Config
      */
     private array $loadedFiles = [];
 
-    public function __construct(private readonly Env $env, array $searchPaths = [])
-    {
+    public function __construct(
+        private readonly Env $env,
+        private string $basePath = '',
+        array $searchPaths = []
+    ) {
+        if ($this->basePath === '') {
+            $this->basePath = dirname(__DIR__, 2);
+        }
+
         $this->searchPaths = $searchPaths;
     }
 
@@ -75,6 +82,7 @@ class Config
     {
         $configs = [];
         $env = $this->env;
+        $basePath = $this->basePath;
 
         foreach ($this->getSearchPaths() as $path) {
             $configPath = $path . "/{$file}.php";
@@ -91,8 +99,7 @@ class Config
     private function getSearchPaths(): array
     {
         $defaults = [
-            __DIR__ . '/../../config',
-            __DIR__ . '/../../../../config',
+            dirname(__DIR__, 2) . '/config',
         ];
 
         return array_merge($defaults, $this->searchPaths);

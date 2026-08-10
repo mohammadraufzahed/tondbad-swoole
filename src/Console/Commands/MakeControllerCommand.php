@@ -1,0 +1,48 @@
+<?php
+
+declare(strict_types=1);
+
+namespace TondbadSwoole\Console\Commands;
+
+class MakeControllerCommand extends MakeCommand
+{
+    public function getName(): string
+    {
+        return 'make:controller';
+    }
+
+    public function getDescription(): string
+    {
+        return 'Create a new controller class.';
+    }
+
+    protected function getStub(): string
+    {
+        return <<<'STUB'
+<?php
+
+declare(strict_types=1);
+
+namespace App\Http\Controllers;
+
+use TondbadSwoole\Core\Route\Attributes\Endpoint;
+use TondbadSwoole\Http\Request;
+use TondbadSwoole\Http\Response;
+
+class {Name}Controller
+{
+    #[Endpoint('GET', '/{name}')]
+    public function index(Request $request, Response $response): void
+    {
+        $response->html('Hello from {Name}Controller');
+    }
+}
+
+STUB;
+    }
+
+    protected function getDefaultPath(string $name): string
+    {
+        return $this->basePath . '/app/Http/Controllers/' . $name . 'Controller.php';
+    }
+}

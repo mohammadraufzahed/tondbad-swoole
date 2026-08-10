@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Core\Route;
 
+use FastRoute\Dispatcher;
 use Monolog\Logger;
 use OpenSwoole\Http\Request;
 use OpenSwoole\Http\Response;
@@ -53,5 +54,15 @@ class Route implements RouteInterface
     public function getRoutes(): array
     {
         return $this->registrar->getRoutes();
+    }
+
+    public function getDispatcher(): Dispatcher
+    {
+        return $this->registrar->getDispatcher();
+    }
+
+    public function warmRouteCache(): void
+    {
+        $this->registrar->getDispatcher();
     }
 }

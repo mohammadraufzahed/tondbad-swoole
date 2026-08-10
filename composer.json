@@ -13,6 +13,9 @@
     "performance"
   ],
   "license": "MIT",
+  "bin": [
+    "bin/tondbad"
+  ],
   "autoload": {
     "psr-4": {
       "TondbadSwoole\\": "src/",

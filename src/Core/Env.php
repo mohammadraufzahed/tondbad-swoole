@@ -92,14 +92,28 @@ class Env
 
     private function parseValue(string $value): mixed
     {
+        if ($value === '') {
+            return '';
+        }
+
         $lower = strtolower($value);
 
-        return match (true) {
-            $lower === 'true' => true,
-            $lower === 'false' => false,
-            $lower === 'null' => null,
-            is_numeric($value) => strpos($value, '.') === false ? (int) $value : (float) $value,
-            default => $value,
-        };
+        if ($lower === 'true') {
+            return true;
+        }
+
+        if ($lower === 'false') {
+            return false;
+        }
+
+        if ($lower === 'null') {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            return strpos($value, '.') === false ? (int) $value : (float) $value;
+        }
+
+        return $value;
     }
 }

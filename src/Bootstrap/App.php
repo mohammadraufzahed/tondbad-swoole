@@ -7,7 +7,7 @@ namespace TondbadSwoole\Bootstrap;
 use Exception;
 use Monolog\Logger;
 use OpenSwoole\GRPC\Server as GrpcServer;
-use OpenSwoole\WebSocket\Server as HttpServer;
+use OpenSwoole\Http\Server as HttpServer;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Env;
@@ -26,24 +26,32 @@ class App
      */
     private readonly array $providers;
 
+    private bool $booted = false;
+
     /**
      * @throws Exception
      */
-    public function __construct()
+    public function __construct(private readonly string $basePath)
     {
         $this->env = new Env();
-        $this->env->loadAll();
+        $this->env->loadAll([$this->basePath]);
 
-        $this->config = new Config($this->env, [dirname(__DIR__, 2) . '/config']);
+        $this->config = new Config($this->env, $this->basePath, [$this->basePath . '/config']);
         $this->validateConfiguration();
 
         $this->container = new Container();
         $this->container->singleton(Container::class, fn() => $this->container);
         $this->container->singleton(Env::class, fn() => $this->env);
         $this->container->singleton(Config::class, fn() => $this->config);
+        $this->container->singleton(App::class, fn() => $this);
 
         $this->providers = $this->loadProviders();
         $this->registerProviders();
+    }
+
+    public function basePath(string $path = ''): string
+    {
+        return $path === '' ? $this->basePath : $this->basePath . '/' . ltrim($path, '/');
     }
 
     /**
@@ -56,7 +64,9 @@ class App
             'app.type' => 'string',
             'app.debug' => 'bool',
             'app.logging.path' => 'string',
+            'app.http.host' => 'string',
             'app.http.port' => 'int',
+            'app.grpc.host' => 'string',
             'app.grpc.port' => 'int',
             'app.middlewares' => 'array',
         ];
@@ -122,18 +132,26 @@ class App
         }
     }
 
-    protected function bootProviders(): void
+    public function boot(): self
     {
+        if ($this->booted) {
+            return $this;
+        }
+
         foreach ($this->providers as $provider) {
             $provider->beforeBoot($this->container);
             $provider->boot($this->container);
             $provider->afterBoot($this->container);
         }
+
+        $this->booted = true;
+
+        return $this;
     }
 
     public function run(): void
     {
-        $this->bootProviders();
+        $this->boot();
 
         $server = $this->config->get('app.type', 'http') === 'http'
             ? $this->container->make(HttpServer::class)
@@ -146,8 +164,10 @@ class App
 
     private function registerShutdownHandlers(object $server): void
     {
-        $server->on('Shutdown', function () {
-            $this->container->make(Logger::class)?->info('Server shutting down gracefully.');
+        $container = $this->container;
+
+        $server->on('Shutdown', function () use ($container) {
+            $container->make(Logger::class)?->info('Server shutting down gracefully.');
         });
 
         if (function_exists('pcntl_signal') && method_exists($server, 'shutdown')) {
