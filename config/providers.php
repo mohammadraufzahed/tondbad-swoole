@@ -6,8 +6,7 @@ use TondbadSwoole\Providers\Default\{
     RouteServiceProvider,
     GrpcServiceProvider,
     PredisCacheProvider,
-    PhpRedisCacheProvider,
-    EnvServiceProvider
+    PhpRedisCacheProvider
 };
 
 return [
@@ -17,5 +16,4 @@ return [
     RouteServiceProvider::class,
     HttpServiceProvider::class,
     GrpcServiceProvider::class,
-    EnvServiceProvider::class,
 ];

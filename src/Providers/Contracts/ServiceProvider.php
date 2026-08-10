@@ -2,10 +2,10 @@
 
 namespace TondbadSwoole\Providers\Contracts;
 
-use TondbadSwoole\Core\Config;
+use TondbadSwoole\Contracts\ServiceProviderInterface;
 use TondbadSwoole\Core\Container;
 
-class ServiceProvider
+abstract class ServiceProvider implements ServiceProviderInterface
 {
     /**
      * Register services or bindings in the container.
@@ -85,15 +85,4 @@ class ServiceProvider
         return 0;
     }
 
-    /**
-     * Add a configuration file path to the global configuration search paths.
-     * This method is used to add additional configuration paths that can be loaded by the application.
-     *
-     * @param string $path The configuration file path to add.
-     * @return void
-     */
-    final protected function addConfigurationPath(string $path): void
-    {
-        Config::addToSearchPaths($path);
-    }
 }

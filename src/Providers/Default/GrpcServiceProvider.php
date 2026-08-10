@@ -1,32 +1,32 @@
 <?php
 
+declare(strict_types=1);
+
 namespace TondbadSwoole\Providers\Default;
 
-use Monolog\Logger;
-use OpenSwoole\GRPC\Middleware\{LoggingMiddleware, TraceMiddleware};
 use OpenSwoole\GRPC\Server as GrpcServer;
-use TondbadSwoole\Core\{Config, Container};
+use TondbadSwoole\Core\Config;
+use TondbadSwoole\Core\Container;
 use TondbadSwoole\Providers\Contracts\ServiceProvider;
 
 class GrpcServiceProvider extends ServiceProvider
 {
-
     public function register(Container $container): void
     {
+        $config = $container->make(Config::class);
 
-        if (Config::get('app.type', 'http') !== 'grpc')
+        if ($config->get('app.type', 'http') !== 'grpc') {
             return;
-        $container->singleton(GrpcServer::class, function () use ($container) {
-            $server = new GrpcServer('0.0.0.0', Config::get('app.grpc.port', 8001));
+        }
 
-            // Register middlewares
-            $middlewares = Config::get('grpc.middlewares', []);
+        $container->singleton(GrpcServer::class, function () use ($container, $config) {
+            $server = new GrpcServer('0.0.0.0', $config->get('app.grpc.port', 8001));
 
-            foreach ($middlewares as $middleware)
+            foreach ($config->get('grpc.middlewares', []) as $middleware) {
                 $server->addMiddleware($container->make($middleware));
+            }
 
-            $grpcServices = Config::get('grpc.services', []);
-            foreach ($grpcServices as $service) {
+            foreach ($config->get('grpc.services', []) as $service) {
                 $server->register($service, $container->make($service));
             }
 

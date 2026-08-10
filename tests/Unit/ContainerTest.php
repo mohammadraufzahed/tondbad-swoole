@@ -18,7 +18,7 @@ class ContainerTest extends TestCase
 {
     public function test_resolve_class_without_constructor(): void
     {
-        $container = Container::create();
+        $container = new Container();
 
         $service = $container->make(ServiceWithNoConstructor::class);
 
@@ -27,7 +27,7 @@ class ContainerTest extends TestCase
 
     public function test_resolve_class_with_class_dependency(): void
     {
-        $container = Container::create();
+        $container = new Container();
 
         $service = $container->make(ServiceWithClassDependency::class);
 
@@ -37,7 +37,7 @@ class ContainerTest extends TestCase
 
     public function test_resolve_class_with_optional_dependency_resolves_when_possible(): void
     {
-        $container = Container::create();
+        $container = new Container();
 
         $service = $container->make(ServiceWithOptional::class);
 
@@ -47,7 +47,7 @@ class ContainerTest extends TestCase
 
     public function test_resolve_class_with_union_dependency(): void
     {
-        $container = Container::create();
+        $container = new Container();
 
         $service = $container->make(ServiceWithUnion::class);
 
@@ -57,7 +57,7 @@ class ContainerTest extends TestCase
 
     public function test_singleton_returns_same_instance(): void
     {
-        $container = Container::create();
+        $container = new Container();
 
         $container->singleton(Logger::class, fn() => new Logger('singleton'));
 
@@ -69,7 +69,7 @@ class ContainerTest extends TestCase
 
     public function test_bind_class_string_resolves_instance(): void
     {
-        $container = Container::create();
+        $container = new Container();
 
         $container->bind('repository', Repository::class);
 
@@ -78,7 +78,7 @@ class ContainerTest extends TestCase
 
     public function test_bind_scalar_value_returns_value(): void
     {
-        $container = Container::create();
+        $container = new Container();
 
         $container->bind('app.name', 'Tondbad Test');
 
@@ -89,13 +89,13 @@ class ContainerTest extends TestCase
     {
         $this->expectException(Exception::class);
 
-        $container = Container::create();
+        $container = new Container();
         $container->make(RequiredScalar::class);
     }
 
     public function test_has_reports_existing_binding(): void
     {
-        $container = Container::create();
+        $container = new Container();
 
         $container->bind('foo', 'bar');
 

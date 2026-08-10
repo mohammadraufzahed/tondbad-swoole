@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace TondbadSwoole\Core;
 
 use Dotenv\Dotenv;
@@ -8,33 +10,29 @@ use Dotenv\Exception\InvalidPathException;
 class Env
 {
     /**
-     * @var array $envCache Cache for storing environment variables
+     * @var array<string, mixed>
      */
-    protected static array $envCache = [];
+    private array $envCache = [];
 
     /**
-     * @var array $loadedFiles Keeps track of loaded environment files
+     * @var list<string>
      */
-    protected static array $loadedFiles = [];
+    private array $loadedFiles = [];
 
     /**
-     * Load the environment variables from framework and application files.
-     *
-     * This function loads both framework and application environment files. Application variables override framework ones.
-     *
-     * @param array $paths Array of paths to environment files.
-     * @param string $filename Name of the environment file (default is '.env')
+     * @param list<string> $paths
      */
-    public static function load(array $paths, string $filename = '.env'): void
+    public function load(array $paths, string $filename = '.env'): void
     {
         foreach ($paths as $path) {
             $filePath = "{$path}/{$filename}";
-            if (file_exists($filePath) && !in_array($filePath, self::$loadedFiles)) {
+
+            if (file_exists($filePath) && !in_array($filePath, $this->loadedFiles, true)) {
                 try {
                     $dotenv = Dotenv::createImmutable($path, $filename);
                     $dotenv->load();
-                    self::$loadedFiles[] = $filePath;
-                    self::$envCache = array_merge(self::$envCache, $_ENV, $_SERVER);
+                    $this->loadedFiles[] = $filePath;
+                    $this->envCache = array_merge($this->envCache, $_ENV, $_SERVER);
                 } catch (InvalidPathException $e) {
                     throw new \Exception("Environment file not found: {$filePath}");
                 }
@@ -43,88 +41,56 @@ class Env
     }
 
     /**
-     * Retrieve an environment variable value.
+     * Load all environment variables from the project root.
      *
-     * @param string $key The environment variable key (dot notation is supported)
-     * @param mixed $default Default value if the key doesn't exist
-     * @return mixed
+     * @param list<string> $paths
      */
-    public static function get(string $key, mixed $default = null): mixed
+    public function loadAll(array $paths = []): void
     {
-        // Convert dot notation to environment key (if needed)
-        $envKey = self::convertDotNotationToEnvKey($key);
+        $defaultPaths = [
+            __DIR__ . '/../..',
+        ];
 
-        // Search for the key in the cache first
-        if (isset(self::$envCache[$envKey])) {
-            return self::parseValue(self::$envCache[$envKey]);
+        $this->load(array_merge($defaultPaths, $paths));
+    }
+
+    public function get(string $key, mixed $default = null): mixed
+    {
+        $envKey = $this->convertDotNotationToEnvKey($key);
+
+        if (isset($this->envCache[$envKey])) {
+            return $this->parseValue($this->envCache[$envKey]);
         }
 
-        // Fallback to the environment super-globals and then getenv
         if (isset($_ENV[$envKey])) {
-            return self::parseValue($_ENV[$envKey]);
+            return $this->parseValue($_ENV[$envKey]);
         }
 
         if (isset($_SERVER[$envKey])) {
-            return self::parseValue($_SERVER[$envKey]);
+            return $this->parseValue($_SERVER[$envKey]);
         }
 
         $value = getenv($envKey);
-        return $value !== false ? self::parseValue($value) : $default;
+
+        return $value !== false ? $this->parseValue($value) : $default;
     }
 
-    /**
-     * Load all environment variables from default and custom search paths.
-     *
-     * @param array $paths Array of additional search paths
-     */
-    public static function loadAll(array $paths = []): void
+    public function has(string $key): bool
     {
-        $defaultPaths = [
-            __DIR__ . '/../../../..',
-            __DIR__ . '/../..'
-        ];
+        $envKey = $this->convertDotNotationToEnvKey($key);
 
-        // Combine default and additional paths
-        $combinedPaths = array_merge($defaultPaths, $paths);
-
-        // Load the environment variables
-        self::load($combinedPaths);
-    }
-
-    /**
-     * Convert dot notation key (e.g., 'app.name') to an environment variable format ('APP_NAME').
-     *
-     * @param string $key The dot notation key
-     * @return string The environment key
-     */
-    protected static function convertDotNotationToEnvKey(string $key): string
-    {
-        return strtoupper(str_replace('.', '_', $key));
-    }
-
-    /**
-     * Determine whether an environment variable exists.
-     *
-     * @param string $key The environment variable key (dot notation is supported)
-     * @return bool
-     */
-    public static function has(string $key): bool
-    {
-        $envKey = self::convertDotNotationToEnvKey($key);
-
-        return isset(self::$envCache[$envKey])
+        return isset($this->envCache[$envKey])
             || isset($_ENV[$envKey])
             || isset($_SERVER[$envKey])
             || getenv($envKey) !== false;
     }
 
-    /**
-     * Parse the environment variable value.
-     *
-     * @param string $value The raw environment variable value
-     * @return mixed The parsed value
-     */
-    protected static function parseValue(string $value): mixed
+    private function convertDotNotationToEnvKey(string $key): string
+    {
+        return strtoupper(str_replace('.', '_', $key));
+    }
+
+    private function parseValue(string $value): mixed
     {
         $lower = strtolower($value);
 

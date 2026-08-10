@@ -1,44 +1,24 @@
 <?php
 
+declare(strict_types=1);
+
 namespace TondbadSwoole\Core\Cache;
 
+use DateInterval;
 use OpenSwoole\Table;
 use OpenSwoole\Timer;
-use Symfony\Component\Serializer\SerializerInterface;
 use Symfony\Component\Serializer\Serializer;
 use Symfony\Component\Serializer\Encoder\JsonEncoder;
 use Symfony\Component\Serializer\Normalizer\ObjectNormalizer;
-use TondbadSwoole\Core\Cache\Contracts\CacheInterface;
+use Symfony\Component\Serializer\SerializerInterface;
+use TondbadSwoole\Contracts\CacheInterface;
 
-/**
- * Class OpenSwooleTableCache
- *
- * Implements the Cache interface using OpenSwoole's Table for in-memory caching with serialization support.
- */
 class InMemoryCache implements CacheInterface
 {
-    /**
-     * @var Table
-     */
     private Table $table;
-
-    /**
-     * @var int Timer interval for cleaning expired items (in milliseconds)
-     */
     private int $cleanInterval;
-
-    /**
-     * @var SerializerInterface
-     */
     private SerializerInterface $serializer;
 
-    /**
-     * Constructor
-     *
-     * @param int $size Number of items the cache can hold
-     * @param int $cleanInterval Interval to clean expired items (in milliseconds)
-     * @param SerializerInterface|null $serializer Optional serializer. If null, a default JSON serializer is used.
-     */
     public function __construct(
         int $size = 1024,
         int $cleanInterval = 1000,
@@ -46,140 +26,134 @@ class InMemoryCache implements CacheInterface
     ) {
         $this->cleanInterval = $cleanInterval;
 
-        // Initialize OpenSwoole\Table
         $this->table = new Table($size);
-        $this->table->column('value', Table::TYPE_STRING, 65535); // Max value size
-        $this->table->column('expires_at', Table::TYPE_INT, 10); // Unix timestamp
+        $this->table->column('value', Table::TYPE_STRING, 65535);
+        $this->table->column('expires_at', Table::TYPE_INT, 10);
         $this->table->create();
 
-        // Initialize Serializer
         $this->serializer = $serializer ?? new Serializer([new ObjectNormalizer()], [new JsonEncoder()]);
 
-        // Start a timer to clean expired items periodically
         Timer::tick($this->cleanInterval, function () {
             $this->cleanExpiredItems();
         });
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function get(string $key): mixed
+    public function get(string $key, mixed $default = null): mixed
     {
         if (!$this->has($key)) {
-            return null;
+            return $default;
         }
 
         $data = $this->table->get($key);
+
         return $this->serializer->decode($data['value'], 'json');
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function set(string $key, mixed $value, ?int $ttl = null): bool
+    public function set(string $key, mixed $value, null|int|DateInterval $ttl = null): bool
     {
         try {
             $serializedValue = $this->serializer->encode($value, 'json');
         } catch (\Exception $e) {
-            // Handle serialization errors (e.g., log the error)
             return false;
         }
 
-        $expiresAt = $ttl !== null ? time() + $ttl : 0;
+        $expiresAt = $this->ttlToSeconds($ttl);
 
         return $this->table->set($key, [
             'value' => $serializedValue,
-            'expires_at' => $expiresAt,
+            'expires_at' => $expiresAt > 0 ? time() + $expiresAt : 0,
         ]);
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function delete(string $key): bool
     {
-        return $this->table->del($key) > 0;
-    }
+        $this->table->del($key);
 
-    /**
-     * {@inheritdoc}
-     */
-    public function clear(): bool
-    {
-        foreach ($this->table as $key => $row) {
-            $this->table->del($key);
-        }
         return true;
     }
 
-    /**
-     * {@inheritdoc}
-     */
+    public function clear(): bool
+    {
+        foreach ($this->table as $key => $row) {
+            $this->table->del((string) $key);
+        }
+
+        return true;
+    }
+
     public function has(string $key): bool
     {
         $data = $this->table->get($key);
+
         if ($data === false) {
             return false;
         }
 
         if ($data['expires_at'] !== 0 && time() > $data['expires_at']) {
             $this->delete($key);
+
             return false;
         }
 
         return true;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getMultiple(iterable $keys): array
+    public function getMultiple(iterable $keys, mixed $default = null): iterable
     {
         $results = [];
+
         foreach ($keys as $key) {
-            $results[$key] = $this->get($key);
+            $results[(string) $key] = $this->get((string) $key, $default);
         }
+
         return $results;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function setMultiple(iterable $items, ?int $ttl = null): bool
+    public function setMultiple(iterable $values, null|int|DateInterval $ttl = null): bool
     {
-        foreach ($items as $key => $value) {
+        foreach ($values as $key => $value) {
             if (!$this->set((string) $key, $value, $ttl)) {
                 return false;
             }
         }
+
         return true;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function deleteMultiple(iterable $keys): bool
     {
         foreach ($keys as $key) {
             $this->delete((string) $key);
         }
+
         return true;
     }
 
-    /**
-     * Clean expired items from the cache.
-     *
-     * @return void
-     */
     private function cleanExpiredItems(): void
     {
         $currentTime = time();
 
         foreach ($this->table as $key => $row) {
             if ($row['expires_at'] !== 0 && $currentTime > $row['expires_at']) {
-                $this->table->del($key);
+                $this->table->del((string) $key);
             }
         }
+    }
+
+    private function ttlToSeconds(null|int|DateInterval $ttl): int
+    {
+        if ($ttl === null) {
+            return 0;
+        }
+
+        if (is_int($ttl)) {
+            return $ttl;
+        }
+
+        $now = new \DateTime();
+        $end = clone $now;
+        $end->add($ttl);
+
+        return $end->getTimestamp() - $now->getTimestamp();
     }
 }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace TondbadSwoole\Core\Route\Contracts;
 
 use OpenSwoole\Http\Request;
@@ -7,9 +9,12 @@ use OpenSwoole\Http\Response;
 
 interface RouteInterface
 {
-    public static function addRoute(string $method, string $path, callable $handler): void;
+    /**
+     * @param array<class-string> $classNames
+     */
+    public function registerAnnotatedRoutes(array $classNames): void;
 
-    public static function registerAnnotatedRoutes(array $classNames): void;
+    public function addRoute(string $method, string $path, array|callable $handler): void;
 
     public function dispatch(Request $request, Response $response): void;
 }
