@@ -15,6 +15,6 @@ class EnvServiceProvider extends ServiceProvider
 
     public function getPriority(): int
     {
-        return 2;
+        return -1000;
     }
 }

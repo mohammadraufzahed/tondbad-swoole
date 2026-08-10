@@ -75,7 +75,7 @@ class ServiceProvider
 
     /**
      * Get the priority of the service provider.
-     * Providers with higher priority values are registered and booted first.
+     * Providers with lower priority values are registered and booted first.
      * This method can be overridden in child classes to specify custom priority values.
      *
      * @return int The priority value of the service provider. Default is 0.

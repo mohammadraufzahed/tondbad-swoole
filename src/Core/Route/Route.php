@@ -14,7 +14,11 @@ use ReflectionClass;
 use ReflectionFunction;
 use ReflectionFunctionAbstract;
 use ReflectionMethod;
+use ReflectionNamedType;
+use ReflectionParameter;
+use ReflectionUnionType;
 use Throwable;
+use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Route\Attributes\Endpoint;
 use TondbadSwoole\Core\Route\Contracts\RouteInterface;
@@ -97,7 +101,7 @@ class Route implements RouteInterface
                 $handler = $routeInfo[1];
                 $vars = $routeInfo[2]; // Extract route parameters
                 // Call the handler, passing in request, response, and resolved dependencies
-                $this->callHandler($handler, array_merge([$request, $response], $vars));
+                $this->callHandler($handler, $request, $response, $vars);
                 break;
         }
     }
@@ -114,47 +118,121 @@ class Route implements RouteInterface
         $this->dispatcher = new Dispatcher($routeCollector->processedRoutes());
     }
 
-    protected function callHandler(array|callable $handler, array $parameters): void
+    protected function callHandler(array|callable $handler, Request $request, Response $response, array $vars): void
     {
         try {
             if (is_array($handler) && count($handler) === 2) {
                 [$class, $method] = $handler;
                 $instance = $this->container->make($class);
                 $reflection = new ReflectionMethod($class, $method);
-                $dependencies = $this->resolveDependencies($reflection, $parameters);
+                $dependencies = $this->resolveDependencies($reflection, $request, $response, $vars);
                 $reflection->invokeArgs($instance, $dependencies);
             } else {
                 $reflection = new ReflectionFunction($handler);
-                $dependencies = $this->resolveDependencies($reflection, $parameters);
+                $dependencies = $this->resolveDependencies($reflection, $request, $response, $vars);
                 $reflection->invokeArgs($dependencies);
             }
         } catch (Throwable $e) {
-            $this->handleError($e, $parameters[1]);
+            $this->handleError($e, $response);
         }
     }
 
-    protected function resolveDependencies(ReflectionFunctionAbstract $reflection, array $parameters): array
+    protected function resolveDependencies(ReflectionFunctionAbstract $reflection, Request $request, Response $response, array $vars): array
     {
         $dependencies = [];
 
         foreach ($reflection->getParameters() as $param) {
-            $name = $param->getName();
-            $type = $param->getType();
-            if (!$type?->isBuiltin() && !in_array($name, ['request', 'response'])) {
-                echo $type . "\n";
-                $dependencies[$name] = $this->container->make($type);
-            } else
-                $dependencies[$name] = array_shift($parameters);
+            $dependencies[] = $this->resolveParameter($param, $request, $response, $vars);
         }
 
         return $dependencies;
     }
 
+    protected function resolveParameter(ReflectionParameter $param, Request $request, Response $response, array $vars): mixed
+    {
+        $type = $param->getType();
+        $name = $param->getName();
+
+        if ($type instanceof ReflectionNamedType) {
+            $typeName = $type->getName();
+
+            if ($typeName === Request::class) {
+                return $request;
+            }
+
+            if ($typeName === Response::class) {
+                return $response;
+            }
+
+            if (array_key_exists($name, $vars)) {
+                return $this->castValue($vars[$name], $type);
+            }
+
+            if (!$type->isBuiltin()) {
+                return $this->container->make($typeName);
+            }
+        } elseif ($type instanceof ReflectionUnionType) {
+            foreach ($type->getTypes() as $unionedType) {
+                if (!$unionedType instanceof ReflectionNamedType) {
+                    continue;
+                }
+
+                $typeName = $unionedType->getName();
+
+                if ($typeName === Request::class) {
+                    return $request;
+                }
+
+                if ($typeName === Response::class) {
+                    return $response;
+                }
+
+                if (array_key_exists($name, $vars) && $unionedType->isBuiltin()) {
+                    return $this->castValue($vars[$name], $unionedType);
+                }
+
+                if (!$unionedType->isBuiltin()) {
+                    try {
+                        return $this->container->make($typeName);
+                    } catch (Throwable $e) {
+                        continue;
+                    }
+                }
+            }
+        }
+
+        if ($param->isDefaultValueAvailable()) {
+            return $param->getDefaultValue();
+        }
+
+        if ($param->allowsNull()) {
+            return null;
+        }
+
+        throw new Exception("Cannot resolve parameter '{$name}'");
+    }
+
+    protected function castValue(mixed $value, ReflectionNamedType $type): mixed
+    {
+        $typeName = $type->getName();
+
+        return match ($typeName) {
+            'int' => (int) $value,
+            'float' => (float) $value,
+            'bool' => is_bool($value) ? $value : (filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? (bool) $value),
+            'string' => (string) $value,
+            'array' => is_array($value) ? $value : [$value],
+            default => $value,
+        };
+    }
+
     protected function handleError(Throwable $e, Response $response): void
     {
-        $this->logger?->error($e);
+        $this->logger?->error($e->getMessage(), ['exception' => $e]);
+
+        $isDebug = Config::get('app.debug', false);
 
         $response->status(500);
-        $response->end('500 Internal Server Error: ' . $e->getMessage());
+        $response->end($isDebug ? '500 Internal Server Error: ' . $e->getMessage() : '500 Internal Server Error');
     }
 }

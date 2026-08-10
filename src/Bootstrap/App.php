@@ -7,6 +7,7 @@ use OpenSwoole\GRPC\Server as GrpcServer;
 use OpenSwoole\WebSocket\Server as HttpServer;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
+use TondbadSwoole\Core\Env;
 use TondbadSwoole\Providers\Contracts\ServiceProvider;
 
 class App
@@ -36,7 +37,11 @@ class App
      */
     public function __construct()
     {
+        Env::loadAll();
+
         $this->container = Container::create();
+        $this->container->singleton(Container::class, fn() => $this->container);
+
         $this->providers = $this->loadProviders();
         $this->registerProviders();
     }
@@ -55,8 +60,20 @@ class App
     private function loadProviders(): array
     {
         $providers = array_map(fn(string $provider) => $this->container->make($provider), Config::get('providers', []));
-        usort($providers, fn(ServiceProvider $a, ServiceProvider $b) => $a->getPriority() <=> $b->getPriority());
-        return $providers;
+
+        // Sort by priority (ascending) while preserving the original order for ties.
+        $indexedProviders = array_map(
+            fn(ServiceProvider $provider, int $index) => ['provider' => $provider, 'index' => $index],
+            $providers,
+            array_keys($providers)
+        );
+
+        usort($indexedProviders, function (array $a, array $b) {
+            $priorityComparison = $a['provider']->getPriority() <=> $b['provider']->getPriority();
+            return $priorityComparison === 0 ? $a['index'] <=> $b['index'] : $priorityComparison;
+        });
+
+        return array_map(fn(array $item) => $item['provider'], $indexedProviders);
     }
 
     /**
