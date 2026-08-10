@@ -1,24 +1,36 @@
 ---
 name: Test Tondbād Swoole
-description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC server.
+description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC server and CLI.
 ---
 
 # Local testing setup
 - PHP 8.3 CLI is required. Install `php8.3-openswoole`, `php8.3-mbstring`, `php8.3-xml`, `php8.3-zip`, `git`, and `unzip`.
-- Install Composer: download `composer.phar` with the official installer, then run `php composer.phar install` from the repo root.
+- Install Composer and dependencies: `php composer.phar install` from the repo root.
 - The `vendor/` directory and `ext-openswoole` must be present before the framework can boot.
 
-# Running the HTTP server
-- `APP_HTTP_PORT=<port> php public/server.php` starts the OpenSwoole HTTP server on the specified port.
-- Equivalent: `APP_HTTP_PORT=<port> php composer.phar run server`.
-- `public/index.php` is only a wrapper that requires `public/server.php`.
-- Default HTTP port is `9501` unless `APP_HTTP_PORT` is set.
+# Static checks
+- `find . -name '*.php' -not -path './vendor/*' -not -path './.git/*' -print0 | xargs -0 -n1 php -l`
+- `php composer.phar validate --strict`
+- `php vendor/bin/phpunit`
 
-# Running the gRPC server
-- `APP_GRPC_PORT=<port> php public/grpc.php` starts the OpenSwoole gRPC server.
-- Equivalent: `APP_GRPC_PORT=<port> php composer.phar run grpc`.
-- `public/grpc.php` sets `$_ENV['APP_TYPE'] = 'grpc'` so the application kernel boots the gRPC kernel.
-- Default gRPC port is `9502` unless `APP_GRPC_PORT` is set.
+# CLI commands (from repo root)
+- `php bin/tondbad serve` — start the OpenSwoole HTTP server.
+- `php bin/tondbad serve:grpc` — start the OpenSwoole gRPC server.
+- `php bin/tondbad route:cache` — pre-compile `storage/cache/routes.cache.php`.
+- `php bin/tondbad cache:clear` — remove compiled route cache and framework caches.
+- `php bin/tondbad make:controller <Name>` — create `app/Http/Controllers/<Name>Controller.php`.
+- `php bin/tondbad make:middleware <Name>` — create `app/Http/Middleware/<Name>Middleware.php`.
+- `php bin/tondbad make:provider <Name>` — create `app/Providers/<Name>ServiceProvider.php`.
+
+# Legacy entry points
+- `APP_HTTP_PORT=<port> php public/server.php` still starts the HTTP server.
+- `APP_GRPC_PORT=<port> php public/grpc.php` still starts the gRPC server.
+- `public/index.php` is a wrapper that requires `public/server.php`.
+
+# Configuration
+- Default HTTP port is `9501`; default gRPC port is `9502`.
+- Override with `APP_HTTP_PORT`, `APP_HTTP_HOST`, `APP_GRPC_PORT`, `APP_GRPC_HOST` environment variables.
+- `app.type` must be `http` or `grpc`.
 
 # Golden-path verification
 - `curl http://127.0.0.1:<port>/hello` should return `Hello ` (note the trailing space from the default `name`).

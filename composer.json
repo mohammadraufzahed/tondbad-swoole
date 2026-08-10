@@ -21,11 +21,15 @@
       "TondbadSwoole\\": "src/",
       "TondbadExample\\": "generated/TondbadExample/",
       "GPBMetadata\\": "generated/GPBMetadata/"
-    }
+    },
+    "files": [
+      "src/Support/helpers.php"
+    ]
   },
   "autoload-dev": {
     "psr-4": {
-      "TondbadSwoole\\Tests\\": "tests/"
+      "TondbadSwoole\\Tests\\": "tests/",
+      "App\\": "app/"
     }
   },
   "authors": [

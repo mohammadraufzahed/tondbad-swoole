@@ -3,14 +3,8 @@
 
 declare(strict_types=1);
 
+use TondbadSwoole\Bootstrap\AppFactory;
 use TondbadSwoole\Console\Application;
-use TondbadSwoole\Console\Commands\CacheClearCommand;
-use TondbadSwoole\Console\Commands\GrpcServeCommand;
-use TondbadSwoole\Console\Commands\MakeControllerCommand;
-use TondbadSwoole\Console\Commands\MakeMiddlewareCommand;
-use TondbadSwoole\Console\Commands\MakeProviderCommand;
-use TondbadSwoole\Console\Commands\RouteCacheCommand;
-use TondbadSwoole\Console\Commands\ServeCommand;
 
 $autoloadFiles = [
     getcwd() . '/vendor/autoload.php',
@@ -35,15 +29,7 @@ if (!$autoloadFound) {
 
 $basePath = getcwd() ?: dirname(__DIR__);
 
-$app = new Application($basePath);
+$app = AppFactory::create($basePath);
+$console = $app->container->make(Application::class);
 
-$app
-    ->register(new ServeCommand($basePath))
-    ->register(new GrpcServeCommand($basePath))
-    ->register(new RouteCacheCommand($basePath))
-    ->register(new CacheClearCommand($basePath))
-    ->register(new MakeControllerCommand($basePath))
-    ->register(new MakeMiddlewareCommand($basePath))
-    ->register(new MakeProviderCommand($basePath));
-
-exit($app->run($argv));
+exit($console->run($argv));

@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use TondbadSwoole\Providers\Default\{
+    CacheServiceProvider,
+    ConsoleServiceProvider,
     HttpServiceProvider,
     LoggerServiceProvider,
     RouteServiceProvider,
@@ -15,7 +17,9 @@ return [
     LoggerServiceProvider::class,
     PredisCacheProvider::class,
     PhpRedisCacheProvider::class,
+    CacheServiceProvider::class,
     RouteServiceProvider::class,
+    ConsoleServiceProvider::class,
     HttpServiceProvider::class,
     GrpcServiceProvider::class,
 ];

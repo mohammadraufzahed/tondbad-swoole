@@ -7,6 +7,7 @@ return [
     'type' => $env->get('app.type', 'http'),
     'debug' => (bool) $env->get('app.debug', false),
     'middlewares' => [],
+    'commands' => [],
     'route_cache_file' => $env->get('app.route_cache_file', $basePath . '/storage/cache/routes.cache.php'),
     'logging' => [
         'path' => $env->get('app.logging.path', $basePath . '/storage/logs/app.log'),
