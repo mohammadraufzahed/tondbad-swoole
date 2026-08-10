@@ -1,60 +1,54 @@
 <?php
 
-use TondbadSwoole\Core\Env;
-
 return [
     'redis' => [
-        'scheme' => Env::get('redis.scheme', 'tcp'), // Connection scheme (tcp, unix, tls)
-        'host' => Env::get('redis.host', '127.0.0.1'), // Redis server host
-        'port' => Env::get('redis.port', 6379), // Redis server port
-        'path' => Env::get('redis.path', null), // Path for unix socket connections
-        'password' => Env::get('redis.password', null), // Redis password for authentication
-        'database' => Env::get('redis.database', 0), // Redis database index
-        'timeout' => Env::get('redis.timeout', 5.0), // Connection timeout in seconds
-        'read_write_timeout' => Env::get('redis.read_write_timeout', null), // Read/write operation timeout
-        'persistent' => Env::get('redis.persistent', false), // Persistent connection (true/false)
-        'retry_interval' => Env::get('redis.retry_interval', 0), // Retry interval for reconnection attempts (milliseconds)
+        'scheme' => $env->get('redis.scheme', 'tcp'),
+        'host' => $env->get('redis.host', '127.0.0.1'),
+        'port' => $env->get('redis.port', 6379),
+        'path' => $env->get('redis.path', null),
+        'password' => $env->get('redis.password', null),
+        'database' => $env->get('redis.database', 0),
+        'timeout' => $env->get('redis.timeout', 5.0),
+        'read_write_timeout' => $env->get('redis.read_write_timeout', null),
+        'persistent' => $env->get('redis.persistent', false),
+        'retry_interval' => $env->get('redis.retry_interval', 0),
 
-        // SSL options (if using TLS)
         'ssl' => [
-            'enabled' => Env::get('redis.ssl.enabled', false), // Enable SSL
-            'cafile' => Env::get('redis.ssl.cafile', null), // Path to the CA file
-            'verify_peer' => Env::get('redis.ssl.verify_peer', true), // Verify peer SSL certificate
-            'verify_peer_name' => Env::get('redis.ssl.verify_peer_name', true), // Verify peer name during SSL handshake
+            'enabled' => $env->get('redis.ssl.enabled', false),
+            'cafile' => $env->get('redis.ssl.cafile', null),
+            'verify_peer' => $env->get('redis.ssl.verify_peer', true),
+            'verify_peer_name' => $env->get('redis.ssl.verify_peer_name', true),
         ],
 
-        // Redis Cluster support
         'cluster' => [
-            'enabled' => Env::get('redis.cluster.enabled', false), // Enable Redis clustering
+            'enabled' => $env->get('redis.cluster.enabled', false),
             'nodes' => [
-                Env::get('redis.cluster.node_1', '127.0.0.1:6379'), // Cluster node 1
-                Env::get('redis.cluster.node_2', null), // Cluster node 2
-                Env::get('redis.cluster.node_3', null), // Cluster node 3
+                $env->get('redis.cluster.node_1', '127.0.0.1:6379'),
+                $env->get('redis.cluster.node_2', null),
+                $env->get('redis.cluster.node_3', null),
             ],
         ],
 
-        // Redis Sentinel support
         'sentinel' => [
-            'enabled' => Env::get('redis.sentinel.enabled', false), // Enable Redis Sentinel
-            'service' => Env::get('redis.sentinel.service', 'mymaster'), // Sentinel service name
+            'enabled' => $env->get('redis.sentinel.enabled', false),
+            'service' => $env->get('redis.sentinel.service', 'mymaster'),
             'nodes' => [
-                Env::get('redis.sentinel.node_1', '127.0.0.1:26379'), // Sentinel node 1
-                Env::get('redis.sentinel.node_2', null), // Sentinel node 2
-                Env::get('redis.sentinel.node_3', null), // Sentinel node 3
+                $env->get('redis.sentinel.node_1', '127.0.0.1:26379'),
+                $env->get('redis.sentinel.node_2', null),
+                $env->get('redis.sentinel.node_3', null),
             ],
         ],
 
-        // Additional Redis client options
         'options' => [
-            'prefix' => Env::get('redis.options.prefix', ''), // Key prefix for Redis keys
-            'serializer' => Env::get('redis.options.serializer', 'php'), // Serializer for Redis (php, json, igbinary)
-            'compression' => Env::get('redis.options.compression', null), // Compression (lzf, zstd)
+            'prefix' => $env->get('redis.options.prefix', ''),
+            'serializer' => $env->get('redis.options.serializer', 'php'),
+            'compression' => $env->get('redis.options.compression', null),
         ],
     ],
     'memcached' => [
-        'host' => Env::get('memcached.host', '127.0.0.1'),
-        'port' => (int)Env::get('memcached.port', 11211),
-        'username' => Env::get('memcached.username', null),
-        'password' => Env::get('memcached.password', null)
-    ]
+        'host' => $env->get('memcached.host', '127.0.0.1'),
+        'port' => (int) $env->get('memcached.port', 11211),
+        'username' => $env->get('memcached.username', null),
+        'password' => $env->get('memcached.password', null),
+    ],
 ];

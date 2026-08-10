@@ -1,13 +1,16 @@
 <?php
 
+declare(strict_types=1);
+
 namespace TondbadSwoole\Core\Cache;
 
-use TondbadSwoole\Core\Cache\Contracts\CacheInterface;
+use DateInterval;
 use Redis;
-use Symfony\Component\Serializer\SerializerInterface;
 use Symfony\Component\Serializer\Serializer;
 use Symfony\Component\Serializer\Encoder\JsonEncoder;
 use Symfony\Component\Serializer\Normalizer\ObjectNormalizer;
+use Symfony\Component\Serializer\SerializerInterface;
+use TondbadSwoole\Contracts\CacheInterface;
 use TondbadSwoole\Core\Config;
 
 class PhpRedisCache implements CacheInterface
@@ -16,48 +19,49 @@ class PhpRedisCache implements CacheInterface
     private SerializerInterface $serializer;
     private string $prefix;
 
-    public function __construct(?SerializerInterface $serializer = null)
-    {
-        $config = Config::get('cache.redis', []);
+    public function __construct(
+        private readonly Config $config,
+        ?SerializerInterface $serializer = null
+    ) {
+        $redisConfig = $config->get('cache.redis', []);
 
         $this->redis = new Redis();
 
-        $host = $config['host'] ?? '127.0.0.1';
-        $port = $config['port'] ?? 6379;
-        $timeout = $config['timeout'] ?? 0.0;
-        $password = $config['password'] ?? null;
-        $database = $config['database'] ?? 0;
+        $host = $redisConfig['host'] ?? '127.0.0.1';
+        $port = $redisConfig['port'] ?? 6379;
+        $timeout = $redisConfig['timeout'] ?? 0.0;
+        $password = $redisConfig['password'] ?? null;
+        $database = $redisConfig['database'] ?? 0;
 
         $connected = $this->redis->connect($host, $port, $timeout);
         if (!$connected) {
             throw new \Exception("Could not connect to Redis at {$host}:{$port}");
         }
 
-        if ($password !== null) {
-            if (!$this->redis->auth($password)) {
-                throw new \Exception("Redis authentication failed.");
-            }
+        if ($password !== null && !$this->redis->auth($password)) {
+            throw new \Exception('Redis authentication failed.');
         }
 
         if (!$this->redis->select($database)) {
             throw new \Exception("Could not select Redis database {$database}.");
         }
 
-        $this->prefix = Config::get('cache.redis.options.prefix', '');
+        $this->prefix = $redisConfig['options']['prefix'] ?? '';
         $this->serializer = $serializer ?? new Serializer([new ObjectNormalizer()], [new JsonEncoder()]);
     }
 
-    public function get(string $key): mixed
+    public function get(string $key, mixed $default = null): mixed
     {
         $value = $this->redis->get($this->prefixKey($key));
+
         if ($value === false) {
-            return null;
+            return $default;
         }
 
         return $this->serializer->decode($value, 'json');
     }
 
-    public function set(string $key, mixed $value, ?int $ttl = null): bool
+    public function set(string $key, mixed $value, null|int|DateInterval $ttl = null): bool
     {
         try {
             $serializedValue = $this->serializer->encode($value, 'json');
@@ -68,7 +72,7 @@ class PhpRedisCache implements CacheInterface
         $prefixedKey = $this->prefixKey($key);
 
         if ($ttl !== null) {
-            return $this->redis->setex($prefixedKey, $ttl, $serializedValue);
+            return $this->redis->setex($prefixedKey, $this->ttlToSeconds($ttl), $serializedValue);
         }
 
         return $this->redis->set($prefixedKey, $serializedValue);
@@ -76,7 +80,9 @@ class PhpRedisCache implements CacheInterface
 
     public function delete(string $key): bool
     {
-        return $this->redis->del([$this->prefixKey($key)]) > 0;
+        $this->redis->del([$this->prefixKey($key)]);
+
+        return true;
     }
 
     public function clear(): bool
@@ -91,6 +97,7 @@ class PhpRedisCache implements CacheInterface
 
         try {
             $iterator = null;
+
             do {
                 $keys = $this->redis->scan($iterator, $this->prefix . '*', 100);
 
@@ -114,11 +121,12 @@ class PhpRedisCache implements CacheInterface
         return $this->redis->exists($this->prefixKey($key)) > 0;
     }
 
-    public function getMultiple(iterable $keys): array
+    public function getMultiple(iterable $keys, mixed $default = null): iterable
     {
-        $keysArray = is_array($keys) ? $keys : iterator_to_array($keys);
+        $keysArray = is_array($keys) ? $keys : iterator_to_array($keys, false);
         $prefixedKeys = [];
         $keyMap = [];
+
         foreach ($keysArray as $key) {
             $pk = $this->prefixKey((string) $key);
             $prefixedKeys[] = $pk;
@@ -130,28 +138,29 @@ class PhpRedisCache implements CacheInterface
         $results = [];
         foreach ($prefixedKeys as $index => $pk) {
             $value = $values[$index];
-            $results[$keyMap[$pk]] = $value !== false ? $this->serializer->decode($value, 'json') : null;
+            $results[$keyMap[$pk]] = $value !== false ? $this->serializer->decode($value, 'json') : $default;
         }
 
         return $results;
     }
 
-    public function setMultiple(iterable $items, ?int $ttl = null): bool
+    public function setMultiple(iterable $values, null|int|DateInterval $ttl = null): bool
     {
         $pipeline = $this->redis->multi(Redis::PIPELINE);
 
-        foreach ($items as $key => $value) {
+        foreach ($values as $key => $value) {
             try {
                 $serializedValue = $this->serializer->encode($value, 'json');
             } catch (\Exception $e) {
                 $this->redis->discard();
+
                 return false;
             }
 
             $prefixedKey = $this->prefixKey((string) $key);
 
             if ($ttl !== null) {
-                $pipeline->setex($prefixedKey, $ttl, $serializedValue);
+                $pipeline->setex($prefixedKey, $this->ttlToSeconds($ttl), $serializedValue);
             } else {
                 $pipeline->set($prefixedKey, $serializedValue);
             }
@@ -174,13 +183,33 @@ class PhpRedisCache implements CacheInterface
 
     public function deleteMultiple(iterable $keys): bool
     {
-        $keysArray = is_array($keys) ? $keys : iterator_to_array($keys);
+        $keysArray = is_array($keys) ? $keys : iterator_to_array($keys, false);
         $prefixedKeys = array_map(fn($key) => $this->prefixKey((string) $key), $keysArray);
-        return $this->redis->del($prefixedKeys) > 0;
+
+        $this->redis->del($prefixedKeys);
+
+        return true;
     }
 
     private function prefixKey(string $key): string
     {
         return $this->prefix . $key;
+    }
+
+    private function ttlToSeconds(null|int|DateInterval $ttl): int
+    {
+        if ($ttl === null) {
+            return 0;
+        }
+
+        if (is_int($ttl)) {
+            return $ttl;
+        }
+
+        $now = new \DateTime();
+        $end = clone $now;
+        $end->add($ttl);
+
+        return $end->getTimestamp() - $now->getTimestamp();
     }
 }

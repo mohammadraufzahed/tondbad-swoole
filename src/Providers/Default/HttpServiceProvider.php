@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace TondbadSwoole\Providers\Default;
 
 use Monolog\Logger;
@@ -14,10 +16,14 @@ class HttpServiceProvider extends ServiceProvider
 {
     public function register(Container $container): void
     {
-        if (Config::get('app.type', 'http') !== 'http')
+        $config = $container->make(Config::class);
+
+        if ($config->get('app.type', 'http') !== 'http') {
             return;
-        $container->singleton(HttpServer::class, function () use ($container) {
-            $server = new HttpServer('0.0.0.0', (int) Config::get('app.http.port', 8000));
+        }
+
+        $container->singleton(HttpServer::class, function () use ($container, $config) {
+            $server = new HttpServer('0.0.0.0', (int) $config->get('app.http.port', 8000));
 
             $this->setupRouter($server, $container);
 
@@ -25,34 +31,35 @@ class HttpServiceProvider extends ServiceProvider
         });
     }
 
-    private function setupRouter(HttpServer $server, $container)
+    private function setupRouter(HttpServer $server, Container $container): void
     {
         $route = $container->make(Route::class);
 
-        $server
-            ->on('message', function () {
-            });
-        $server
-            ->on(
-                'request',
-                fn(Request $request, Response $response) => $route->dispatch($request, $response)
-            );
+        $server->on('message', function () {
+        });
+
+        $server->on(
+            'request',
+            fn(Request $request, Response $response) => $route->dispatch($request, $response)
+        );
     }
 
     public function boot(Container $container): void
     {
-        if (Config::get('app.type', 'http') !== 'http')
+        $config = $container->make(Config::class);
+
+        if ($config->get('app.type', 'http') !== 'http') {
             return;
+        }
+
         $server = $container->make(HttpServer::class);
         $logger = $container->make(Logger::class);
 
         $this->setupLogs($server, $logger);
-
     }
 
-    private function setupLogs(HttpServer $server, Logger $logger)
+    private function setupLogs(HttpServer $server, Logger $logger): void
     {
-        // Attach event listeners to OpenSwoole server events
         $server->on('start', function (HttpServer $server) use ($logger) {
             $logger->info('Server has started.', ['master_pid' => $server->master_pid, 'port' => $server->port]);
         });
