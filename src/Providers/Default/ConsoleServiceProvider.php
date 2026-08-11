@@ -14,9 +14,11 @@ use TondbadSwoole\Console\Commands\CacheClearCommand;
 use TondbadSwoole\Console\Commands\GrpcServeCommand;
 use TondbadSwoole\Console\Commands\MakeControllerCommand;
 use TondbadSwoole\Console\Commands\MakeMigrationCommand;
+use TondbadSwoole\Console\Commands\MakeJobCommand;
 use TondbadSwoole\Console\Commands\MakeMiddlewareCommand;
 use TondbadSwoole\Console\Commands\MakeProviderCommand;
 use TondbadSwoole\Console\Commands\MigrateCommand;
+use TondbadSwoole\Console\Commands\QueueWorkCommand;
 use TondbadSwoole\Console\Commands\MigrateFreshCommand;
 use TondbadSwoole\Console\Commands\MigrateRollbackCommand;
 use TondbadSwoole\Console\Commands\MigrateStatusCommand;
@@ -55,6 +57,8 @@ class ConsoleServiceProvider extends ServiceProvider
             ->register(new MakeControllerCommand($basePath))
             ->register(new MakeMiddlewareCommand($basePath))
             ->register(new MakeProviderCommand($basePath))
+            ->register(new MakeJobCommand($basePath))
+            ->register(new QueueWorkCommand($basePath))
             ->register(new MakeMigrationCommand($basePath))
             ->register(new MigrateCommand($basePath))
             ->register(new MigrateFreshCommand($basePath))
