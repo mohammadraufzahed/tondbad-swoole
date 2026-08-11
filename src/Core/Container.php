@@ -180,15 +180,35 @@ class Container
     {
         if (is_array($callback) && is_object($callback[0])) {
             $reflection = new ReflectionMethod($callback[0], $callback[1]);
-        } elseif (is_string($callback) && function_exists($callback)) {
-            $reflection = new ReflectionFunction($callback);
-        } elseif ($callback instanceof \Closure) {
-            $reflection = new ReflectionFunction($callback);
-        } else {
-            throw new Exception('Unsupported callback type for container call.');
+            $args = $this->resolveArgs($reflection, $parameters, $reflection->class ?? '');
+
+            return $reflection->invokeArgs($callback[0], $args);
         }
 
+        if (is_string($callback) && function_exists($callback)) {
+            $reflection = new ReflectionFunction($callback);
+            $args = $this->resolveArgs($reflection, $parameters);
+
+            return $reflection->invokeArgs($args);
+        }
+
+        if ($callback instanceof \Closure) {
+            $reflection = new ReflectionFunction($callback);
+            $args = $this->resolveArgs($reflection, $parameters);
+
+            return $reflection->invokeArgs($args);
+        }
+
+        throw new Exception('Unsupported callback type for container call.');
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    private function resolveArgs(\ReflectionFunctionAbstract $reflection, array $parameters, string $class = ''): array
+    {
         $args = [];
+
         foreach ($reflection->getParameters() as $parameter) {
             $name = $parameter->getName();
 
@@ -198,9 +218,9 @@ class Container
                 continue;
             }
 
-            $args[] = $this->resolveParameter($parameter, $reflection->class ?? '');
+            $args[] = $this->resolveParameter($parameter, $class);
         }
 
-        return $reflection->invokeArgs(is_array($callback) ? $callback[0] : null, $args);
+        return $args;
     }
 }

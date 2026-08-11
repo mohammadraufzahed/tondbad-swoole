@@ -24,6 +24,8 @@ use TondbadSwoole\Console\Commands\MigrateFreshCommand;
 use TondbadSwoole\Console\Commands\MigrateRollbackCommand;
 use TondbadSwoole\Console\Commands\MigrateStatusCommand;
 use TondbadSwoole\Console\Commands\RouteCacheCommand;
+use TondbadSwoole\Console\Commands\ScheduleListCommand;
+use TondbadSwoole\Console\Commands\ScheduleWorkCommand;
 use TondbadSwoole\Console\Commands\ServeCommand;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
@@ -65,7 +67,9 @@ class ConsoleServiceProvider extends ServiceProvider
             ->register(new MigrateCommand($basePath))
             ->register(new MigrateFreshCommand($basePath))
             ->register(new MigrateRollbackCommand($basePath))
-            ->register(new MigrateStatusCommand($basePath));
+            ->register(new MigrateStatusCommand($basePath))
+            ->register(new ScheduleWorkCommand($basePath))
+            ->register(new ScheduleListCommand($basePath));
     }
 
     private function registerConfiguredCommands(Application $console, Container $container, Config $config, string $basePath): void

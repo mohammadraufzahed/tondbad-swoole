@@ -6,13 +6,14 @@ use TondbadSwoole\Providers\Default\{
     CacheServiceProvider,
     ConsoleServiceProvider,
     DatabaseServiceProvider,
+    GrpcServiceProvider,
     HttpServiceProvider,
     LoggerServiceProvider,
+    PhpRedisCacheProvider,
+    PredisCacheProvider,
     QueueServiceProvider,
     RouteServiceProvider,
-    GrpcServiceProvider,
-    PredisCacheProvider,
-    PhpRedisCacheProvider
+    ScheduleServiceProvider,
 };
 
 return [
@@ -23,6 +24,7 @@ return [
     DatabaseServiceProvider::class,
     QueueServiceProvider::class,
     RouteServiceProvider::class,
+    ScheduleServiceProvider::class,
     ConsoleServiceProvider::class,
     HttpServiceProvider::class,
     GrpcServiceProvider::class,

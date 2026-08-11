@@ -84,12 +84,18 @@ class Config
         $env = $this->env;
         $basePath = $this->basePath;
 
-        foreach ($this->getSearchPaths() as $path) {
+        foreach (array_unique($this->getSearchPaths()) as $path) {
             $configPath = $path . "/{$file}.php";
             $configs[] = file_exists($configPath) ? require $configPath : [];
         }
 
-        $this->config[$file] = array_merge(...$configs);
+        $merged = [];
+
+        foreach ($configs as $config) {
+            $merged = array_merge($merged, $config);
+        }
+
+        $this->config[$file] = $merged;
         $this->loadedFiles[] = $file;
     }
 
