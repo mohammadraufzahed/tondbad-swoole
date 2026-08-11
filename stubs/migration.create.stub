@@ -1,0 +1,21 @@
+<?php
+
+declare(strict_types=1);
+
+use TondbadSwoole\Database\Migrations\Migration;
+
+class {ClassName} extends Migration
+{
+    public function up(): void
+    {
+        schema()->create('{TableName}', function ($table): void {
+            $table->id();
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        schema()->dropIfExists('{TableName}');
+    }
+}

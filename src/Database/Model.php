@@ -253,10 +253,6 @@ abstract class Model
 
     public function setAttribute(string $key, mixed $value): self
     {
-        if ($key === $this->primaryKey && $this->keyType === 'int' && is_numeric($value)) {
-            $value = (int) $value;
-        }
-
         $this->attributes[$key] = $this->castToPHP($key, $value);
 
         return $this;
@@ -447,6 +443,20 @@ abstract class Model
         return $this;
     }
 
+    public function getKeyType(): string
+    {
+        return $this->keyType;
+    }
+
+    public function getCasts(): array
+    {
+        if ($this->getIncrementing()) {
+            return array_merge($this->casts, [$this->getKeyName() => $this->getKeyType()]);
+        }
+
+        return $this->casts;
+    }
+
     public function getCreatedAtColumn(): string
     {
         return 'created_at';
@@ -539,7 +549,7 @@ abstract class Model
             return null;
         }
 
-        $type = $this->casts[$key] ?? null;
+        $type = $this->getCasts()[$key] ?? null;
 
         if ($type === null) {
             return $value;
@@ -571,7 +581,7 @@ abstract class Model
             return null;
         }
 
-        $type = $this->casts[$key] ?? null;
+        $type = $this->getCasts()[$key] ?? null;
 
         if ($type === null) {
             return $value;
@@ -608,7 +618,7 @@ abstract class Model
             return $value->name;
         }
 
-        $type = $this->casts[$key] ?? null;
+        $type = $this->getCasts()[$key] ?? null;
 
         if ($type === 'date') {
             return $value instanceof DateTimeInterface ? $value->format('Y-m-d') : $value;

@@ -16,27 +16,9 @@ class MakeModelCommand extends MakeCommand
         return 'Create a new model class.';
     }
 
-    protected function getStub(): string
+    protected function getStubPath(): string
     {
-        return <<<'STUB'
-<?php
-
-declare(strict_types=1);
-
-namespace App\Models;
-
-use TondbadSwoole\Database\Model;
-
-class {Name} extends Model
-{
-    protected ?string $table = null;
-
-    protected array $fillable = [];
-
-    protected array $casts = [];
-}
-
-STUB;
+        return __DIR__ . '/../../../stubs/model.stub';
     }
 
     protected function getDefaultPath(string $name): string

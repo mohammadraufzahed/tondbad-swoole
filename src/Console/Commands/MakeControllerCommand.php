@@ -16,29 +16,9 @@ class MakeControllerCommand extends MakeCommand
         return 'Create a new controller class.';
     }
 
-    protected function getStub(): string
+    protected function getStubPath(): string
     {
-        return <<<'STUB'
-<?php
-
-declare(strict_types=1);
-
-namespace App\Http\Controllers;
-
-use TondbadSwoole\Core\Route\Attributes\Endpoint;
-use TondbadSwoole\Http\Request;
-use TondbadSwoole\Http\Response;
-
-class {Name}Controller
-{
-    #[Endpoint('GET', '/{name}')]
-    public function index(Request $request, Response $response): void
-    {
-        $response->html('Hello from {Name}Controller');
-    }
-}
-
-STUB;
+        return __DIR__ . '/../../../stubs/controller.stub';
     }
 
     protected function getDefaultPath(string $name): string
