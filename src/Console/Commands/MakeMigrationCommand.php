@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace TondbadSwoole\Console\Commands;
 
 use TondbadSwoole\Database\Migrations\MigrationCreator;
+use TondbadSwoole\Database\Migrations\MigrationPathManager;
 
 class MakeMigrationCommand extends Command
 {
@@ -39,7 +40,7 @@ class MakeMigrationCommand extends Command
             }
         }
 
-        $path = $this->basePath . '/database/migrations';
+        $path = $this->getDefaultPath();
         $this->ensureDirectory($path);
 
         $creator = $this->getCreator();
@@ -48,6 +49,20 @@ class MakeMigrationCommand extends Command
         fwrite(STDOUT, "Created: {$file}\n");
 
         return 0;
+    }
+
+    protected function getDefaultPath(): string
+    {
+        if (app() !== null) {
+            $manager = app()->container->make(MigrationPathManager::class);
+            $default = $manager->getDefaultPath();
+
+            if ($default !== '') {
+                return $default;
+            }
+        }
+
+        return $this->basePath . '/database/migrations';
     }
 
     protected function getCreator(): MigrationCreator

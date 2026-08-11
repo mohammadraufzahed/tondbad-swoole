@@ -13,14 +13,13 @@ class Migrator
     public function __construct(
         private readonly MigrationRepository $repository,
         private readonly ConnectionInterface $connection,
-        private readonly string $path,
+        private readonly MigrationPathManager $paths,
     ) {
     }
 
-    public function run(?string $path = null, array $options = []): array
+    public function run(array $options = []): array
     {
-        $path ??= $this->path;
-        $files = $this->getMigrationFiles($path);
+        $files = $this->getMigrationFiles();
         $ran = $this->repository->getRan();
         $migrations = array_diff($files, $ran);
 
@@ -74,12 +73,12 @@ class Migrator
         return $migrations;
     }
 
-    public function fresh(?string $path = null): array
+    public function fresh(): array
     {
         $this->repository->deleteRepository();
         $this->repository->createRepository();
 
-        return $this->run($path);
+        return $this->run();
     }
 
     public function getRepository(): MigrationRepository
@@ -87,21 +86,17 @@ class Migrator
         return $this->repository;
     }
 
-    public function getMigrationFiles(string $path): array
+    public function getPathManager(): MigrationPathManager
     {
-        if (!is_dir($path)) {
-            return [];
-        }
+        return $this->paths;
+    }
 
-        $files = glob($path . '/*_*.php');
-
-        if ($files === false) {
-            return [];
-        }
-
-        sort($files);
-
-        return array_map(fn (string $file): string => basename($file), $files);
+    /**
+     * @return list<string>
+     */
+    public function getMigrationFiles(): array
+    {
+        return $this->paths->getFiles();
     }
 
     protected function runUp(string $file, int $batch): void
@@ -131,10 +126,10 @@ class Migrator
 
     protected function resolve(string $file): Migration
     {
-        $path = $this->path . '/' . $file;
+        $path = $this->paths->getFullPath($file);
 
-        if (!file_exists($path)) {
-            throw new RuntimeException("Migration file not found: {$path}");
+        if ($path === null) {
+            throw new RuntimeException("Migration file not found: {$file}");
         }
 
         require_once $path;
@@ -165,9 +160,9 @@ class Migrator
     protected function requireFiles(array $files): void
     {
         foreach ($files as $file) {
-            $path = $this->path . '/' . $file;
+            $path = $this->paths->getFullPath($file);
 
-            if (file_exists($path)) {
+            if ($path !== null) {
                 require_once $path;
             }
         }

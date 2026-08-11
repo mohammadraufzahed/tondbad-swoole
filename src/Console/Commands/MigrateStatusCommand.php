@@ -21,8 +21,7 @@ class MigrateStatusCommand extends Command
     public function run(array $args): int
     {
         $migrator = $this->getMigrator();
-        $path = $this->basePath . '/database/migrations';
-        $files = $migrator->getMigrationFiles($path);
+        $files = $migrator->getMigrationFiles();
         $ran = app()->container->make(\TondbadSwoole\Database\Migrations\MigrationRepository::class)->getRan();
 
         fwrite(STDOUT, str_pad('Migration', 50) . ' Status' . "\n");

@@ -61,3 +61,23 @@ it('rolls back the last batch of migrations', function () {
 
     expect($schema->hasTable('articles'))->toBeFalse();
 });
+
+it('runs migrations from multiple registered paths', function () {
+    $moduleDir = "{$this->tmpDir}/modules/users/database/migrations";
+    mkdir($moduleDir, 0777, true);
+
+    $creator = new MigrationCreator();
+    $creator->create('create_profiles_table', $moduleDir, 'profiles', true);
+
+    $this->migrator->getPathManager()->addPath($moduleDir);
+
+    $migrations = $this->migrator->run();
+
+    expect($migrations)->toHaveCount(1);
+
+    $schema = $this->app->container->make(\TondbadSwoole\Database\DatabaseManager::class)
+        ->connection()
+        ->getSchemaBuilder();
+
+    expect($schema->hasTable('profiles'))->toBeTrue();
+});

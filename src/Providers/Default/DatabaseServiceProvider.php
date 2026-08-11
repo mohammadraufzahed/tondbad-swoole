@@ -10,6 +10,7 @@ use TondbadSwoole\Core\Container;
 use TondbadSwoole\Database\ConnectionInterface;
 use TondbadSwoole\Database\DatabaseManager;
 use TondbadSwoole\Database\Migrations\MigrationCreator;
+use TondbadSwoole\Database\Migrations\MigrationPathManager;
 use TondbadSwoole\Database\Migrations\MigrationRepository;
 use TondbadSwoole\Database\Migrations\Migrator;
 use TondbadSwoole\Providers\Contracts\ServiceProvider;
@@ -30,15 +31,26 @@ class DatabaseServiceProvider extends ServiceProvider
             return new MigrationRepository($container->make(ConnectionInterface::class));
         });
 
-        $container->singleton(Migrator::class, function () use ($container): Migrator {
+        $container->singleton(MigrationPathManager::class, function () use ($container): MigrationPathManager {
             $app = $container->make(App::class);
             $config = $container->make(Config::class);
-            $path = $app->basePath($config->get('database.migrations', 'database/migrations'));
+            $configured = $config->get('database.migrations', 'database/migrations');
+            $paths = is_array($configured) ? $configured : [$configured];
 
+            $manager = new MigrationPathManager();
+
+            foreach ($paths as $path) {
+                $manager->addPath($app->basePath($path));
+            }
+
+            return $manager;
+        });
+
+        $container->singleton(Migrator::class, function () use ($container): Migrator {
             return new Migrator(
                 $container->make(MigrationRepository::class),
                 $container->make(ConnectionInterface::class),
-                $path,
+                $container->make(MigrationPathManager::class),
             );
         });
 
