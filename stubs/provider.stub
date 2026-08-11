@@ -1,0 +1,16 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Providers;
+
+use TondbadSwoole\Core\Container;
+use TondbadSwoole\Providers\Contracts\ServiceProvider;
+
+class {Name}ServiceProvider extends ServiceProvider
+{
+    public function register(Container $container): void
+    {
+        // Register services here.
+    }
+}

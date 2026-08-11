@@ -9,6 +9,11 @@ use RuntimeException;
 
 class MigrationCreator
 {
+    public function __construct(
+        protected string $stubPath = __DIR__ . '/../../../stubs',
+    ) {
+    }
+
     public function create(string $name, string $path, ?string $table = null, bool $create = false): string
     {
         $this->ensureDirectory($path);
@@ -45,82 +50,20 @@ class MigrationCreator
 
     protected function getStub(?string $table, bool $create): string
     {
-        if ($table !== null && $create) {
-            return <<<'STUB'
-<?php
+        $stubFile = match (true) {
+            $table !== null && $create => 'migration.create.stub',
+            $table !== null => 'migration.table.stub',
+            default => 'migration.blank.stub',
+        };
 
-declare(strict_types=1);
+        $path = $this->stubPath . '/' . $stubFile;
+        $content = file_get_contents($path);
 
-use TondbadSwoole\Database\Migrations\Migration;
-
-class {ClassName} extends Migration
-{
-    public function up(): void
-    {
-        schema()->create('{TableName}', function ($table): void {
-            $table->id();
-            $table->timestamps();
-        });
-    }
-
-    public function down(): void
-    {
-        schema()->dropIfExists('{TableName}');
-    }
-}
-
-STUB;
+        if ($content === false) {
+            throw new RuntimeException("Migration stub not found: {$path}");
         }
 
-        if ($table !== null) {
-            return <<<'STUB'
-<?php
-
-declare(strict_types=1);
-
-use TondbadSwoole\Database\Migrations\Migration;
-
-class {ClassName} extends Migration
-{
-    public function up(): void
-    {
-        schema()->table('{TableName}', function ($table): void {
-            //
-        });
-    }
-
-    public function down(): void
-    {
-        schema()->table('{TableName}', function ($table): void {
-            //
-        });
-    }
-}
-
-STUB;
-        }
-
-        return <<<'STUB'
-<?php
-
-declare(strict_types=1);
-
-use TondbadSwoole\Database\Migrations\Migration;
-
-class {ClassName} extends Migration
-{
-    public function up(): void
-    {
-        //
-    }
-
-    public function down(): void
-    {
-        //
-    }
-}
-
-STUB;
+        return $content;
     }
 
     private function ensureDirectory(string $path): void

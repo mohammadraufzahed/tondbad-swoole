@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace TondbadSwoole\Console\Commands;
 
 use InvalidArgumentException;
+use RuntimeException;
 
 abstract class MakeCommand extends Command
 {
@@ -49,10 +50,17 @@ abstract class MakeCommand extends Command
 
     private function compileStub(string $name): string
     {
-        return str_replace('{Name}', $name, $this->getStub());
+        $stubPath = $this->getStubPath();
+        $content = file_get_contents($stubPath);
+
+        if ($content === false) {
+            throw new RuntimeException("Stub file not found: {$stubPath}");
+        }
+
+        return str_replace('{Name}', $name, $content);
     }
 
-    abstract protected function getStub(): string;
+    abstract protected function getStubPath(): string;
 
     abstract protected function getDefaultPath(string $name): string;
 }

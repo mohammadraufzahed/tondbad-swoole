@@ -16,27 +16,9 @@ class MakeProviderCommand extends MakeCommand
         return 'Create a new service provider class.';
     }
 
-    protected function getStub(): string
+    protected function getStubPath(): string
     {
-        return <<<'STUB'
-<?php
-
-declare(strict_types=1);
-
-namespace App\Providers;
-
-use TondbadSwoole\Core\Container;
-use TondbadSwoole\Providers\Contracts\ServiceProvider;
-
-class {Name}ServiceProvider extends ServiceProvider
-{
-    public function register(Container $container): void
-    {
-        // Register services here.
-    }
-}
-
-STUB;
+        return __DIR__ . '/../../../stubs/provider.stub';
     }
 
     protected function getDefaultPath(string $name): string

@@ -386,14 +386,14 @@ class Builder
         return $this->connection->select($this->toSql(), $this->getBindings());
     }
 
-    public function first(): ?array
+    public function first(): mixed
     {
         $results = $this->limit(1)->get();
 
         return $results[0] ?? null;
     }
 
-    public function find(mixed $id, array|string $columns = ['*']): ?array
+    public function find(mixed $id, array|string $columns = ['*']): mixed
     {
         return $this->where('id', '=', $id)->select($columns)->first();
     }
