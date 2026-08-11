@@ -1,0 +1,16 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Models;
+
+use TondbadSwoole\Database\Model;
+
+class {Name} extends Model
+{
+    protected ?string $table = null;
+
+    protected array $fillable = [];
+
+    protected array $casts = [];
+}

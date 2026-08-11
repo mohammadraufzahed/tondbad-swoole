@@ -4,25 +4,25 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
-class MakeControllerCommand extends MakeCommand
+class MakeModelCommand extends MakeCommand
 {
     public function getName(): string
     {
-        return 'make:controller';
+        return 'make:model';
     }
 
     public function getDescription(): string
     {
-        return 'Create a new controller class.';
+        return 'Create a new model class.';
     }
 
     protected function getStubPath(): string
     {
-        return __DIR__ . '/../../../stubs/controller.stub';
+        return __DIR__ . '/../../../stubs/model.stub';
     }
 
     protected function getDefaultPath(string $name): string
     {
-        return $this->basePath . '/app/Http/Controllers/' . $name . 'Controller.php';
+        return $this->basePath . '/app/Models/' . $name . '.php';
     }
 }

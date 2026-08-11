@@ -1,0 +1,22 @@
+<?php
+
+declare(strict_types=1);
+
+use TondbadSwoole\Database\Migrations\Migration;
+
+class {ClassName} extends Migration
+{
+    public function up(): void
+    {
+        schema()->table('{TableName}', function ($table): void {
+            //
+        });
+    }
+
+    public function down(): void
+    {
+        schema()->table('{TableName}', function ($table): void {
+            //
+        });
+    }
+}

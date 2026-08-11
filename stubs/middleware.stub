@@ -1,0 +1,17 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Http\Middleware;
+
+use TondbadSwoole\Contracts\MiddlewareInterface;
+use TondbadSwoole\Http\Request;
+use TondbadSwoole\Http\Response;
+
+class {Name}Middleware implements MiddlewareInterface
+{
+    public function process(Request $request, Response $response, callable $next): void
+    {
+        $next($request, $response);
+    }
+}

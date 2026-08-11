@@ -16,28 +16,9 @@ class MakeMiddlewareCommand extends MakeCommand
         return 'Create a new HTTP middleware class.';
     }
 
-    protected function getStub(): string
+    protected function getStubPath(): string
     {
-        return <<<'STUB'
-<?php
-
-declare(strict_types=1);
-
-namespace App\Http\Middleware;
-
-use TondbadSwoole\Contracts\MiddlewareInterface;
-use TondbadSwoole\Http\Request;
-use TondbadSwoole\Http\Response;
-
-class {Name}Middleware implements MiddlewareInterface
-{
-    public function process(Request $request, Response $response, callable $next): void
-    {
-        $next($request, $response);
-    }
-}
-
-STUB;
+        return __DIR__ . '/../../../stubs/middleware.stub';
     }
 
     protected function getDefaultPath(string $name): string
