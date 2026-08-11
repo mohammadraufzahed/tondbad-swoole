@@ -5,6 +5,8 @@ declare(strict_types=1);
 use TondbadSwoole\Bootstrap\App;
 use TondbadSwoole\Contracts\CacheInterface;
 use TondbadSwoole\Core\Config;
+use TondbadSwoole\Database\ConnectionInterface;
+use TondbadSwoole\Database\DatabaseManager;
 
 if (!function_exists('app')) {
     function app(): ?App
@@ -24,5 +26,18 @@ if (!function_exists('cache')) {
     function cache(): ?CacheInterface
     {
         return app()?->container->make(CacheInterface::class);
+    }
+}
+
+if (!function_exists('db')) {
+    function db(?string $connection = null): ConnectionInterface|DatabaseManager|null
+    {
+        $manager = app()?->container->make(DatabaseManager::class);
+
+        if ($manager === null) {
+            return null;
+        }
+
+        return $connection !== null ? $manager->connection($connection) : $manager;
     }
 }
