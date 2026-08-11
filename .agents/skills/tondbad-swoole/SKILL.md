@@ -11,9 +11,10 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 # Static checks
 - `find . -name '*.php' -not -path './vendor/*' -not -path './.git/*' -print0 | xargs -0 -n1 php -l`
 - `php composer.phar validate --strict`
-- `php vendor/bin/phpunit`
+- `php composer.phar test` (runs Pest)
 
 # CLI commands (from repo root)
+- Use `php bin/tondbad` (`vendor/bin/tondbad` is not generated when the framework is the root package).
 - `php bin/tondbad serve` — start the OpenSwoole HTTP server.
 - `php bin/tondbad serve:grpc` — start the OpenSwoole gRPC server.
 - `php bin/tondbad route:cache` — pre-compile `storage/cache/routes.cache.php`.
