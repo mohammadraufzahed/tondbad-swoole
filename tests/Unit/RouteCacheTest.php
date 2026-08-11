@@ -2,44 +2,32 @@
 
 declare(strict_types=1);
 
-namespace TondbadSwoole\Tests\Unit;
-
 use TondbadSwoole\Core\Route\RouteRegistrar;
 
-class RouteCacheTest extends TestCase
-{
-    public function test_compiles_route_cache_file(): void
-    {
-        $cacheFile = $this->cacheFile();
+it('compiles a route cache file', function () {
+    $cacheFile = $this->tempDir('tondbad_route_cache') . '/routes.cache.php';
 
-        $registrar = new RouteRegistrar($cacheFile);
-        $registrar->addRoute('GET', '/hello', fn() => 'hello');
-        $registrar->getDispatcher();
+    $registrar = new RouteRegistrar($cacheFile);
+    $registrar->addRoute('GET', '/hello', fn () => 'hello');
+    $registrar->getDispatcher();
 
-        $this->assertFileExists($cacheFile);
-    }
+    expect($cacheFile)->toBeFile();
+});
 
-    public function test_cached_routes_take_precedence_over_new_routes(): void
-    {
-        $cacheFile = $this->cacheFile();
+it('gives cached routes precedence over new routes', function () {
+    $cacheFile = $this->tempDir('tondbad_route_cache') . '/routes.cache.php';
 
-        $first = new RouteRegistrar($cacheFile);
-        $first->addRoute('GET', '/first', fn() => 'first');
-        $first->getDispatcher();
+    $first = new RouteRegistrar($cacheFile);
+    $first->addRoute('GET', '/first', fn () => 'first');
+    $first->getDispatcher();
 
-        $second = new RouteRegistrar($cacheFile);
-        $second->addRoute('GET', '/second', fn() => 'second');
-        $dispatcher = $second->getDispatcher();
+    $second = new RouteRegistrar($cacheFile);
+    $second->addRoute('GET', '/second', fn () => 'second');
+    $dispatcher = $second->getDispatcher();
 
-        $result = $dispatcher->dispatch('GET', '/first');
-        $this->assertSame(\FastRoute\Dispatcher::FOUND, $result[0]);
+    $result = $dispatcher->dispatch('GET', '/first');
+    expect($result[0])->toBe(\FastRoute\Dispatcher::FOUND);
 
-        $missing = $dispatcher->dispatch('GET', '/second');
-        $this->assertSame(\FastRoute\Dispatcher::NOT_FOUND, $missing[0]);
-    }
-
-    private function cacheFile(): string
-    {
-        return sys_get_temp_dir() . '/tondbad_route_cache_' . uniqid() . '.php';
-    }
-}
+    $missing = $dispatcher->dispatch('GET', '/second');
+    expect($missing[0])->toBe(\FastRoute\Dispatcher::NOT_FOUND);
+});

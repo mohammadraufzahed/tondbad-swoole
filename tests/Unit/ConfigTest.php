@@ -2,90 +2,72 @@
 
 declare(strict_types=1);
 
-namespace TondbadSwoole\Tests\Unit;
+it('uses env value over config file', function () {
+    $tmpDir = $this->tempDir('tondbad_config_test');
 
-class ConfigTest extends TestCase
-{
-    public function test_get_uses_env_value_over_config_file(): void
-    {
-        $tmpDir = $this->createTempDir();
+    file_put_contents("{$tmpDir}/.env", "APP_DEBUG=false\n");
+    file_put_contents(
+        "{$tmpDir}/app.php",
+        "<?php\nreturn ['debug' => \$env->get('app.debug', true)];\n"
+    );
 
-        file_put_contents("{$tmpDir}/.env", "APP_DEBUG=false\n");
-        file_put_contents(
-            "{$tmpDir}/app.php",
-            "<?php\nreturn ['debug' => \$env->get('app.debug', true)];\n"
-        );
+    $this->env->load([$tmpDir]);
+    $this->setConfigSearchPaths([$tmpDir]);
 
-        $this->env->load([$tmpDir]);
-        $this->setConfigSearchPaths([$tmpDir]);
+    expect($this->config->get('app.debug', true))->toBeFalse();
+});
 
-        $this->assertFalse($this->config->get('app.debug', true));
-    }
+it('preserves falsey env values', function () {
+    $tmpDir = $this->tempDir('tondbad_config_test');
 
-    public function test_get_preserves_falsey_env_values(): void
-    {
-        $tmpDir = $this->createTempDir();
+    file_put_contents("{$tmpDir}/.env", "APP_VALUE=0\n");
+    file_put_contents(
+        "{$tmpDir}/app.php",
+        "<?php\nreturn ['value' => \$env->get('app.value', 'default')];\n"
+    );
 
-        file_put_contents("{$tmpDir}/.env", "APP_VALUE=0\n");
-        file_put_contents(
-            "{$tmpDir}/app.php",
-            "<?php\nreturn ['value' => \$env->get('app.value', 'default')];\n"
-        );
+    $this->env->load([$tmpDir]);
+    $this->setConfigSearchPaths([$tmpDir]);
 
-        $this->env->load([$tmpDir]);
-        $this->setConfigSearchPaths([$tmpDir]);
+    expect($this->config->get('app.value', 'default'))->toBe(0);
+});
 
-        $this->assertSame(0, $this->config->get('app.value', 'default'));
-    }
+it('preserves empty env values', function () {
+    $tmpDir = $this->tempDir('tondbad_config_test');
 
-    public function test_get_preserves_empty_env_values(): void
-    {
-        $tmpDir = $this->createTempDir();
+    file_put_contents("{$tmpDir}/.env", "APP_VALUE=\n");
+    file_put_contents(
+        "{$tmpDir}/app.php",
+        "<?php\nreturn ['value' => \$env->get('app.value', 'default')];\n"
+    );
 
-        file_put_contents("{$tmpDir}/.env", "APP_VALUE=\n");
-        file_put_contents(
-            "{$tmpDir}/app.php",
-            "<?php\nreturn ['value' => \$env->get('app.value', 'default')];\n"
-        );
+    $this->env->load([$tmpDir]);
+    $this->setConfigSearchPaths([$tmpDir]);
 
-        $this->env->load([$tmpDir]);
-        $this->setConfigSearchPaths([$tmpDir]);
+    expect($this->config->get('app.value', 'default'))->toBe('');
+});
 
-        $this->assertSame('', $this->config->get('app.value', 'default'));
-    }
+it('falls back to config default', function () {
+    $tmpDir = $this->tempDir('tondbad_config_test');
 
-    public function test_get_falls_back_to_config_default(): void
-    {
-        $tmpDir = $this->createTempDir();
+    file_put_contents(
+        "{$tmpDir}/app.php",
+        "<?php\nreturn ['debug' => true];\n"
+    );
 
-        file_put_contents(
-            "{$tmpDir}/app.php",
-            "<?php\nreturn ['debug' => true];\n"
-        );
+    $this->setConfigSearchPaths([$tmpDir]);
 
-        $this->setConfigSearchPaths([$tmpDir]);
+    expect($this->config->get('app.debug', false))->toBeTrue();
+});
 
-        $this->assertTrue($this->config->get('app.debug', false));
-    }
+it('uses default when key missing', function () {
+    $tmpDir = $this->tempDir('tondbad_config_test');
 
-    public function test_get_uses_default_when_key_missing(): void
-    {
-        $tmpDir = $this->createTempDir();
+    file_put_contents("{$tmpDir}/.env", "\n");
+    file_put_contents("{$tmpDir}/app.php", "<?php\nreturn [];\n");
 
-        file_put_contents("{$tmpDir}/.env", "\n");
-        file_put_contents("{$tmpDir}/app.php", "<?php\nreturn [];\n");
+    $this->env->load([$tmpDir]);
+    $this->setConfigSearchPaths([$tmpDir]);
 
-        $this->env->load([$tmpDir]);
-        $this->setConfigSearchPaths([$tmpDir]);
-
-        $this->assertSame('fallback', $this->config->get('app.missing', 'fallback'));
-    }
-
-    private function createTempDir(): string
-    {
-        $dir = sys_get_temp_dir() . '/tondbad_config_test_' . uniqid();
-        mkdir($dir, 0777, true);
-
-        return $dir;
-    }
-}
+    expect($this->config->get('app.missing', 'fallback'))->toBe('fallback');
+});

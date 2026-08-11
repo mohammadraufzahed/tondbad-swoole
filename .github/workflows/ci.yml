@@ -31,5 +31,5 @@ jobs:
         run: |
           ! find . -path ./vendor -prune -o -name '*.php' -exec php -l {} \; 2>&1 | grep -qiE 'parse error|fatal error|errors parsing'
 
-      - name: Run PHPUnit
+      - name: Run Pest
         run: composer test

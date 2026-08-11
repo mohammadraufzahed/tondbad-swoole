@@ -41,7 +41,7 @@
   "scripts": {
     "server": "php public/server.php",
     "grpc": "php public/grpc.php",
-    "test": "phpunit",
+    "test": "pest",
     "compile-proto": [
       "sh -c 'protoc $(find ./protos -name \"*.proto\") --proto_path=./protos --php_out=./generated --openswoole-grpc_out=./generated --plugin=protoc-gen-openswoole-grpc=$(which protoc-gen-openswoole-grpc)'"
     ]
@@ -64,6 +64,11 @@
     "psr/simple-cache": "^3.0"
   },
   "require-dev": {
-    "phpunit/phpunit": "^11.0"
+    "pestphp/pest": "^3.8"
+  },
+  "config": {
+    "allow-plugins": {
+      "pestphp/pest-plugin": true
+    }
   }
 }

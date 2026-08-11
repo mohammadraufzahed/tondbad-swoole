@@ -2,89 +2,64 @@
 
 declare(strict_types=1);
 
-namespace TondbadSwoole\Tests\Unit;
-
-use OpenSwoole\Timer;
 use TondbadSwoole\Core\Cache\InMemoryCache;
 
-class InMemoryCacheTest extends TestCase
-{
-    protected function tearDown(): void
-    {
-        if (class_exists(Timer::class) && method_exists(Timer::class, 'clearAll')) {
-            Timer::clearAll();
-        }
+it('sets and gets a value', function () {
+    $cache = new InMemoryCache(1024, 3600000);
 
-        parent::tearDown();
-    }
+    expect($cache->set('key', 'value'))->toBeTrue();
+    expect($cache->get('key'))->toBe('value');
+});
 
-    public function test_set_and_get(): void
-    {
-        $cache = new InMemoryCache(1024, 3600000);
+it('returns null for a missing key', function () {
+    $cache = new InMemoryCache(1024, 3600000);
 
-        $this->assertTrue($cache->set('key', 'value'));
-        $this->assertSame('value', $cache->get('key'));
-    }
+    expect($cache->get('missing'))->toBeNull();
+});
 
-    public function test_get_returns_null_for_missing_key(): void
-    {
-        $cache = new InMemoryCache(1024, 3600000);
+it('reports an existing key through has()', function () {
+    $cache = new InMemoryCache(1024, 3600000);
+    $cache->set('key', 'value');
 
-        $this->assertNull($cache->get('missing'));
-    }
+    expect($cache->has('key'))->toBeTrue();
+});
 
-    public function test_has_returns_true_for_existing_key(): void
-    {
-        $cache = new InMemoryCache(1024, 3600000);
+it('removes a key through delete()', function () {
+    $cache = new InMemoryCache(1024, 3600000);
+    $cache->set('key', 'value');
 
-        $cache->set('key', 'value');
+    expect($cache->delete('key'))->toBeTrue();
+    expect($cache->get('key'))->toBeNull();
+    expect($cache->has('key'))->toBeFalse();
+});
 
-        $this->assertTrue($cache->has('key'));
-    }
+it('expires an item after ttl', function () {
+    $cache = new InMemoryCache(1024, 3600000);
 
-    public function test_delete_removes_key(): void
-    {
-        $cache = new InMemoryCache(1024, 3600000);
+    $cache->set('key', 'value', 1);
+    expect($cache->has('key'))->toBeTrue();
 
-        $cache->set('key', 'value');
-        $this->assertTrue($cache->delete('key'));
+    sleep(2);
 
-        $this->assertNull($cache->get('key'));
-        $this->assertFalse($cache->has('key'));
-    }
+    expect($cache->get('key'))->toBeNull();
+    expect($cache->has('key'))->toBeFalse();
+});
 
-    public function test_ttl_expires_item(): void
-    {
-        $cache = new InMemoryCache(1024, 3600000);
+it('clears all keys', function () {
+    $cache = new InMemoryCache(1024, 3600000);
 
-        $cache->set('key', 'value', 1);
-        $this->assertTrue($cache->has('key'));
+    $cache->set('a', 1);
+    $cache->set('b', 2);
 
-        sleep(2);
+    expect($cache->clear())->toBeTrue();
 
-        $this->assertNull($cache->get('key'));
-        $this->assertFalse($cache->has('key'));
-    }
+    expect($cache->get('a'))->toBeNull();
+    expect($cache->get('b'))->toBeNull();
+});
 
-    public function test_clear_removes_all_keys(): void
-    {
-        $cache = new InMemoryCache(1024, 3600000);
+it('sets and gets multiple items', function () {
+    $cache = new InMemoryCache(1024, 3600000);
 
-        $cache->set('a', 1);
-        $cache->set('b', 2);
-
-        $this->assertTrue($cache->clear());
-
-        $this->assertNull($cache->get('a'));
-        $this->assertNull($cache->get('b'));
-    }
-
-    public function test_set_multiple_and_get_multiple(): void
-    {
-        $cache = new InMemoryCache(1024, 3600000);
-
-        $this->assertTrue($cache->setMultiple(['a' => 1, 'b' => 2]));
-
-        $this->assertSame(['a' => 1, 'b' => 2], $cache->getMultiple(['a', 'b']));
-    }
-}
+    expect($cache->setMultiple(['a' => 1, 'b' => 2]))->toBeTrue();
+    expect($cache->getMultiple(['a', 'b']))->toBe(['a' => 1, 'b' => 2]);
+});
