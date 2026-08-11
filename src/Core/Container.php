@@ -6,6 +6,8 @@ namespace TondbadSwoole\Core;
 
 use Exception;
 use ReflectionClass;
+use ReflectionFunction;
+use ReflectionMethod;
 use ReflectionNamedType;
 use ReflectionParameter;
 use ReflectionUnionType;
@@ -167,5 +169,38 @@ class Container
         }
 
         throw new Exception("Cannot resolve parameter '\${$parameter->getName()}' for class '{$class}': unresolvable type.");
+    }
+
+    /**
+     * Call a callable and resolve its parameters from the container.
+     *
+     * @param callable|array{0: object, 1: string} $callback
+     */
+    public function call(callable $callback, array $parameters = []): mixed
+    {
+        if (is_array($callback) && is_object($callback[0])) {
+            $reflection = new ReflectionMethod($callback[0], $callback[1]);
+        } elseif (is_string($callback) && function_exists($callback)) {
+            $reflection = new ReflectionFunction($callback);
+        } elseif ($callback instanceof \Closure) {
+            $reflection = new ReflectionFunction($callback);
+        } else {
+            throw new Exception('Unsupported callback type for container call.');
+        }
+
+        $args = [];
+        foreach ($reflection->getParameters() as $parameter) {
+            $name = $parameter->getName();
+
+            if (array_key_exists($name, $parameters)) {
+                $args[] = $parameters[$name];
+
+                continue;
+            }
+
+            $args[] = $this->resolveParameter($parameter, $reflection->class ?? '');
+        }
+
+        return $reflection->invokeArgs(is_array($callback) ? $callback[0] : null, $args);
     }
 }

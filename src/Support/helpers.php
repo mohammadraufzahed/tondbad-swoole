@@ -8,6 +8,8 @@ use TondbadSwoole\Core\Config;
 use TondbadSwoole\Database\ConnectionInterface;
 use TondbadSwoole\Database\DatabaseManager;
 use TondbadSwoole\Database\Schema\Builder as SchemaBuilder;
+use TondbadSwoole\Queue\QueueInterface;
+use TondbadSwoole\Queue\QueueManager;
 
 if (!function_exists('app')) {
     function app(): ?App
@@ -53,5 +55,14 @@ if (!function_exists('schema')) {
         }
 
         return $connection?->getSchemaBuilder();
+    }
+}
+
+if (!function_exists('queue')) {
+    function queue(?string $connection = null): ?QueueInterface
+    {
+        $manager = app()?->container->make(QueueManager::class);
+
+        return $manager?->connection($connection);
     }
 }
