@@ -1,6 +1,8 @@
 composer.phar
 /vendor/
 /.phpunit.cache/
+/.pest/
+.pest.xml
 *.log
 /logs/*.log
 !/logs/.gitkeep

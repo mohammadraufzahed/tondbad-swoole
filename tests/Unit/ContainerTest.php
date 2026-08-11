@@ -2,9 +2,6 @@
 
 declare(strict_types=1);
 
-namespace TondbadSwoole\Tests\Unit;
-
-use Exception;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Tests\Unit\Fixtures\Logger;
 use TondbadSwoole\Tests\Unit\Fixtures\Repository;
@@ -14,92 +11,70 @@ use TondbadSwoole\Tests\Unit\Fixtures\ServiceWithNoConstructor;
 use TondbadSwoole\Tests\Unit\Fixtures\ServiceWithOptional;
 use TondbadSwoole\Tests\Unit\Fixtures\ServiceWithUnion;
 
-class ContainerTest extends TestCase
-{
-    public function test_resolve_class_without_constructor(): void
-    {
-        $container = new Container();
+it('resolves a class without a constructor', function () {
+    $container = new Container();
+    $service = $container->make(ServiceWithNoConstructor::class);
 
-        $service = $container->make(ServiceWithNoConstructor::class);
+    expect($service)->toBeInstanceOf(ServiceWithNoConstructor::class);
+});
 
-        $this->assertInstanceOf(ServiceWithNoConstructor::class, $service);
-    }
+it('resolves a class with a class dependency', function () {
+    $container = new Container();
+    $service = $container->make(ServiceWithClassDependency::class);
 
-    public function test_resolve_class_with_class_dependency(): void
-    {
-        $container = new Container();
+    expect($service)->toBeInstanceOf(ServiceWithClassDependency::class);
+    expect($service->repository)->toBeInstanceOf(Repository::class);
+});
 
-        $service = $container->make(ServiceWithClassDependency::class);
+it('resolves a class with an optional dependency when possible', function () {
+    $container = new Container();
+    $service = $container->make(ServiceWithOptional::class);
 
-        $this->assertInstanceOf(ServiceWithClassDependency::class, $service);
-        $this->assertInstanceOf(Repository::class, $service->repository);
-    }
+    expect($service)->toBeInstanceOf(ServiceWithOptional::class);
+    expect($service->logger)->toBeInstanceOf(Logger::class);
+});
 
-    public function test_resolve_class_with_optional_dependency_resolves_when_possible(): void
-    {
-        $container = new Container();
+it('resolves a class with a union dependency', function () {
+    $container = new Container();
+    $service = $container->make(ServiceWithUnion::class);
 
-        $service = $container->make(ServiceWithOptional::class);
+    expect($service)->toBeInstanceOf(ServiceWithUnion::class);
+    expect($service->logger)->toBeInstanceOf(Logger::class);
+});
 
-        $this->assertInstanceOf(ServiceWithOptional::class, $service);
-        $this->assertInstanceOf(Logger::class, $service->logger);
-    }
+it('returns the same instance for singletons', function () {
+    $container = new Container();
+    $container->singleton(Logger::class, fn () => new Logger('singleton'));
 
-    public function test_resolve_class_with_union_dependency(): void
-    {
-        $container = new Container();
+    $first = $container->make(Logger::class);
+    $second = $container->make(Logger::class);
 
-        $service = $container->make(ServiceWithUnion::class);
+    expect($first)->toBe($second);
+});
 
-        $this->assertInstanceOf(ServiceWithUnion::class, $service);
-        $this->assertInstanceOf(Logger::class, $service->logger);
-    }
+it('resolves a bound class string', function () {
+    $container = new Container();
+    $container->bind('repository', Repository::class);
 
-    public function test_singleton_returns_same_instance(): void
-    {
-        $container = new Container();
+    expect($container->make('repository'))->toBeInstanceOf(Repository::class);
+});
 
-        $container->singleton(Logger::class, fn() => new Logger('singleton'));
+it('returns a bound scalar value', function () {
+    $container = new Container();
+    $container->bind('app.name', 'Tondbad Test');
 
-        $first = $container->make(Logger::class);
-        $second = $container->make(Logger::class);
+    expect($container->make('app.name'))->toBe('Tondbad Test');
+});
 
-        $this->assertSame($first, $second);
-    }
+it('throws when a scalar parameter cannot be resolved', function () {
+    $container = new Container();
+    $container->make(RequiredScalar::class);
+})->throws(Exception::class);
 
-    public function test_bind_class_string_resolves_instance(): void
-    {
-        $container = new Container();
+it('reports existing bindings through has()', function () {
+    $container = new Container();
+    $container->bind('foo', 'bar');
 
-        $container->bind('repository', Repository::class);
-
-        $this->assertInstanceOf(Repository::class, $container->make('repository'));
-    }
-
-    public function test_bind_scalar_value_returns_value(): void
-    {
-        $container = new Container();
-
-        $container->bind('app.name', 'Tondbad Test');
-
-        $this->assertSame('Tondbad Test', $container->make('app.name'));
-    }
-
-    public function test_resolve_unresolvable_scalar_parameter_throws(): void
-    {
-        $this->expectException(Exception::class);
-
-        $container = new Container();
-        $container->make(RequiredScalar::class);
-    }
-
-    public function test_has_reports_existing_binding(): void
-    {
-        $container = new Container();
-
-        $container->bind('foo', 'bar');
-
-        $this->assertTrue($container->has('foo'));
-        $this->assertFalse($container->has('baz'));
-    }
-}
+    expect($container->has('foo'))->toBeTrue();
+    expect($container->has('baz'))->toBeFalse();
+});
