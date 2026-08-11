@@ -21,6 +21,7 @@ class ConnectionFactory
         $driver = $config['driver'] ?? 'mysql';
         $grammar = $this->createGrammar($driver);
         $grammar->setTablePrefix($config['prefix'] ?? null);
+        $grammar->setDriver($driver);
 
         $factory = function () use ($config, $driver): PDO {
             $dsn = $this->createDsn($driver, $config);

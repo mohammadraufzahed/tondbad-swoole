@@ -30,6 +30,7 @@ class HttpServiceProvider extends ServiceProvider
             );
 
             $this->setupRouter($server, $container);
+            $this->setupLogs($server, $container->make(Logger::class));
 
             return $server;
         });
@@ -43,20 +44,6 @@ class HttpServiceProvider extends ServiceProvider
             'request',
             fn(Request $request, Response $response) => $route->dispatch($request, $response)
         );
-    }
-
-    public function boot(Container $container): void
-    {
-        $config = $container->make(Config::class);
-
-        if ($config->get('app.type', 'http') !== 'http') {
-            return;
-        }
-
-        $server = $container->make(HttpServer::class);
-        $logger = $container->make(Logger::class);
-
-        $this->setupLogs($server, $logger);
     }
 
     private function setupLogs(HttpServer $server, Logger $logger): void

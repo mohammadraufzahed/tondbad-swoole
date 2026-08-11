@@ -5,6 +5,8 @@ declare(strict_types=1);
 return [
     'default' => $env->get('db.connection', 'mysql'),
 
+    'migrations' => $env->get('db.migrations', 'database/migrations'),
+
     'connections' => [
         'mysql' => [
             'driver' => 'mysql',

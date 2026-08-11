@@ -7,12 +7,18 @@ namespace TondbadSwoole\Database\Query;
 use Closure;
 use InvalidArgumentException;
 use RuntimeException;
+use TondbadSwoole\Database\Schema\Blueprint;
+use TondbadSwoole\Database\Schema\Column;
+use TondbadSwoole\Database\Schema\ForeignKey;
+use TondbadSwoole\Database\Schema\Index;
 
 abstract class Grammar
 {
     protected string $quoteCharacter = '"';
 
     protected ?string $tablePrefix = null;
+
+    protected string $driver = 'mysql';
 
     public function setTablePrefix(?string $prefix): void
     {
@@ -22,6 +28,16 @@ abstract class Grammar
     public function getTablePrefix(): ?string
     {
         return $this->tablePrefix;
+    }
+
+    public function setDriver(string $driver): void
+    {
+        $this->driver = $driver;
+    }
+
+    public function getDriver(): string
+    {
+        return $this->driver;
     }
 
     public function compileSelect(Builder $query): string
@@ -314,5 +330,356 @@ abstract class Grammar
         }
 
         return 'offset ' . $query->offset;
+    }
+
+    public function compileCreate(Blueprint $blueprint): array
+    {
+        $columns = [];
+        $statements = [];
+
+        foreach ($blueprint->columns as $column) {
+            $columns[] = $this->getColumnSql($column);
+        }
+
+        foreach ($blueprint->indexes as $index) {
+            if ($index->type === 'index') {
+                $statements[] = $this->compileIndex($index, $blueprint->table);
+
+                continue;
+            }
+
+            $columns[] = $this->getIndexSql($index, $blueprint->table);
+        }
+
+        foreach ($blueprint->foreignKeys as $foreignKey) {
+            if ($foreignKey->on === '') {
+                continue;
+            }
+
+            $columns[] = $this->getForeignKeySql($foreignKey);
+        }
+
+        $sql = $blueprint->temporary ? 'create temporary table ' : 'create table ';
+        $sql .= $this->wrapTable($blueprint->table) . ' (' . implode(', ', $columns) . ')';
+
+        if ($this->driver === 'mysql') {
+            if ($blueprint->engine !== null) {
+                $sql .= ' engine=' . $blueprint->engine;
+            }
+            if ($blueprint->charset !== null) {
+                $sql .= ' default charset=' . $blueprint->charset;
+            }
+            if ($blueprint->collation !== null) {
+                $sql .= ' collate=' . $blueprint->collation;
+            }
+            if ($blueprint->comment !== null) {
+                $sql .= " comment '" . addslashes($blueprint->comment) . "'";
+            }
+        }
+
+        array_unshift($statements, $sql);
+
+        return $statements;
+    }
+
+    public function compileIndex(Index $index, string $table): string
+    {
+        $columns = implode(', ', array_map([$this, 'wrap'], $index->columns));
+
+        return 'create index ' . $this->wrap($index->name) . ' on ' . $this->wrapTable($table) . ' (' . $columns . ')';
+    }
+
+    public function compileDrop(string $table): string
+    {
+        return 'drop table ' . $this->wrapTable($table);
+    }
+
+    public function compileDropIfExists(string $table): string
+    {
+        return match ($this->driver) {
+            'sqlite' => 'drop table if exists ' . $this->wrapTable($table),
+            default => 'drop table if exists ' . $this->wrapTable($table),
+        };
+    }
+
+    public function compileHasTable(string $table): string
+    {
+        return match ($this->driver) {
+            'mysql' => 'show tables like ' . $this->quoteString($table),
+            'sqlite' => "select name from sqlite_master where type = 'table' and name = " . $this->quoteString($table),
+            'pgsql' => "select * from information_schema.tables where table_schema = 'public' and table_name = " . $this->quoteString($table),
+            default => 'show tables like ' . $this->quoteString($table),
+        };
+    }
+
+    public function compileHasColumn(string $table, string $column): string
+    {
+        return match ($this->driver) {
+            'mysql' => 'show columns from ' . $this->wrapTable($table) . ' where Field = ' . $this->quoteString($column),
+            'sqlite' => 'pragma table_info(' . $this->wrapTable($table) . ')',
+            'pgsql' => "select * from information_schema.columns where table_name = " . $this->quoteString($table) . " and column_name = " . $this->quoteString($column),
+            default => 'show columns from ' . $this->wrapTable($table) . ' where Field = ' . $this->quoteString($column),
+        };
+    }
+
+    public function compileRename(string $from, string $to): string
+    {
+        return match ($this->driver) {
+            'pgsql' => 'alter table ' . $this->wrapTable($from) . ' rename to ' . $this->wrapTable($to),
+            default => 'rename table ' . $this->wrapTable($from) . ' to ' . $this->wrapTable($to),
+        };
+    }
+
+    public function compileGetTables(): string
+    {
+        return match ($this->driver) {
+            'mysql' => 'show tables',
+            'sqlite' => "select name as name from sqlite_master where type = 'table' and name not like 'sqlite_%'",
+            'pgsql' => "select table_name as name from information_schema.tables where table_schema = 'public'",
+            default => 'show tables',
+        };
+    }
+
+    public function compileTruncate(string $table): string
+    {
+        return match ($this->driver) {
+            'sqlite' => 'delete from ' . $this->wrapTable($table),
+            default => 'truncate table ' . $this->wrapTable($table),
+        };
+    }
+
+    protected function getColumnSql(Column $column): string
+    {
+        return match ($this->driver) {
+            'sqlite' => $this->getSqliteColumnSql($column),
+            'pgsql' => $this->getPostgresColumnSql($column),
+            default => $this->getMysqlColumnSql($column),
+        };
+    }
+
+    protected function getIndexSql(Index $index, string $table): string
+    {
+        if ($index->type === 'dropIndex') {
+            return match ($this->driver) {
+                'sqlite' => 'drop index if exists ' . $this->wrap($index->name),
+                default => 'drop index ' . $this->wrap($index->name) . ' on ' . $this->wrapTable($table),
+            };
+        }
+
+        if ($index->type === 'dropUnique') {
+            return match ($this->driver) {
+                'sqlite' => 'drop index if exists ' . $this->wrap($index->name),
+                default => 'drop index ' . $this->wrap($index->name) . ' on ' . $this->wrapTable($table),
+            };
+        }
+
+        if ($index->type === 'dropPrimary') {
+            return 'alter table ' . $this->wrapTable($table) . ' drop primary key';
+        }
+
+        $columns = implode(', ', array_map([$this, 'wrap'], $index->columns));
+
+        return match ($index->type) {
+            'primary' => 'primary key (' . $columns . ')',
+            'unique' => 'constraint ' . $this->wrap($index->name) . ' unique (' . $columns . ')',
+            default => 'index ' . $this->wrap($index->name) . ' (' . $columns . ')',
+        };
+    }
+
+    protected function getForeignKeySql(ForeignKey $foreignKey): string
+    {
+        $columns = implode(', ', array_map([$this, 'wrap'], $foreignKey->columns));
+        $references = implode(', ', array_map([$this, 'wrap'], $foreignKey->references));
+
+        $sql = 'constraint ' . $this->wrap($foreignKey->name) . ' foreign key (' . $columns . ') references ' . $this->wrapTable($foreignKey->on) . ' (' . $references . ')';
+
+        if ($foreignKey->onDelete !== null) {
+            $sql .= ' on delete ' . $foreignKey->onDelete;
+        }
+
+        if ($foreignKey->onUpdate !== null) {
+            $sql .= ' on update ' . $foreignKey->onUpdate;
+        }
+
+        return $sql;
+    }
+
+    protected function getMysqlColumnSql(Column $column): string
+    {
+        $sql = $this->wrap($column->name) . ' ' . $this->getMysqlType($column);
+
+        if ($column->unsigned) {
+            $sql .= ' unsigned';
+        }
+
+        if (!$column->nullable && $column->default === null && !$column->autoIncrement) {
+            $sql .= ' not null';
+        } elseif ($column->nullable) {
+            $sql .= ' null';
+        } else {
+            $sql .= ' not null';
+        }
+
+        if ($column->autoIncrement) {
+            $sql .= ' auto_increment';
+        }
+
+        if ($column->primary) {
+            $sql .= ' primary key';
+        }
+
+        if ($column->useCurrent) {
+            $sql .= ' default CURRENT_TIMESTAMP';
+        } elseif ($column->default !== null) {
+            $sql .= ' default ' . $this->formatDefault($column->default);
+        }
+
+        if ($column->comment !== null) {
+            $sql .= " comment '" . addslashes($column->comment) . "'";
+        }
+
+        if ($column->collation !== null) {
+            $sql .= ' collate ' . $column->collation;
+        }
+
+        return $sql;
+    }
+
+    protected function getSqliteColumnSql(Column $column): string
+    {
+        $sql = $this->wrap($column->name) . ' ' . $this->getSqliteType($column);
+
+        if ($column->primary || $column->autoIncrement) {
+            $sql .= ' primary key';
+            if ($column->autoIncrement) {
+                $sql .= ' autoincrement';
+            }
+        }
+
+        if ($column->nullable) {
+            $sql .= ' null';
+        } elseif (!$column->primary && !$column->autoIncrement) {
+            $sql .= ' not null';
+        }
+
+        if ($column->default !== null) {
+            $sql .= ' default ' . $this->formatDefault($column->default);
+        }
+
+        return $sql;
+    }
+
+    protected function getPostgresColumnSql(Column $column): string
+    {
+        $sql = $this->wrap($column->name) . ' ' . $this->getPostgresType($column);
+
+        if (!$column->nullable && $column->default === null && !$column->autoIncrement) {
+            $sql .= ' not null';
+        } elseif ($column->nullable) {
+            $sql .= ' null';
+        } else {
+            $sql .= ' not null';
+        }
+
+        if ($column->autoIncrement) {
+            $sql .= ' generated always as identity primary key';
+        } elseif ($column->primary) {
+            $sql .= ' primary key';
+        }
+
+        if ($column->useCurrent) {
+            $sql .= ' default CURRENT_TIMESTAMP';
+        } elseif ($column->default !== null) {
+            $sql .= ' default ' . $this->formatDefault($column->default);
+        }
+
+        return $sql;
+    }
+
+    protected function getMysqlType(Column $column): string
+    {
+        return match ($column->type) {
+            'integer', 'mediumInteger', 'tinyInteger', 'smallInteger' => 'int',
+            'bigInteger' => 'bigint',
+            'string' => 'varchar(' . ($column->length ?? 255) . ')',
+            'char' => 'char(' . ($column->length ?? 1) . ')',
+            'text' => 'text',
+            'mediumText' => 'mediumtext',
+            'longText' => 'longtext',
+            'boolean' => 'tinyint(1)',
+            'json', 'jsonb' => 'json',
+            'datetime' => 'datetime',
+            'date' => 'date',
+            'time' => 'time',
+            'timestamp' => 'timestamp',
+            'enum' => 'enum(' . implode(', ', array_map(fn ($v) => "'" . addslashes($v) . "'", $column->allowed ?? [])) . ')',
+            'decimal' => 'decimal(' . ($column->total ?? 8) . ', ' . ($column->places ?? 2) . ')',
+            'float' => 'float',
+            'double' => 'double',
+            'binary' => 'blob',
+            default => 'varchar(255)',
+        };
+    }
+
+    protected function getSqliteType(Column $column): string
+    {
+        return match ($column->type) {
+            'integer', 'bigInteger', 'smallInteger', 'tinyInteger', 'mediumInteger' => 'integer',
+            'string', 'char', 'text', 'mediumText', 'longText' => 'text',
+            'boolean' => 'integer',
+            'json', 'jsonb' => 'text',
+            'datetime', 'timestamp', 'date', 'time' => 'text',
+            'enum' => 'text',
+            'decimal', 'float', 'double' => 'real',
+            'binary' => 'blob',
+            default => 'text',
+        };
+    }
+
+    protected function getPostgresType(Column $column): string
+    {
+        return match ($column->type) {
+            'integer', 'mediumInteger' => 'integer',
+            'bigInteger' => 'bigint',
+            'smallInteger', 'tinyInteger' => 'smallint',
+            'string' => 'varchar(' . ($column->length ?? 255) . ')',
+            'char' => 'char(' . ($column->length ?? 1) . ')',
+            'text', 'mediumText', 'longText' => 'text',
+            'boolean' => 'boolean',
+            'json' => 'json',
+            'jsonb' => 'jsonb',
+            'datetime' => 'timestamp',
+            'date' => 'date',
+            'time' => 'time',
+            'timestamp' => 'timestamp',
+            'enum' => 'varchar(255)',
+            'decimal' => 'decimal(' . ($column->total ?? 8) . ', ' . ($column->places ?? 2) . ')',
+            'float' => 'real',
+            'double' => 'double precision',
+            'binary' => 'bytea',
+            default => 'text',
+        };
+    }
+
+    protected function formatDefault(mixed $value): string
+    {
+        if ($value === null) {
+            return 'null';
+        }
+
+        if (is_bool($value)) {
+            return $value ? '1' : '0';
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return (string) $value;
+        }
+
+        return "'" . addslashes((string) $value) . "'";
+    }
+
+    protected function quoteString(string $value): string
+    {
+        return "'" . addslashes($value) . "'";
     }
 }

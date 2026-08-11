@@ -13,8 +13,13 @@ use TondbadSwoole\Console\Commands\Command;
 use TondbadSwoole\Console\Commands\CacheClearCommand;
 use TondbadSwoole\Console\Commands\GrpcServeCommand;
 use TondbadSwoole\Console\Commands\MakeControllerCommand;
+use TondbadSwoole\Console\Commands\MakeMigrationCommand;
 use TondbadSwoole\Console\Commands\MakeMiddlewareCommand;
 use TondbadSwoole\Console\Commands\MakeProviderCommand;
+use TondbadSwoole\Console\Commands\MigrateCommand;
+use TondbadSwoole\Console\Commands\MigrateFreshCommand;
+use TondbadSwoole\Console\Commands\MigrateRollbackCommand;
+use TondbadSwoole\Console\Commands\MigrateStatusCommand;
 use TondbadSwoole\Console\Commands\RouteCacheCommand;
 use TondbadSwoole\Console\Commands\ServeCommand;
 use TondbadSwoole\Core\Config;
@@ -49,7 +54,12 @@ class ConsoleServiceProvider extends ServiceProvider
             ->register(new CacheClearCommand($basePath))
             ->register(new MakeControllerCommand($basePath))
             ->register(new MakeMiddlewareCommand($basePath))
-            ->register(new MakeProviderCommand($basePath));
+            ->register(new MakeProviderCommand($basePath))
+            ->register(new MakeMigrationCommand($basePath))
+            ->register(new MigrateCommand($basePath))
+            ->register(new MigrateFreshCommand($basePath))
+            ->register(new MigrateRollbackCommand($basePath))
+            ->register(new MigrateStatusCommand($basePath));
     }
 
     private function registerConfiguredCommands(Application $console, Container $container, Config $config, string $basePath): void

@@ -6,6 +6,7 @@ namespace TondbadSwoole\Database;
 
 use TondbadSwoole\Database\Query\Builder;
 use TondbadSwoole\Database\Query\Grammar;
+use TondbadSwoole\Database\Schema\Builder as SchemaBuilder;
 
 interface ConnectionInterface
 {
@@ -33,4 +34,6 @@ interface ConnectionInterface
     public function getGrammar(): Grammar;
 
     public function getName(): string;
+
+    public function getSchemaBuilder(): SchemaBuilder;
 }
