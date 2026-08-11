@@ -56,4 +56,15 @@ class DatabaseServiceProvider extends ServiceProvider
 
         $container->singleton(MigrationCreator::class, fn () => new MigrationCreator());
     }
+
+    public function boot(Container $container): void
+    {
+        $manager = $container->make(MigrationPathManager::class);
+
+        foreach ($container->make(App::class)->getProviders() as $provider) {
+            foreach ($provider->getMigrationPaths() as $path) {
+                $manager->addPath($path);
+            }
+        }
+    }
 }

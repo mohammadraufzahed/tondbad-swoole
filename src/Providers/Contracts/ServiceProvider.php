@@ -10,6 +10,11 @@ use TondbadSwoole\Core\Container;
 abstract class ServiceProvider implements ServiceProviderInterface
 {
     /**
+     * @var list<string>
+     */
+    protected array $migrationPaths = [];
+
+    /**
      * Register services or bindings in the container.
      * This method should be overridden in child classes to add custom services.
      *
@@ -73,6 +78,25 @@ abstract class ServiceProvider implements ServiceProviderInterface
      */
     public function afterBoot(Container $container): void
     {
+    }
+
+    /**
+     * Register a directory that contains migration files.
+     * Paths are collected by the database service provider during boot.
+     */
+    public function loadMigrationsFrom(string $path): self
+    {
+        $this->migrationPaths[] = $path;
+
+        return $this;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function getMigrationPaths(): array
+    {
+        return $this->migrationPaths;
     }
 
     /**

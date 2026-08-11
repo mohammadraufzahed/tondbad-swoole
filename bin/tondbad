@@ -30,6 +30,8 @@ if (!$autoloadFound) {
 $basePath = getcwd() ?: dirname(__DIR__);
 
 $app = AppFactory::create($basePath);
+$app->boot();
+
 $console = $app->container->make(Application::class);
 
 exit($console->run($argv));

@@ -107,6 +107,14 @@ class App
 
     /**
      * @return ServiceProvider[]
+     */
+    public function getProviders(): array
+    {
+        return $this->providers;
+    }
+
+    /**
+     * @return ServiceProvider[]
      * @throws Exception
      */
     private function loadProviders(): array
