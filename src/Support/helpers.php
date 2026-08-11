@@ -7,6 +7,7 @@ use TondbadSwoole\Contracts\CacheInterface;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Database\ConnectionInterface;
 use TondbadSwoole\Database\DatabaseManager;
+use TondbadSwoole\Database\Schema\Builder as SchemaBuilder;
 
 if (!function_exists('app')) {
     function app(): ?App
@@ -39,5 +40,18 @@ if (!function_exists('db')) {
         }
 
         return $connection !== null ? $manager->connection($connection) : $manager;
+    }
+}
+
+if (!function_exists('schema')) {
+    function schema(): ?SchemaBuilder
+    {
+        $connection = db();
+
+        if ($connection instanceof ConnectionInterface) {
+            return $connection->getSchemaBuilder();
+        }
+
+        return $connection?->getSchemaBuilder();
     }
 }

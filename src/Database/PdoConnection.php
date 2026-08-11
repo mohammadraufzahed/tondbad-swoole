@@ -9,6 +9,7 @@ use PDOStatement;
 use Throwable;
 use TondbadSwoole\Database\Query\Builder;
 use TondbadSwoole\Database\Query\Grammar;
+use TondbadSwoole\Database\Schema\Builder as SchemaBuilder;
 
 class PdoConnection implements ConnectionInterface
 {
@@ -114,6 +115,11 @@ class PdoConnection implements ConnectionInterface
     public function getName(): string
     {
         return $this->name;
+    }
+
+    public function getSchemaBuilder(): SchemaBuilder
+    {
+        return new SchemaBuilder($this);
     }
 
     public function getPdo(): PDO

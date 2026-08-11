@@ -7,6 +7,7 @@ namespace TondbadSwoole\Tests\Unit\Database;
 use TondbadSwoole\Database\ConnectionInterface;
 use TondbadSwoole\Database\Query\Builder;
 use TondbadSwoole\Database\Query\Grammar;
+use TondbadSwoole\Database\Schema\Builder as SchemaBuilder;
 
 class FakeConnection implements ConnectionInterface
 {
@@ -90,5 +91,10 @@ class FakeConnection implements ConnectionInterface
     public function getName(): string
     {
         return $this->name;
+    }
+
+    public function getSchemaBuilder(): SchemaBuilder
+    {
+        return new SchemaBuilder($this);
     }
 }
