@@ -29,13 +29,15 @@ class Worker
             return false;
         }
 
-        $this->process($job, $connection);
+        $this->process($job, $connection, $maxTries);
 
         return true;
     }
 
-    public function process(Job $job, ?QueueInterface $connection = null): void
+    public function process(Job $job, ?QueueInterface $connection = null, ?int $maxTries = null): void
     {
+        $maxTries ??= 1;
+
         try {
             $this->container->call([$job, 'handle']);
 
@@ -43,15 +45,17 @@ class Worker
                 $connection->delete($job->getJobId());
             }
         } catch (Throwable $e) {
-            $this->handleException($job, $connection, $e);
+            $this->handleException($job, $connection, $e, $maxTries);
         }
     }
 
-    protected function handleException(Job $job, ?QueueInterface $connection, Throwable $e): void
+    protected function handleException(Job $job, ?QueueInterface $connection, Throwable $e, ?int $maxTries = null): void
     {
         $job->incrementAttempts();
 
-        if ($job->hasFailed($job->getMaxTries())) {
+        $tries = $job->getMaxTries() ?? $maxTries;
+
+        if ($job->hasFailed($tries)) {
             $this->fail($job, $e);
 
             if ($connection !== null && $job->getJobId() !== null) {

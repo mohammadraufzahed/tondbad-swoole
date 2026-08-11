@@ -19,6 +19,8 @@ class QueueServiceProvider extends ServiceProvider
 {
     public function register(Container $container): void
     {
+        $this->loadMigrationsFrom(__DIR__ . '/../../Database/Migrations/Queue');
+
         $container->singleton(QueueManager::class, function () use ($container): QueueManager {
             return new QueueManager(
                 $container->make(Config::class),
