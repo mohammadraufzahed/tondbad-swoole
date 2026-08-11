@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace TondbadSwoole\Providers\Default;
 
 use ReflectionClass;
+use ReflectionNamedType;
 use TondbadSwoole\Bootstrap\App;
 use TondbadSwoole\Console\Application;
 use TondbadSwoole\Console\CommandInterface;
+use TondbadSwoole\Console\Commands\Command;
 use TondbadSwoole\Console\Commands\CacheClearCommand;
 use TondbadSwoole\Console\Commands\GrpcServeCommand;
 use TondbadSwoole\Console\Commands\MakeControllerCommand;
@@ -31,7 +33,7 @@ class ConsoleServiceProvider extends ServiceProvider
             $console = new Application($basePath);
 
             $this->registerBuiltInCommands($console, $basePath);
-            $this->registerConfiguredCommands($console, $container, $config);
+            $this->registerConfiguredCommands($console, $container, $config, $basePath);
             $this->discoverCommands($console, $basePath, $container);
 
             return $console;
@@ -50,7 +52,7 @@ class ConsoleServiceProvider extends ServiceProvider
             ->register(new MakeProviderCommand($basePath));
     }
 
-    private function registerConfiguredCommands(Application $console, Container $container, Config $config): void
+    private function registerConfiguredCommands(Application $console, Container $container, Config $config, string $basePath): void
     {
         $commands = $config->get('app.commands', []);
 
@@ -59,7 +61,11 @@ class ConsoleServiceProvider extends ServiceProvider
                 continue;
             }
 
-            $console->register($container->make($commandClass));
+            $command = $this->resolveCommand($commandClass, $basePath, $container);
+
+            if ($command !== null) {
+                $console->register($command);
+            }
         }
     }
 
@@ -84,7 +90,11 @@ class ConsoleServiceProvider extends ServiceProvider
                 continue;
             }
 
-            $console->register($container->make($class));
+            $command = $this->resolveCommand($class, $basePath, $container);
+
+            if ($command !== null) {
+                $console->register($command);
+            }
         }
     }
 
@@ -93,5 +103,69 @@ class ConsoleServiceProvider extends ServiceProvider
         $name = basename($file, '.php');
 
         return 'App\\Console\\Commands\\' . $name;
+    }
+
+    private function resolveCommand(string $class, string $basePath, Container $container): ?CommandInterface
+    {
+        if (!class_exists($class) || !is_subclass_of($class, CommandInterface::class)) {
+            return null;
+        }
+
+        $reflection = new ReflectionClass($class);
+
+        if ($reflection->isAbstract()) {
+            return null;
+        }
+
+        $constructor = $reflection->getConstructor();
+
+        if ($constructor === null) {
+            return $container->make($class);
+        }
+
+        $parameters = $constructor->getParameters();
+
+        if (count($parameters) === 1
+            && $parameters[0]->getName() === 'basePath'
+            && ($parameters[0]->getType() instanceof ReflectionNamedType)
+            && ($parameters[0]->getType()->getName() === 'string')
+        ) {
+            return new $class($basePath);
+        }
+
+        $dependencies = [];
+
+        foreach ($parameters as $parameter) {
+            $type = $parameter->getType();
+
+            if ($parameter->getName() === 'basePath'
+                && ($type instanceof ReflectionNamedType)
+                && ($type->getName() === 'string')
+            ) {
+                $dependencies[] = $basePath;
+
+                continue;
+            }
+
+            if ($type instanceof ReflectionNamedType && !$type->isBuiltin()) {
+                try {
+                    $dependencies[] = $container->make($type->getName());
+
+                    continue;
+                } catch (\Throwable $e) {
+                    // fall through to defaults/null handling below
+                }
+            }
+
+            if ($parameter->isDefaultValueAvailable()) {
+                $dependencies[] = $parameter->getDefaultValue();
+            } elseif ($parameter->allowsNull()) {
+                $dependencies[] = null;
+            } else {
+                return null;
+            }
+        }
+
+        return $reflection->newInstanceArgs($dependencies);
     }
 }
