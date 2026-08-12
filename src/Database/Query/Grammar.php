@@ -394,6 +394,11 @@ abstract class Grammar
         return 'drop table ' . $this->wrapTable($table);
     }
 
+    public function compileAddColumn(string $table, Column $column): string
+    {
+        return 'alter table ' . $this->wrapTable($table) . ' add column ' . $this->getColumnSql($column);
+    }
+
     public function compileDropIfExists(string $table): string
     {
         return match ($this->driver) {
