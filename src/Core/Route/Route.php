@@ -162,6 +162,11 @@ class Route implements RouteInterface
         return $this->registrar->getRoutes();
     }
 
+    public function getHandler(int $id): array|callable
+    {
+        return $this->registrar->getHandler($id);
+    }
+
     public function getDispatcher(): Dispatcher
     {
         return $this->registrar->getDispatcher();

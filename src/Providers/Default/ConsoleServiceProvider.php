@@ -31,6 +31,7 @@ use TondbadSwoole\Console\Commands\MigrateFreshCommand;
 use TondbadSwoole\Console\Commands\MigrateRollbackCommand;
 use TondbadSwoole\Console\Commands\MigrateStatusCommand;
 use TondbadSwoole\Console\Commands\RouteCacheCommand;
+use TondbadSwoole\Console\Commands\RouteListCommand;
 use TondbadSwoole\Console\Commands\ScheduleListCommand;
 use TondbadSwoole\Console\Commands\ScheduleWorkCommand;
 use TondbadSwoole\Console\Commands\ServeCommand;
@@ -63,6 +64,7 @@ class ConsoleServiceProvider extends ServiceProvider
             ServeCommand::class,
             GrpcServeCommand::class,
             RouteCacheCommand::class,
+            RouteListCommand::class,
             CacheClearCommand::class,
             MakeControllerCommand::class,
             MakeEventCommand::class,

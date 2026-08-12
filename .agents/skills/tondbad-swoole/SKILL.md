@@ -4,9 +4,9 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 ---
 
 # Local testing setup
-- PHP 8.3 CLI is required. Install `php8.3-openswoole`, `php8.3-mbstring`, `php8.3-xml`, `php8.3-zip`, `git`, and `unzip`.
+- PHP 8.4 CLI is required (the current lock file resolves Pest/PHPUnit packages that require >= 8.4.1). Install `php8.4-cli`, `php8.4-openswoole`, `php8.4-mbstring`, `php8.4-xml`, `php8.4-zip`, `php8.4-sqlite3`, `git`, and `unzip`.
 - `pdo` and `pdo_sqlite` extensions are useful for SQLite queue/migration tests.
-- Install Composer and dependencies: `php composer.phar install` from the repo root.
+- Install Composer and dependencies: `php composer.phar install` from the repo root (or `php composer.phar install --ignore-platform-reqs` if the lock was generated for a different PHP version).
 - The `vendor/` directory and `ext-openswoole` must be present before the framework can boot.
 
 # Static checks
@@ -18,8 +18,10 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - Use `php bin/tondbad` (`vendor/bin/tondbad` is not generated when the framework is the root package).
 - `php bin/tondbad serve` — start the OpenSwoole HTTP server.
 - `php bin/tondbad serve:grpc` — start the OpenSwoole gRPC server.
+- `php bin/tondbad route:list` — list all registered routes.
 - `php bin/tondbad route:cache` — pre-compile `storage/cache/routes.cache.php`.
 - `php bin/tondbad cache:clear` — remove compiled route cache and framework caches.
+- `php bin/tondbad --version` / `php bin/tondbad -V` — print the framework version.
 - `php bin/tondbad make:controller <Name>` — create `app/Http/Controllers/<Name>Controller.php`.
 - `php bin/tondbad make:middleware <Name>` — create `app/Http/Middleware/<Name>Middleware.php`.
 - `php bin/tondbad make:provider <Name>` — create `app/Providers/<Name>ServiceProvider.php`.
@@ -31,10 +33,16 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - `php bin/tondbad migrate` — run migrations, including the `jobs` and `failed_jobs` tables from the queue provider.
 - `php bin/tondbad queue:work --connection=<name> --queue=<name> --max-jobs=<n> --sleep=<sec>` — process queued jobs.
 
-# Legacy entry points
-- `APP_HTTP_PORT=<port> php public/server.php` still starts the OpenSwoole HTTP server.
-- `APP_GRPC_PORT=<port> php public/grpc.php` still starts the OpenSwoole gRPC server.
-- `public/index.php` is a wrapper that requires `public/server.php`.
+# Server entry points
+- `APP_HTTP_PORT=<port> php bin/tondbad serve` starts the OpenSwoole HTTP server.
+- `APP_GRPC_PORT=<port> php bin/tondbad serve:grpc` starts the OpenSwoole gRPC server.
+- The legacy `public/server.php`, `public/grpc.php`, and `public/index.php` entry points were removed on the `devin/db-engine-pool` branch.
+
+# Database engine / pool verification
+- `DatabaseManager` resolves `DatabaseWrapper` via `EngineFactory`; `DatabaseWrapper` checks out a PDO from `SimplePdoPool` (single connection) or `SwoolePdoPool` (coroutine channel) and returns it via `putPdo()` / `close()`.
+- `RouteDispatcher` calls `databaseManager->closeOldConnections()` in a `finally` block after each request.
+- To verify pool return, expose a test route that uses `db()->connection()` to insert/select rows, then use reflection to read `DatabaseWrapper::$pool` and call `stats()`. After the request `borrowed` should be `0`, `available` at least `1`.
+- With SQLite, use a file-backed database (`DB_SQLITE_DATABASE=/path/to/file.sqlite`) so the same database is shared between `php bin/tondbad migrate` and the long-running HTTP server; `:memory:` works only within a single process.
 
 # Configuration
 - Default HTTP port is `9501`; default gRPC port is `9502`.

@@ -41,7 +41,8 @@ class RouteServiceProvider extends ServiceProvider
                 $loader->load($basePath . '/' . $grpcRouteFile, $route);
             }
 
-            $route->registerAnnotatedRoutes($config->get('routes', []));
+            $controllers = $config->get('routes.controllers', []);
+            $route->registerAnnotatedRoutes(is_array($controllers) ? $controllers : []);
 
             return $route;
         });

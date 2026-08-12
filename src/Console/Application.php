@@ -31,6 +31,12 @@ class Application
     {
         $name = $argv[1] ?? null;
 
+        if ($name === '--version' || $name === '-V') {
+            $this->printVersion();
+
+            return 0;
+        }
+
         if ($name === null || !isset($this->commands[$name])) {
             $this->printHelp($name);
 
@@ -53,5 +59,10 @@ class Application
         }
 
         fwrite(STDOUT, "\n");
+    }
+
+    private function printVersion(): void
+    {
+        fwrite(STDOUT, "Tondbad Swoole version 1.0.0\n");
     }
 }
