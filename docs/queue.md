@@ -212,6 +212,9 @@ $queue->on('cleaned', function (array $data) {
 # Start a worker
 php bin/tondbad queue:work --connection=database --queue=default --tries=3 --sleep=3
 
+# Start with coroutine concurrency (OpenSwoole only) and rate limiting
+php bin/tondbad queue:work --connection=database --queue=default --concurrency=4 --rate-limit=10:60
+
 # Show queue metrics
 php bin/tondbad queue:status --connection=database --queue=default
 
@@ -279,6 +282,17 @@ The `redis` driver pushes jobs to a Redis list and pops them in the worker:
 php bin/tondbad queue:work --connection=redis --queue=emails
 ```
 
+## Rate limiting
+
+Rate limiting is applied during `handle()` after the job has been popped. Enable it by setting `queue.rateLimiter.driver` to `database` or by passing `--rate-limit` to `queue:work`.
+
+```bash
+# max 10 jobs per 60 seconds for the queue
+php bin/tondbad queue:work --connection=database --queue=default --rate-limit=10:60
+```
+
+The limit key can be `'queue'` (default), `'class'` (job class name), or any custom string. When the limit is exceeded, the job is released with a delay equal to the remaining window and a `rate_limited` event is emitted.
+
 ## Failed jobs
 
 Jobs that fail after the configured number of tries are stored in a `failed_jobs` table (or the configured store) and can be inspected or retried later.
@@ -287,8 +301,9 @@ Jobs that fail after the configured number of tries are stored in a `failed_jobs
 
 1. `dispatch()` or `queue()->add()` serializes the job and pushes it to the configured connection. An `added` (or `delayed`) event is emitted.
 2. `queue:work` pops the next available job using an atomic reservation so only one worker can process it. An `active` event is emitted; if the job was recovered from a stale reservation, a `stalled` event is emitted first.
-3. The container builds the job and calls `handle()`.
-4. `handle()` may call `$this->progress($value)` to update the `progress` column and emit a `progress` event.
-5. On success, the job is deleted by default. If `removeOnComplete(false)` was used, the row is kept with `status = completed` and a `completed` event is emitted.
-6. On failure, the attempts counter is checked; if the maximum is reached the job is moved to failed jobs (or kept with `status = failed` when `removeOnFail(false)`) and a `failed` event is emitted, otherwise it is released with the configured backoff delay.
-7. For flow jobs, the parent waits in `waiting_children` until all children complete. Children pass results back to the parent via `setResult()`. If any child fails, the parent is marked `failed` too.
+3. If rate limiting is configured and the limit has been reached, the job is released with a delay and a `rate_limited` event is emitted.
+4. The container builds the job and calls `handle()`.
+5. `handle()` may call `$this->progress($value)` to update the `progress` column and emit a `progress` event.
+6. On success, the job is deleted by default. If `removeOnComplete(false)` was used, the row is kept with `status = completed` and a `completed` event is emitted.
+7. On failure, the attempts counter is checked; if the maximum is reached the job is moved to failed jobs (or kept with `status = failed` when `removeOnFail(false)`) and a `failed` event is emitted, otherwise it is released with the configured backoff delay.
+8. For flow jobs, the parent waits in `waiting_children` until all children complete. Children pass results back to the parent via `setResult()`. If any child fails, the parent is marked `failed` too.

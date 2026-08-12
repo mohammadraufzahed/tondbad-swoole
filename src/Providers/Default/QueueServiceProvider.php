@@ -14,6 +14,9 @@ use TondbadSwoole\Queue\Failed\FailedJobProviderInterface;
 use TondbadSwoole\Queue\FlowProducer;
 use TondbadSwoole\Queue\QueueInterface;
 use TondbadSwoole\Queue\QueueManager;
+use TondbadSwoole\Queue\RateLimiter\DatabaseRateLimiter;
+use TondbadSwoole\Queue\RateLimiter\NullRateLimiter;
+use TondbadSwoole\Queue\RateLimiter\RateLimiterInterface;
 use TondbadSwoole\Queue\Worker;
 
 class QueueServiceProvider extends ServiceProvider
@@ -55,6 +58,24 @@ class QueueServiceProvider extends ServiceProvider
                 $connection,
                 (string) $config->get('queue.failed.table', 'failed_jobs'),
             );
+        });
+
+        $container->singleton(RateLimiterInterface::class, function () use ($container): RateLimiterInterface {
+            $config = $container->make(Config::class);
+            $driver = $config->get('queue.rateLimiter.driver', null);
+
+            if ($driver === 'database') {
+                $connection = $container->make(DatabaseManager::class)->connection(
+                    $config->get('queue.rateLimiter.database', null)
+                );
+
+                return new DatabaseRateLimiter(
+                    $connection,
+                    (string) $config->get('queue.rateLimiter.table', 'rate_limits'),
+                );
+            }
+
+            return new NullRateLimiter();
         });
     }
 }

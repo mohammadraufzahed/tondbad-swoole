@@ -54,10 +54,19 @@ beforeEach(function () {
 
         $table->unique('queue');
     });
+
+    schema()->create('rate_limits', function (Blueprint $table) {
+        $table->string('key', 255);
+        $table->integer('count', false, true)->default(0);
+        $table->integer('reset_at', false, true);
+
+        $table->unique('key');
+    });
 });
 
 afterEach(function () {
     schema()->dropIfExists('queue_pauses');
+    schema()->dropIfExists('rate_limits');
     schema()->dropIfExists('failed_jobs');
     schema()->dropIfExists('jobs');
 
@@ -345,6 +354,37 @@ it('marks a flow parent as failed when any child fails', function () {
 
     $metrics = $queue->getMetrics('default');
     expect($metrics['failed'])->toBe(3);
+});
+
+it('rate limits job execution based on queue key', function () {
+    $queue = queue('database');
+    $worker = app()->container->make(\TondbadSwoole\Queue\Worker::class);
+
+    app()->container->bind(
+        \TondbadSwoole\Queue\RateLimiter\RateLimiterInterface::class,
+        fn () => new \TondbadSwoole\Queue\RateLimiter\DatabaseRateLimiter(db()->connection())
+    );
+
+    $queue->add(new TestQueueJob(), 'default');
+    $queue->add(new TestQueueJob(), 'default');
+
+    $options = new \TondbadSwoole\Queue\WorkerOptions(
+        maxTries: 1,
+        sleep: 0,
+        rateLimiter: ['max' => 1, 'window' => 60, 'key' => 'queue'],
+    );
+
+    $worker->runNextJob($queue, 'default', 1, 0, $options);
+
+    expect(TestQueueJob::$ran)->toBeTrue();
+    expect($queue->size())->toBe(1);
+
+    $row = db()->table('jobs')
+        ->where('status', 'waiting')
+        ->first();
+
+    expect($row)->not->toBeNull();
+    expect($row['available_at'])->toBeGreaterThanOrEqual(time());
 });
 
 class TestQueueJob extends \TondbadSwoole\Queue\Jobs\Job
