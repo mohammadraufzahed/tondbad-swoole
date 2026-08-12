@@ -51,6 +51,8 @@ class UnitOfWork implements UnitOfWorkInterface
         } else {
             $this->states[$entity] = self::STATE_NEW;
         }
+
+        $this->cascade($entity, 'persist');
     }
 
     public function remove(object $entity): void
@@ -69,6 +71,8 @@ class UnitOfWork implements UnitOfWorkInterface
             $this->identityMap->remove($entity);
             $this->states[$entity] = self::STATE_REMOVED;
         }
+
+        $this->cascade($entity, 'remove');
     }
 
     public function flush(): void
@@ -212,6 +216,48 @@ class UnitOfWork implements UnitOfWorkInterface
         }
 
         return $entities;
+    }
+
+    private function cascade(Model $entity, string $operation): void
+    {
+        foreach ($entity->getRelations() as $name => $related) {
+            if (!in_array($operation, $entity->getRelationCascade($name), true)) {
+                continue;
+            }
+
+            foreach ($this->normalizeRelated($related) as $item) {
+                if ($item instanceof Model) {
+                    match ($operation) {
+                        'persist' => $this->persist($item),
+                        'remove' => $this->remove($item),
+                    };
+                }
+            }
+        }
+    }
+
+    /**
+     * @return list<Model>
+     */
+    private function normalizeRelated(mixed $related): array
+    {
+        if ($related instanceof Model) {
+            return [$related];
+        }
+
+        if (is_array($related)) {
+            $models = [];
+
+            foreach ($related as $item) {
+                if ($item instanceof Model) {
+                    $models[] = $item;
+                }
+            }
+
+            return $models;
+        }
+
+        return [];
     }
 
     private function assertModel(object $entity): void

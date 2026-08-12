@@ -27,4 +27,6 @@ interface EntityManagerInterface
     public function getEventManager(): EntityEventManager;
 
     public function getConnection(): ConnectionInterface;
+
+    public function getRepository(string $class): EntityRepository;
 }

@@ -11,6 +11,8 @@ abstract class Relation
 {
     protected ModelBuilder $query;
 
+    protected array $cascade = [];
+
     public function __construct(
         protected Model $parent,
         protected string $related,
@@ -19,6 +21,18 @@ abstract class Relation
         protected string $relationName,
     ) {
         $this->query = $this->newRelatedInstance()->newQuery();
+    }
+
+    public function getCascade(): array
+    {
+        return $this->cascade;
+    }
+
+    public function setCascade(array $cascade): self
+    {
+        $this->cascade = $cascade;
+
+        return $this;
     }
 
     abstract public function getResults(): mixed;

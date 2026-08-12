@@ -8,9 +8,12 @@ use BackedEnum;
 use DateTimeImmutable;
 use DateTimeInterface;
 use ReflectionClass;
+use ReflectionMethod;
 use ReflectionProperty;
 use RuntimeException;
+use TondbadSwoole\Database\Attributes\Cascade;
 use TondbadSwoole\Database\Attributes\Embedded;
+use TondbadSwoole\Database\Attributes\Version;
 use TondbadSwoole\Database\Casts\CastsAttributes;
 use TondbadSwoole\Database\Relations\BelongsTo;
 use TondbadSwoole\Database\Relations\HasMany;
@@ -51,6 +54,10 @@ abstract class Model
     protected array $embeddedObjects = [];
 
     private static array $embeddableMap = [];
+
+    private static array $versionPropertyMap = [];
+
+    private static array $cascadeMap = [];
 
     public bool $exists = false;
 
@@ -515,6 +522,8 @@ abstract class Model
         if (method_exists($this, $key)) {
             $relation = $this->$key();
             if ($relation instanceof Relation) {
+                $relation->setCascade($this->getRelationCascade($key));
+
                 return $this->relations[$key] = $relation->getResults();
             }
         }
@@ -598,6 +607,78 @@ abstract class Model
         }
 
         return self::$embeddableMap[$class] = $map;
+    }
+
+    public function getVersionProperty(): ?string
+    {
+        $class = static::class;
+
+        if (array_key_exists($class, self::$versionPropertyMap)) {
+            return self::$versionPropertyMap[$class];
+        }
+
+        $reflection = new ReflectionClass($class);
+
+        foreach ($reflection->getProperties() as $property) {
+            if ($property->getAttributes(Version::class) !== []) {
+                return self::$versionPropertyMap[$class] = $property->getName();
+            }
+        }
+
+        return self::$versionPropertyMap[$class] = null;
+    }
+
+    public function getVersion(): mixed
+    {
+        $property = $this->getVersionProperty();
+
+        return $property !== null ? $this->getAttribute($property) : null;
+    }
+
+    public function setVersion(mixed $value): self
+    {
+        $property = $this->getVersionProperty();
+
+        if ($property !== null) {
+            $this->setAttribute($property, $value);
+        }
+
+        return $this;
+    }
+
+    private function incrementVersionValue(mixed $value): mixed
+    {
+        if (is_int($value)) {
+            return $value + 1;
+        }
+
+        if (is_string($value) && is_numeric($value)) {
+            return (int) $value + 1;
+        }
+
+        return $value;
+    }
+
+    public function getRelationCascade(string $key): array
+    {
+        $class = static::class;
+
+        if (isset(self::$cascadeMap[$class][$key])) {
+            return self::$cascadeMap[$class][$key];
+        }
+
+        if (!method_exists($this, $key)) {
+            return self::$cascadeMap[$class][$key] = [];
+        }
+
+        $reflection = new ReflectionMethod($this, $key);
+        $attributes = $reflection->getAttributes(Cascade::class);
+
+        if ($attributes === []) {
+            return self::$cascadeMap[$class][$key] = [];
+        }
+
+        return self::$cascadeMap[$class][$key] = $attributes[0]->newInstance()->cascade;
     }
 
     public function isEmbedded(string $key): bool
@@ -751,13 +832,32 @@ abstract class Model
             $this->setAttribute($this->getUpdatedAtColumn(), $this->freshTimestampString());
         }
 
+        $versionProperty = $this->getVersionProperty();
+        $versionValue = null;
+
+        if ($versionProperty !== null) {
+            $versionValue = $this->getAttribute($versionProperty);
+            $this->setAttribute($versionProperty, $this->incrementVersionValue($versionValue));
+        }
+
         $dirty = $this->getAttributesForUpdate();
 
         if ($dirty === []) {
             return true;
         }
 
-        $this->newQuery()->where($this->getKeyName(), '=', $this->getKey())->update($dirty);
+        $query = $this->newQuery()->where($this->getKeyName(), '=', $this->getKey());
+
+        if ($versionProperty !== null) {
+            $query->where($versionProperty, '=', $versionValue);
+        }
+
+        $rows = $query->update($dirty);
+
+        if ($versionProperty !== null && $rows === 0) {
+            throw OptimisticLockException::fromEntity($this);
+        }
+
         $this->syncOriginal();
 
         return true;
