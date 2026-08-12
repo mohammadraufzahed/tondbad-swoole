@@ -98,10 +98,4 @@ return function (Route $route): void {
 php bin/tondbad serve
 ```
 
-or directly:
-
-```bash
-php public/index.php
-```
-
 The OpenSwoole HTTP server starts and listens on the configured host/port.

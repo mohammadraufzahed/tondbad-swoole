@@ -92,12 +92,6 @@ Register gRPC middleware in `config/grpc.php`:
 ## Running the server
 
 ```bash
-php public/grpc.php
-```
-
-or
-
-```bash
 php bin/tondbad serve:grpc --host=0.0.0.0 --port=9502
 ```
 
