@@ -6,6 +6,7 @@ namespace TondbadSwoole\Core;
 
 use Dotenv\Dotenv;
 use Dotenv\Exception\InvalidPathException;
+use RuntimeException;
 
 class Env
 {
@@ -34,7 +35,7 @@ class Env
                     $this->loadedFiles[] = $filePath;
                     $this->envCache = array_merge($this->envCache, $_ENV, $_SERVER);
                 } catch (InvalidPathException $e) {
-                    throw new \Exception("Environment file not found: {$filePath}");
+                    throw new RuntimeException("Environment file not found: {$filePath}");
                 }
             }
         }
