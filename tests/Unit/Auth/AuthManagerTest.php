@@ -111,3 +111,25 @@ it('validates credentials via session guard', function () {
     expect($this->auth->validate(['email' => 'test@example.com', 'password' => 'secret']))->toBeTrue();
     expect($this->auth->validate(['email' => 'test@example.com', 'password' => 'wrong']))->toBeFalse();
 });
+
+it('supports custom guards via extend', function () {
+    $this->config->set('auth.guards.custom', [
+        'driver' => 'custom',
+        'provider' => 'users',
+    ]);
+
+    $this->auth->extend('custom', function (\TondbadSwoole\Core\Container $container, \TondbadSwoole\Auth\Contracts\UserProvider $provider, array $config) {
+        return new class($provider) implements \TondbadSwoole\Auth\Contracts\Guard {
+            public function __construct(private readonly \TondbadSwoole\Auth\Contracts\UserProvider $provider) {}
+
+            public function check(): bool { return true; }
+            public function guest(): bool { return false; }
+            public function user(): ?\TondbadSwoole\Auth\Contracts\Authenticatable { return null; }
+            public function id(): string|int|null { return null; }
+            public function setUser(\TondbadSwoole\Auth\Contracts\Authenticatable $user): self { return $this; }
+            public function validate(array $credentials = []): bool { return true; }
+        };
+    });
+
+    expect($this->auth->guard('custom')->check())->toBeTrue();
+});

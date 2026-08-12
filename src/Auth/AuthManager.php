@@ -17,6 +17,7 @@ use TondbadSwoole\Core\Container;
 use TondbadSwoole\Database\DatabaseManager;
 use TondbadSwoole\Http\Request;
 use TondbadSwoole\Support\Context;
+use Closure;
 use InvalidArgumentException;
 
 class AuthManager
@@ -26,10 +27,27 @@ class AuthManager
      */
     private array $guards = [];
 
+    /**
+     * @var array<string, Closure(Container, UserProvider, array<string, mixed>): Guard>
+     */
+    private array $customGuardFactories = [];
+
     public function __construct(
         private readonly Container $container,
         private readonly Config $config,
     ) {
+    }
+
+    /**
+     * Register a custom guard factory.
+     *
+     * @param Closure(Container, UserProvider, array<string, mixed>): Guard $factory
+     */
+    public function extend(string $name, Closure $factory): self
+    {
+        $this->customGuardFactories[$name] = $factory;
+
+        return $this;
     }
 
     public function guard(?string $name = null): Guard
@@ -98,6 +116,10 @@ class AuthManager
 
         $driver = $config['driver'] ?? 'token';
         $provider = $this->resolveProvider($config['provider'] ?? null);
+
+        if (isset($this->customGuardFactories[$driver])) {
+            return ($this->customGuardFactories[$driver])($this->container, $provider, $config);
+        }
 
         return match ($driver) {
             'session' => new SessionGuard(

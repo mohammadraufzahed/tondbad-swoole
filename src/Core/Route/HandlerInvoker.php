@@ -15,6 +15,8 @@ use ReflectionParameter;
 use ReflectionUnionType;
 use Throwable;
 use TondbadSwoole\Core\Container;
+use TondbadSwoole\Auth\Access\AuthorizationException;
+use TondbadSwoole\Http\Attributes\Authenticate as AuthenticateAttribute;
 use TondbadSwoole\Http\FormRequest;
 use TondbadSwoole\Http\Request;
 use TondbadSwoole\Http\Response;
@@ -34,6 +36,9 @@ class HandlerInvoker
     {
         if (is_array($handler) && count($handler) === 2) {
             [$class, $method] = $handler;
+
+            $this->ensureAuthorized($class, $method);
+
             $instance = $this->container->make($class);
             $reflection = new ReflectionMethod($class, $method);
             $dependencies = $this->resolveDependencies($reflection, $request, $response, $vars);
@@ -45,6 +50,32 @@ class HandlerInvoker
         $reflection = new ReflectionFunction($handler);
         $dependencies = $this->resolveDependencies($reflection, $request, $response, $vars);
         $reflection->invokeArgs($dependencies);
+    }
+
+    /**
+     * @param class-string|null $class
+     */
+    private function ensureAuthorized(?string $class, ?string $method): void
+    {
+        if ($class === null || $method === null) {
+            return;
+        }
+
+        $attributes = array_merge(
+            (new \ReflectionClass($class))->getAttributes(AuthenticateAttribute::class),
+            (new ReflectionMethod($class, $method))->getAttributes(AuthenticateAttribute::class),
+        );
+
+        if (count($attributes) === 0) {
+            return;
+        }
+
+        $attribute = $attributes[0]->newInstance();
+        $auth = $attribute->guard === null ? auth() : auth($attribute->guard);
+
+        if (!$auth->check()) {
+            throw new AuthorizationException();
+        }
     }
 
     /**
