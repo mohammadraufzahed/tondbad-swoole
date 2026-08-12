@@ -12,7 +12,7 @@ use TondbadSwoole\Database\Query\Builder;
 use TondbadSwoole\Database\Query\Grammar;
 use TondbadSwoole\Database\Schema\Builder as SchemaBuilder;
 
-class PdoConnection implements ConnectionInterface
+class DatabaseWrapper implements ConnectionInterface
 {
     public function __construct(
         private readonly PoolInterface $pool,
@@ -150,6 +150,23 @@ class PdoConnection implements ConnectionInterface
 
         if ($queryPdo instanceof PDO && $queryPdo === $pdo) {
             $this->pool->put($pdo);
+            $this->context->delete($this->queryKey());
+        }
+    }
+
+    public function close(): void
+    {
+        $transactionPdo = $this->context->get($this->transactionKey());
+
+        if ($transactionPdo instanceof PDO) {
+            $this->pool->put($transactionPdo);
+            $this->context->delete($this->transactionKey());
+        }
+
+        $queryPdo = $this->context->get($this->queryKey());
+
+        if ($queryPdo instanceof PDO) {
+            $this->pool->put($queryPdo);
             $this->context->delete($this->queryKey());
         }
     }

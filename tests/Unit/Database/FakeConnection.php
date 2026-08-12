@@ -97,4 +97,8 @@ class FakeConnection implements ConnectionInterface
     {
         return new SchemaBuilder($this);
     }
+
+    public function close(): void
+    {
+    }
 }

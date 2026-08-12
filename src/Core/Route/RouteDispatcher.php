@@ -12,6 +12,7 @@ use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Contracts\MiddlewareInterface;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Pipeline\Pipeline;
+use TondbadSwoole\Database\DatabaseManager;
 use TondbadSwoole\Http\Request;
 use TondbadSwoole\Http\Response;
 
@@ -26,6 +27,7 @@ class RouteDispatcher
         private readonly ErrorHandler $errorHandler,
         private readonly Container $container,
         private readonly ContextInterface $context,
+        private readonly DatabaseManager $databaseManager,
         private readonly array $middlewares = []
     ) {
     }
@@ -61,6 +63,7 @@ class RouteDispatcher
         } catch (Throwable $e) {
             $this->errorHandler->handle($e, $swooleResponse);
         } finally {
+            $this->databaseManager->closeOldConnections();
             $this->context->clear();
         }
     }

@@ -34,6 +34,10 @@ return [
                 'min' => (int) $env->get('db.mysql.pool.min', 1),
                 'max' => (int) $env->get('db.mysql.pool.max', 10),
                 'wait_timeout' => (float) $env->get('db.mysql.pool.wait_timeout', 3.0),
+                'max_age' => (float) $env->get('db.mysql.pool.max_age', 600.0),
+                'max_usage' => (int) $env->get('db.mysql.pool.max_usage', 0),
+                'health_check' => (bool) $env->get('db.mysql.pool.health_check', true),
+                'check_interval' => (float) $env->get('db.mysql.pool.check_interval', 30.0),
             ],
         ],
 
@@ -49,6 +53,10 @@ return [
                 'min' => 1,
                 'max' => 1,
                 'wait_timeout' => 3.0,
+                'max_age' => (float) $env->get('db.sqlite.pool.max_age', 0.0),
+                'max_usage' => (int) $env->get('db.sqlite.pool.max_usage', 0),
+                'health_check' => (bool) $env->get('db.sqlite.pool.health_check', false),
+                'check_interval' => (float) $env->get('db.sqlite.pool.check_interval', 30.0),
             ],
         ],
 
@@ -69,6 +77,10 @@ return [
                 'min' => (int) $env->get('db.pgsql.pool.min', 1),
                 'max' => (int) $env->get('db.pgsql.pool.max', 10),
                 'wait_timeout' => (float) $env->get('db.pgsql.pool.wait_timeout', 3.0),
+                'max_age' => (float) $env->get('db.pgsql.pool.max_age', 600.0),
+                'max_usage' => (int) $env->get('db.pgsql.pool.max_usage', 0),
+                'health_check' => (bool) $env->get('db.pgsql.pool.health_check', true),
+                'check_interval' => (float) $env->get('db.pgsql.pool.check_interval', 30.0),
             ],
         ],
     ],
@@ -140,6 +152,35 @@ schema()->dropIfExists('users');
 
 Supported column types include `id`, `bigIncrements`, `string`, `text`, `integer`, `bigInteger`, `boolean`, `json`, `datetime`, `timestamp`, `date`, `time`, `enum`, `decimal`, `float`, `double`, `binary`, `uuid`, and `char`.
 
+## Database engines
+
+Each connection is backed by a driver-specific `DatabaseEngine` (`MySqlEngine`, `PostgresEngine`, `SqliteEngine`). The engine provides:
+
+- `DatabaseOperations` — SQL dialect details such as identifier quoting, limit/offset syntax, default formatting, and DDL generation.
+- `DatabaseFeatures` — capability flags for transactions, savepoints, `RETURNING`, JSON fields, deferrable constraints, unsigned modifiers, autoincrement, etc.
+- `Grammar` — assembles `SELECT`/`INSERT`/`UPDATE`/`DELETE` and `Schema` statements while delegating driver-specific fragments to `DatabaseOperations`.
+
+Register a custom engine from a service provider or bootstrap file:
+
+```php
+use TondbadSwoole\Database\DatabaseManager;
+
+$manager = app(DatabaseManager::class);
+$manager->extend('mariadb', \App\Database\Engines\MariaDbEngine::class);
+```
+
 ## Connection pooling
 
-Under OpenSwoole, `DatabaseManager` uses a `SwoolePdoPool`. Outside Swoole it falls back to `SimplePdoPool` for local development and testing. Each coroutine (or request) gets its own connection from the pool and it is returned when the context is cleared.
+Under OpenSwoole, `DatabaseManager` uses a `SwoolePdoPool`. Outside Swoole it falls back to `SimplePdoPool` for local development and testing. Each coroutine (or request) gets its own connection from the pool and is returned when the request lifecycle ends.
+
+Pool options:
+
+- `min` — minimum number of idle connections.
+- `max` — maximum number of connections.
+- `wait_timeout` — seconds to wait for an available connection.
+- `max_age` — seconds a connection may live before it is discarded (`0` = unlimited).
+- `max_usage` — number of times a connection may be borrowed before it is retired (`0` = unlimited).
+- `health_check` — run a cheap `SELECT 1` before reusing an idle connection.
+- `check_interval` — minimum seconds between health checks on the same connection.
+
+Request cleanup is handled by `RouteDispatcher::dispatch()` which calls `DatabaseManager::closeOldConnections()` in a `finally` block before clearing the request context.

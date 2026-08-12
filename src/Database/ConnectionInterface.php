@@ -36,4 +36,6 @@ interface ConnectionInterface
     public function getName(): string;
 
     public function getSchemaBuilder(): SchemaBuilder;
+
+    public function close(): void;
 }
