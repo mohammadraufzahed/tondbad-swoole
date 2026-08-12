@@ -6,6 +6,7 @@ namespace TondbadSwoole\Auth;
 
 use TondbadSwoole\Auth\Contracts\Authenticatable;
 use TondbadSwoole\Auth\Contracts\Guard;
+use TondbadSwoole\Auth\Contracts\GuardFactory;
 use TondbadSwoole\Auth\Contracts\UserProvider;
 use TondbadSwoole\Auth\Guards\SessionGuard;
 use TondbadSwoole\Auth\Guards\TokenGuard;
@@ -28,7 +29,7 @@ class AuthManager
     private array $guards = [];
 
     /**
-     * @var array<string, Closure(Container, UserProvider, array<string, mixed>): Guard>
+     * @var array<string, GuardFactory|Closure>
      */
     private array $customGuardFactories = [];
 
@@ -39,12 +40,19 @@ class AuthManager
     }
 
     /**
-     * Register a custom guard factory.
+     * Register a custom guard.
      *
-     * @param Closure(Container, UserProvider, array<string, mixed>): Guard $factory
+     * Accepts a closure `fn(Container, UserProvider, array, string): Guard` or a
+     * class-string implementing `GuardFactory`.
+     *
+     * @param Closure(Container, UserProvider, array<string, mixed>, string): Guard|class-string<GuardFactory> $factory
      */
-    public function extend(string $name, Closure $factory): self
+    public function extend(string $name, Closure|string $factory): self
     {
+        if (is_string($factory) && (!class_exists($factory) || !is_subclass_of($factory, GuardFactory::class))) {
+            throw new InvalidArgumentException("Custom guard [{$name}] must be a closure or a class implementing [" . GuardFactory::class . '].');
+        }
+
         $this->customGuardFactories[$name] = $factory;
 
         return $this;
@@ -117,8 +125,24 @@ class AuthManager
         $driver = $config['driver'] ?? 'token';
         $provider = $this->resolveProvider($config['provider'] ?? null);
 
+        if (!isset($this->customGuardFactories[$driver]) && is_string($driver) && class_exists($driver) && is_subclass_of($driver, GuardFactory::class)) {
+            $this->customGuardFactories[$driver] = $driver;
+        }
+
         if (isset($this->customGuardFactories[$driver])) {
-            return ($this->customGuardFactories[$driver])($this->container, $provider, $config);
+            $factory = $this->customGuardFactories[$driver];
+
+            if ($factory instanceof GuardFactory) {
+                return $factory->create($this->container, $provider, $config, $name);
+            }
+
+            if (is_string($factory)) {
+                $factoryInstance = $this->container->make($factory);
+
+                return $factoryInstance->create($this->container, $provider, $config, $name);
+            }
+
+            return $factory($this->container, $provider, $config, $name);
         }
 
         return match ($driver) {

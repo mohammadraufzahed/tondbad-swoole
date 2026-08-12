@@ -112,7 +112,7 @@ it('validates credentials via session guard', function () {
     expect($this->auth->validate(['email' => 'test@example.com', 'password' => 'wrong']))->toBeFalse();
 });
 
-it('supports custom guards via extend', function () {
+it('supports custom guards via extend with a closure', function () {
     $this->config->set('auth.guards.custom', [
         'driver' => 'custom',
         'provider' => 'users',
@@ -132,4 +132,31 @@ it('supports custom guards via extend', function () {
     });
 
     expect($this->auth->guard('custom')->check())->toBeTrue();
+});
+
+it('supports custom guards via a GuardFactory class', function () {
+    $factory = new class() implements \TondbadSwoole\Auth\Contracts\GuardFactory {
+        public function create(\TondbadSwoole\Core\Container $container, \TondbadSwoole\Auth\Contracts\UserProvider $provider, array $config, string $name): \TondbadSwoole\Auth\Contracts\Guard
+        {
+            return new class($provider) implements \TondbadSwoole\Auth\Contracts\Guard {
+                public function __construct(private readonly \TondbadSwoole\Auth\Contracts\UserProvider $provider) {}
+
+                public function check(): bool { return true; }
+                public function guest(): bool { return false; }
+                public function user(): ?\TondbadSwoole\Auth\Contracts\Authenticatable { return null; }
+                public function id(): string|int|null { return null; }
+                public function setUser(\TondbadSwoole\Auth\Contracts\Authenticatable $user): self { return $this; }
+                public function validate(array $credentials = []): bool { return true; }
+            };
+        }
+    };
+
+    $this->config->set('auth.guards.factory', [
+        'driver' => get_class($factory),
+        'provider' => 'users',
+    ]);
+
+    $this->container->bind(get_class($factory), $factory);
+
+    expect($this->auth->guard('factory')->check())->toBeTrue();
 });
