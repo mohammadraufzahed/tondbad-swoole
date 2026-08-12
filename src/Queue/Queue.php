@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace TondbadSwoole\Queue;
 
 use Closure;
+use Throwable;
 use TondbadSwoole\Queue\Jobs\Job;
 
 abstract class Queue implements QueueInterface
@@ -76,9 +77,13 @@ abstract class Queue implements QueueInterface
 
     abstract public function markCompleted(int $id): bool;
 
-    abstract public function markFailed(int $id): bool;
+    abstract public function markFailed(int $id, ?Throwable $exception = null): bool;
 
     abstract public function progress(int $id, int $progress): bool;
+
+    abstract public function setResult(int $id, mixed $value): bool;
+
+    abstract public function getChildren(int $parentId): array;
 
     abstract public function getJob(int $id): ?Job;
 

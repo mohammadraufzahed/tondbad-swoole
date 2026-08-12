@@ -33,6 +33,7 @@ beforeEach(function () {
         $table->integer('parent_id', false, true)->nullable();
         $table->integer('children_count', false, true)->default(0);
         $table->integer('completed_children_count', false, true)->default(0);
+        $table->text('result')->nullable();
         $table->string('status', 20)->default('waiting');
     });
 
@@ -59,6 +60,11 @@ afterEach(function () {
     schema()->dropIfExists('queue_pauses');
     schema()->dropIfExists('failed_jobs');
     schema()->dropIfExists('jobs');
+
+    TestQueueJob::$ran = false;
+    TestFailingJob::$handleCount = 0;
+    TestParentFlowJob::$ran = false;
+    TestParentFlowJob::$childValues = [];
 });
 
 it('processes a job synchronously with the sync queue', function () {
@@ -292,6 +298,55 @@ it('retries a failed job via the retry command', function () {
     expect($queue->size())->toBe(1);
 });
 
+it('runs a flow job after all children complete and passes child results to the parent', function () {
+    $queue = queue('database');
+    $producer = new \TondbadSwoole\Queue\FlowProducer(app()->container->make(\TondbadSwoole\Queue\QueueManager::class));
+
+    $flow = \TondbadSwoole\Queue\Flow\Flow::create(
+        new TestParentFlowJob(),
+        [
+            \TondbadSwoole\Queue\Flow\FlowChild::create(new TestChildFlowJob('child1')),
+            \TondbadSwoole\Queue\Flow\FlowChild::create(new TestChildFlowJob('child2')),
+        ]
+    );
+
+    $producer->add($flow, 'database', 'default');
+
+    $worker = app()->container->make(\TondbadSwoole\Queue\Worker::class);
+    while ($worker->runNextJob($queue, 'default', 1, 0)) {
+        // process until empty
+    }
+
+    expect(TestParentFlowJob::$ran)->toBeTrue();
+    expect(TestParentFlowJob::$childValues)->toHaveCount(2);
+    expect($queue->size())->toBe(0);
+});
+
+it('marks a flow parent as failed when any child fails', function () {
+    $queue = queue('database');
+    $producer = new \TondbadSwoole\Queue\FlowProducer(app()->container->make(\TondbadSwoole\Queue\QueueManager::class));
+
+    $flow = \TondbadSwoole\Queue\Flow\Flow::create(
+        new TestParentFlowJob(),
+        [
+            \TondbadSwoole\Queue\Flow\FlowChild::create(new TestChildFlowJob('child1')),
+            \TondbadSwoole\Queue\Flow\FlowChild::create(new TestFailingFlowJob()),
+        ]
+    );
+
+    $producer->add($flow, 'database', 'default');
+
+    $worker = app()->container->make(\TondbadSwoole\Queue\Worker::class);
+    while ($worker->runNextJob($queue, 'default', 1, 0)) {
+        // process until empty
+    }
+
+    expect(TestParentFlowJob::$ran)->toBeFalse();
+
+    $metrics = $queue->getMetrics('default');
+    expect($metrics['failed'])->toBe(3);
+});
+
 class TestQueueJob extends \TondbadSwoole\Queue\Jobs\Job
 {
     public static bool $ran = false;
@@ -324,5 +379,39 @@ class TestProgressJob extends \TondbadSwoole\Queue\Jobs\Job
     public function handle(): void
     {
         $this->progress(50);
+    }
+}
+
+class TestChildFlowJob extends \TondbadSwoole\Queue\Jobs\Job
+{
+    public function __construct(public readonly string $name) {}
+
+    public function handle(): void
+    {
+        $this->setResult(['name' => $this->name]);
+    }
+}
+
+class TestFailingFlowJob extends \TondbadSwoole\Queue\Jobs\Job
+{
+    public function handle(): void
+    {
+        throw new Exception('Child failed');
+    }
+}
+
+class TestParentFlowJob extends \TondbadSwoole\Queue\Jobs\Job
+{
+    public static bool $ran = false;
+
+    /**
+     * @var array<string, array<string, mixed>>
+     */
+    public static array $childValues = [];
+
+    public function handle(): void
+    {
+        self::$ran = true;
+        self::$childValues = $this->getChildrenValues();
     }
 }

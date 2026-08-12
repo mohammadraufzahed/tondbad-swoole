@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace TondbadSwoole\Queue;
 
 use Closure;
+use Throwable;
 use TondbadSwoole\Queue\Jobs\Job;
 
 interface QueueInterface
@@ -21,7 +22,13 @@ interface QueueInterface
 
     public function markCompleted(int $id): bool;
 
-    public function markFailed(int $id): bool;
+    public function markFailed(int $id, ?Throwable $exception = null): bool;
+
+    public function progress(int $id, int $progress): bool;
+
+    public function setResult(int $id, mixed $value): bool;
+
+    public function getChildren(int $parentId): array;
 
     public function add(Job $job, ?string $queue = null, array $options = []): mixed;
 
@@ -42,6 +49,4 @@ interface QueueInterface
     public function on(string $event, Closure $callback): void;
 
     public function emit(string $event, array $data = []): void;
-
-    public function progress(int $id, int $progress): bool;
 }
