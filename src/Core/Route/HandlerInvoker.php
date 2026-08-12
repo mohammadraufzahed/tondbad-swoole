@@ -15,6 +15,7 @@ use ReflectionParameter;
 use ReflectionUnionType;
 use Throwable;
 use TondbadSwoole\Core\Container;
+use TondbadSwoole\Http\FormRequest;
 use TondbadSwoole\Http\Request;
 use TondbadSwoole\Http\Response;
 
@@ -129,6 +130,10 @@ class HandlerInvoker
 
         if ($typeName === SwooleResponse::class) {
             return $response->getSwooleResponse();
+        }
+
+        if (is_subclass_of($typeName, FormRequest::class)) {
+            return new $typeName($request->getSwooleRequest());
         }
 
         if (array_key_exists($name, $vars)) {

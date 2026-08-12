@@ -8,6 +8,7 @@ use Monolog\Logger;
 use OpenSwoole\Http\Response;
 use Throwable;
 use TondbadSwoole\Core\Config;
+use TondbadSwoole\Validation\ValidationException;
 
 class ErrorHandler
 {
@@ -24,6 +25,14 @@ class ErrorHandler
             'file' => $e->getFile(),
             'line' => $e->getLine(),
         ]);
+
+        if ($e instanceof ValidationException) {
+            $response->status(422);
+            $response->header('Content-Type', 'application/json');
+            $response->end(json_encode(['message' => $e->getMessage(), 'errors' => $e->getErrors()], JSON_THROW_ON_ERROR));
+
+            return;
+        }
 
         $isDebug = $this->config->get('app.debug', false);
 
