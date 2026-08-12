@@ -6,6 +6,7 @@ namespace TondbadSwoole\Providers\Default;
 
 use TondbadSwoole\Auth\AuthManager;
 use TondbadSwoole\Auth\Contracts\Guard;
+use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Providers\Contracts\ServiceProvider;
 
@@ -17,6 +18,7 @@ class AuthServiceProvider extends ServiceProvider
             return new AuthManager(
                 $container,
                 $container->make(\TondbadSwoole\Core\Config::class),
+                $container->make(ContextInterface::class),
             );
         });
 

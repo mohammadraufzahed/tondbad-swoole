@@ -22,8 +22,16 @@ class GrpcServiceProvider extends ServiceProvider
         $container->singleton(GrpcServer::class, function () use ($container, $config) {
             $server = new GrpcServer(
                 (string) $config->get('app.grpc.host', '0.0.0.0'),
-                (int) $config->get('app.grpc.port', 9502)
+                (int) $config->get('app.grpc.port', 9502),
+                (int) $config->get('app.grpc.mode', defined('SWOOLE_PROCESS') ? SWOOLE_PROCESS : 0),
+                (int) $config->get('app.grpc.sock_type', defined('SWOOLE_SOCK_TCP') ? SWOOLE_SOCK_TCP : 0),
             );
+
+            $settings = $config->get('app.grpc.settings', []);
+
+            if ($settings !== []) {
+                $server->set($settings);
+            }
 
             foreach ($config->get('grpc.middlewares', []) as $middleware) {
                 $server->addMiddleware($container->make($middleware));

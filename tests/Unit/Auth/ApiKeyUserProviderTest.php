@@ -8,6 +8,7 @@ use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Database\DatabaseManager;
 use TondbadSwoole\Http\Request;
+use TondbadSwoole\Support\Context;
 
 beforeEach(function () {
     $this->config->set('database.default', 'sqlite');
@@ -44,7 +45,7 @@ beforeEach(function () {
     $this->container->bind(Config::class, $this->config);
     $this->container->bind(DatabaseManager::class, $this->manager);
 
-    $this->auth = new AuthManager($this->container, $this->config);
+    $this->auth = new AuthManager($this->container, $this->config, new Context());
 });
 
 it('authenticates a user with a valid api key from the api_keys table', function () {

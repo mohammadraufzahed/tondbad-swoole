@@ -26,8 +26,16 @@ class HttpServiceProvider extends ServiceProvider
         $container->singleton(HttpServer::class, function () use ($container, $config) {
             $server = new HttpServer(
                 (string) $config->get('app.http.host', '0.0.0.0'),
-                (int) $config->get('app.http.port', 9501)
+                (int) $config->get('app.http.port', 9501),
+                (int) $config->get('app.http.mode', defined('SWOOLE_PROCESS') ? SWOOLE_PROCESS : 0),
+                (int) $config->get('app.http.sock_type', defined('SWOOLE_SOCK_TCP') ? SWOOLE_SOCK_TCP : 0),
             );
+
+            $settings = $config->get('app.http.settings', []);
+
+            if ($settings !== []) {
+                $server->set($settings);
+            }
 
             $this->setupRouter($server, $container);
             $this->setupLogs($server, $container->make(Logger::class));

@@ -8,12 +8,12 @@ use FastRoute\Dispatcher\GroupCountBased as Dispatcher;
 use OpenSwoole\Http\Request as SwooleRequest;
 use OpenSwoole\Http\Response as SwooleResponse;
 use Throwable;
+use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Contracts\MiddlewareInterface;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Pipeline\Pipeline;
 use TondbadSwoole\Http\Request;
 use TondbadSwoole\Http\Response;
-use TondbadSwoole\Support\Context;
 
 class RouteDispatcher
 {
@@ -25,6 +25,7 @@ class RouteDispatcher
         private readonly HandlerInvoker $invoker,
         private readonly ErrorHandler $errorHandler,
         private readonly Container $container,
+        private readonly ContextInterface $context,
         private readonly array $middlewares = []
     ) {
     }
@@ -32,12 +33,12 @@ class RouteDispatcher
     public function dispatch(SwooleRequest $swooleRequest, SwooleResponse $swooleResponse): void
     {
         try {
-            Context::clear();
+            $this->context->clear();
 
             $request = new Request($swooleRequest);
             $response = new Response($swooleResponse);
 
-            Context::set('request', $request);
+            $this->context->set('request', $request);
 
             $httpMethod = $request->method();
             $uri = $request->path();
@@ -71,10 +72,8 @@ class RouteDispatcher
         $routeMiddlewares = $this->registrar->getMiddlewares($handlerId);
 
         $context = new HttpContext($request, $response);
-        $pipeline = new Pipeline($this->container);
 
-        $pipeline
-            ->send($context)
+        Pipeline::send($context, $this->container)
             ->through($this->preparePipes(array_merge($this->middlewares, $routeMiddlewares)))
             ->then(function (HttpContext $context) use ($handler, $vars): void {
                 $this->invokeHandler($handler, $context, $vars);

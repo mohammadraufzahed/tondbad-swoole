@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Queue\Jobs;
 
-use TondbadSwoole\Queue\QueueInterface;
-use TondbadSwoole\Queue\QueueManager;
+use TondbadSwoole\Queue\Concerns\Dispatchable;
 
 abstract class Job
 {
+    use Dispatchable;
+
     protected ?int $jobId = null;
 
     protected int $attempts = 0;
@@ -16,24 +17,6 @@ abstract class Job
     public ?int $tries = null;
 
     public ?int $timeout = null;
-
-    public function dispatch(?string $queue = null, ?string $connection = null): self
-    {
-        $queueManager = app()->container->make(QueueInterface::class);
-
-        if ($connection !== null) {
-            $queueManager = app()->container->make(QueueManager::class)->connection($connection);
-        }
-
-        $queueManager->push($this, $queue);
-
-        return $this;
-    }
-
-    public function onQueue(string $queue): self
-    {
-        return $this->dispatch($queue);
-    }
 
     abstract public function handle(): void;
 

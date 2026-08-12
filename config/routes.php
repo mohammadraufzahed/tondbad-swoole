@@ -2,4 +2,7 @@
 
 declare(strict_types=1);
 
-return [];
+return [
+    'http' => 'routes/http.php',
+    'grpc' => 'routes/grpc.php',
+];

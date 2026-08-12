@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Bootstrap\App;
 use TondbadSwoole\Bootstrap\AppFactory;
 
 class RouteCacheCommand extends Command
@@ -20,7 +21,12 @@ class RouteCacheCommand extends Command
 
     public function run(array $args): int
     {
-        $app = AppFactory::create($this->basePath);
+        $app = app();
+
+        if (!$app instanceof App) {
+            $app = AppFactory::create($this->basePath);
+        }
+
         $app->routes()->warmRouteCache();
 
         fwrite(STDOUT, "Route cache compiled.\n");

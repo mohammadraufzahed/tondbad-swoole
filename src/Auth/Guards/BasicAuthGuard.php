@@ -7,14 +7,15 @@ namespace TondbadSwoole\Auth\Guards;
 use TondbadSwoole\Auth\Contracts\Authenticatable;
 use TondbadSwoole\Auth\Contracts\Guard;
 use TondbadSwoole\Auth\Contracts\UserProvider;
+use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Http\Request;
-use TondbadSwoole\Support\Context;
 
 class BasicAuthGuard implements Guard
 {
     public function __construct(
         private readonly string $name,
         private readonly UserProvider $provider,
+        private readonly ContextInterface $context,
         private readonly string $usernameKey = 'email',
     ) {
     }
@@ -39,14 +40,14 @@ class BasicAuthGuard implements Guard
 
         $cacheKey = $this->cacheKey($request);
 
-        if (Context::has($cacheKey)) {
-            return Context::get($cacheKey);
+        if ($this->context->has($cacheKey)) {
+            return $this->context->get($cacheKey);
         }
 
         $credentials = $this->getBasicCredentials($request);
 
         if ($credentials === null) {
-            Context::set($cacheKey, null);
+            $this->context->set($cacheKey, null);
 
             return null;
         }
@@ -54,12 +55,12 @@ class BasicAuthGuard implements Guard
         $user = $this->provider->retrieveByCredentials([$this->usernameKey => $credentials['username']]);
 
         if ($user === null || !$this->provider->validateCredentials($user, ['password' => $credentials['password']])) {
-            Context::set($cacheKey, null);
+            $this->context->set($cacheKey, null);
 
             return null;
         }
 
-        Context::set($cacheKey, $user);
+        $this->context->set($cacheKey, $user);
 
         return $user;
     }
@@ -74,7 +75,7 @@ class BasicAuthGuard implements Guard
         $request = $this->request();
 
         if ($request !== null) {
-            Context::set($this->cacheKey($request), $user);
+            $this->context->set($this->cacheKey($request), $user);
         }
 
         return $this;
@@ -115,7 +116,7 @@ class BasicAuthGuard implements Guard
 
     private function request(): ?Request
     {
-        return Context::get('request');
+        return $this->context->get('request');
     }
 
     private function cacheKey(Request $request): string

@@ -9,6 +9,7 @@ use InvalidArgumentException;
 use Monolog\Logger;
 use OpenSwoole\Http\Request;
 use OpenSwoole\Http\Response;
+use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Route\Contracts\RouteInterface;
@@ -33,14 +34,15 @@ class Route implements RouteInterface
     public function __construct(
         private readonly Container $container,
         private readonly Config $config,
-        private readonly Logger $logger
+        private readonly Logger $logger,
+        private readonly ContextInterface $context,
     ) {
         $routeCacheFile = $this->config->get('app.route_cache_file');
         $this->registrar = new RouteRegistrar($routeCacheFile);
         $invoker = new HandlerInvoker($this->container);
         $errorHandler = new ErrorHandler($this->config, $this->logger);
         $middlewares = $this->config->get('app.middlewares', []);
-        $this->dispatcher = new RouteDispatcher($this->registrar, $invoker, $errorHandler, $this->container, $middlewares);
+        $this->dispatcher = new RouteDispatcher($this->registrar, $invoker, $errorHandler, $this->container, $this->context, $middlewares);
     }
 
     public function addRoute(
