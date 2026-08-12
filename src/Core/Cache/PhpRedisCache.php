@@ -6,6 +6,7 @@ namespace TondbadSwoole\Core\Cache;
 
 use DateInterval;
 use Redis;
+use RuntimeException;
 use Symfony\Component\Serializer\Serializer;
 use Symfony\Component\Serializer\Encoder\JsonEncoder;
 use Symfony\Component\Serializer\Normalizer\ObjectNormalizer;
@@ -35,15 +36,15 @@ class PhpRedisCache implements CacheInterface
 
         $connected = $this->redis->connect($host, $port, $timeout);
         if (!$connected) {
-            throw new \Exception("Could not connect to Redis at {$host}:{$port}");
+            throw new RuntimeException("Could not connect to Redis at {$host}:{$port}");
         }
 
         if ($password !== null && !$this->redis->auth($password)) {
-            throw new \Exception('Redis authentication failed.');
+            throw new RuntimeException('Redis authentication failed.');
         }
 
         if (!$this->redis->select($database)) {
-            throw new \Exception("Could not select Redis database {$database}.");
+            throw new RuntimeException("Could not select Redis database {$database}.");
         }
 
         $this->prefix = $redisConfig['options']['prefix'] ?? '';
