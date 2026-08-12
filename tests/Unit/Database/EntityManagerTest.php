@@ -151,6 +151,42 @@ it('reuses the same entity manager within a request context', function () {
     expect($em1)->toBe($em2);
 });
 
+it('shares the identity map between Model static API and EntityManager', function () {
+    User::create([
+        'name' => 'Merged',
+        'email' => 'merged@example.com',
+    ]);
+
+    $fromModel = User::find(1);
+    $fromEm = em()->find(User::class, 1);
+
+    expect($fromEm)->toBe($fromModel);
+});
+
+it('routes Model::save through the entity manager', function () {
+    $user = User::create([
+        'name' => 'Nora',
+        'email' => 'nora@example.com',
+    ]);
+
+    $user->name = 'Noreen';
+    $user->save();
+
+    expect(User::find(1)->name)->toBe('Noreen');
+});
+
+it('routes Model::delete through the entity manager', function () {
+    User::create([
+        'name' => 'Otto',
+        'email' => 'otto@example.com',
+    ]);
+
+    $user = User::find(1);
+    $user->delete();
+
+    expect(em()->find(User::class, 1))->toBeNull();
+});
+
 it('returns a lazy reference from getReference', function () {
     User::create([
         'name' => 'Grace',
@@ -158,6 +194,7 @@ it('returns a lazy reference from getReference', function () {
     ]);
 
     $em = em();
+    $em->clear();
     $reference = $em->getReference(User::class, 1);
 
     expect($reference)->toBeInstanceOf(Reference::class);
@@ -207,7 +244,9 @@ it('loads a reference lazily when a property is accessed', function () {
         'email' => 'ivy@example.com',
     ]);
 
-    $reference = em()->getReference(User::class, 1);
+    $em = em();
+    $em->clear();
+    $reference = $em->getReference(User::class, 1);
 
     expect($reference->isInitialized())->toBeFalse();
     expect($reference->id)->toBe(1);
@@ -223,7 +262,9 @@ it('delegates model methods through a reference', function () {
         'email' => 'jack@example.com',
     ]);
 
-    $reference = em()->getReference(User::class, 1);
+    $em = em();
+    $em->clear();
+    $reference = $em->getReference(User::class, 1);
 
     $array = $reference->toArray();
 
@@ -236,7 +277,9 @@ it('can read the primary key from a reference without loading', function () {
         'email' => 'ivy@example.com',
     ]);
 
-    $reference = em()->getReference(User::class, 1);
+    $em = em();
+    $em->clear();
+    $reference = $em->getReference(User::class, 1);
 
     expect($reference->id)->toBe(1);
     expect($reference->isInitialized())->toBeFalse();

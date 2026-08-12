@@ -20,6 +20,8 @@ interface EntityManagerInterface
 
     public function contains(object $entity): bool;
 
+    public function getManaged(string $class, mixed $id): ?object;
+
     public function getUnitOfWork(): UnitOfWorkInterface;
 
     public function getConnection(): ConnectionInterface;

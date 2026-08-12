@@ -86,6 +86,11 @@ class EntityManager implements EntityManagerInterface
         return $this->unitOfWork->contains($entity);
     }
 
+    public function getManaged(string $class, mixed $id): ?object
+    {
+        return $this->identityMap->get($class, $id);
+    }
+
     public function getUnitOfWork(): UnitOfWorkInterface
     {
         return $this->unitOfWork;
@@ -110,6 +115,7 @@ class EntityManager implements EntityManagerInterface
         return (new ModelBuilder($this->connection, $this->connection->getGrammar()))
             ->from($instance->getTable())
             ->setModel($class)
+            ->setEntityManager($this)
             ->where($instance->getKeyName(), '=', $id);
     }
 
