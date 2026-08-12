@@ -54,6 +54,16 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - `queue:work --connection=database --queue=default --max-jobs=1` pops one job from `jobs` and calls `handle()`.
 - A failing `Job` with `tries` set is retried up to that number, then logged to `failed_jobs` and deleted from `jobs`.
 
+# Auth/gate/route-binding verification
+- Create a `users` table with `id`, `email`, `api_token`, `password`, `name` columns and seed a test user.
+- The default auth config uses `guard=token` and `provider=users` (`database` driver), so `TokenGuard` looks for an `Authorization: Bearer <token>` header or an `api_token` query parameter.
+- `Authenticate::class` middleware enforces the default guard; `Authenticate::guard('...')` enforces a named guard.
+- `#[\TondbadSwoole\Http\Attributes\Authenticate]` on a controller class or method is evaluated by `HandlerInvoker` for array handlers (`[Class::class, 'method']`).
+- `auth()` returns the `AuthManager`; `auth('guard')->check()` returns a guard. `gate()` returns the `Gate` service for ability/policy checks.
+- Route model binding works for `TondbadSwoole\Database\Model` subclasses: type-hint a route parameter, e.g. `function (User $user, Response $response) { ... }` on a route with `/user/{user}`.
+- `AuthManager::extend()` accepts a closure or a class implementing `GuardFactory` to register custom guards.
+- Missing-token requests throw `AuthorizationException`, which the `ErrorHandler` converts to a `403` response with the message `This action is unauthorized.`.
+
 # Golden-path verification
 - `curl http://127.0.0.1:<port>/hello` should return `Hello ` (note the trailing space from the default `name`).
 - `curl http://127.0.0.1:<port>/hello/world` should return `Hello world`.
