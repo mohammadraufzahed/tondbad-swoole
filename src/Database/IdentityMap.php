@@ -56,7 +56,7 @@ class IdentityMap
 
         $id = $entity->getKey();
 
-        if ($id === null || $id === '') {
+        if ($id === null || $id === '' || (is_array($id) && in_array(null, $id, true))) {
             return null;
         }
 

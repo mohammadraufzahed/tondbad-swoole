@@ -7,7 +7,10 @@ namespace TondbadSwoole\Database;
 use BackedEnum;
 use DateTimeImmutable;
 use DateTimeInterface;
+use ReflectionClass;
+use ReflectionProperty;
 use RuntimeException;
+use TondbadSwoole\Database\Attributes\Embedded;
 use TondbadSwoole\Database\Casts\CastsAttributes;
 use TondbadSwoole\Database\Relations\BelongsTo;
 use TondbadSwoole\Database\Relations\HasMany;
@@ -19,11 +22,11 @@ abstract class Model
 {
     protected ?string $table = null;
 
-    protected string $primaryKey = 'id';
+    protected string|array $primaryKey = 'id';
 
     protected bool $incrementing = true;
 
-    protected string $keyType = 'int';
+    protected string|array $keyType = 'int';
 
     protected bool $timestamps = true;
 
@@ -44,6 +47,10 @@ abstract class Model
     protected array $original = [];
 
     protected array $relations = [];
+
+    protected array $embeddedObjects = [];
+
+    private static array $embeddableMap = [];
 
     public bool $exists = false;
 
@@ -181,22 +188,47 @@ abstract class Model
 
     public function getKey(): mixed
     {
-        return $this->getAttribute($this->primaryKey);
+        if (is_string($this->primaryKey)) {
+            return $this->getAttribute($this->primaryKey);
+        }
+
+        $key = [];
+        foreach ($this->primaryKey as $part) {
+            $key[$part] = $this->getAttribute($part);
+        }
+
+        return $key;
     }
 
-    public function getKeyName(): string
+    public function getKeyName(): string|array
     {
         return $this->primaryKey;
     }
 
+    public function getKeyFromRow(array $row): mixed
+    {
+        if (is_string($this->primaryKey)) {
+            return $row[$this->primaryKey] ?? null;
+        }
+
+        $key = [];
+        foreach ($this->primaryKey as $part) {
+            $key[$part] = $row[$part] ?? null;
+        }
+
+        return $key;
+    }
+
     public function getQualifiedKeyName(): string
     {
-        return $this->getTable() . '.' . $this->getKeyName();
+        $key = $this->getKeyName();
+
+        return $this->getTable() . '.' . (is_array($key) ? implode('.', $key) : $key);
     }
 
     public function getForeignKey(): string
     {
-        return $this->snake($this->getClassBasename()) . '_' . $this->primaryKey;
+        return $this->snake($this->getClassBasename()) . '_' . implode('_', (array) $this->primaryKey);
     }
 
     public function getConnection(): ConnectionInterface
@@ -222,7 +254,7 @@ abstract class Model
 
     public function isIncrementing(): bool
     {
-        return $this->incrementing;
+        return $this->incrementing && is_string($this->primaryKey);
     }
 
     public function fill(array $attributes): self
@@ -260,6 +292,10 @@ abstract class Model
 
     public function getAttribute(string $key): mixed
     {
+        if ($this->isEmbedded($key)) {
+            return $this->getEmbedded($key);
+        }
+
         if (array_key_exists($key, $this->attributes)) {
             return $this->castToPHP($key, $this->attributes[$key]);
         }
@@ -269,6 +305,12 @@ abstract class Model
 
     public function setAttribute(string $key, mixed $value): self
     {
+        if ($this->isEmbedded($key)) {
+            $this->setEmbedded($key, $value);
+
+            return $this;
+        }
+
         $this->attributes[$key] = $this->castToPHP($key, $value);
 
         return $this;
@@ -458,6 +500,10 @@ abstract class Model
 
     public function __get(string $key): mixed
     {
+        if ($this->isEmbedded($key)) {
+            return $this->getEmbedded($key);
+        }
+
         if (array_key_exists($key, $this->attributes)) {
             return $this->getAttribute($key);
         }
@@ -483,7 +529,9 @@ abstract class Model
 
     public function __isset(string $key): bool
     {
-        return array_key_exists($key, $this->attributes) || array_key_exists($key, $this->relations);
+        return $this->isEmbedded($key)
+            || array_key_exists($key, $this->attributes)
+            || array_key_exists($key, $this->relations);
     }
 
     public function getIncrementing(): bool
@@ -498,18 +546,157 @@ abstract class Model
         return $this;
     }
 
-    public function getKeyType(): string
+    public function getKeyType(): string|array
     {
         return $this->keyType;
     }
 
     public function getCasts(): array
     {
-        if ($this->getIncrementing()) {
-            return array_merge($this->casts, [$this->getKeyName() => $this->getKeyType()]);
+        $keyName = $this->getKeyName();
+        $keyType = $this->getKeyType();
+
+        if (!$this->isIncrementing() && !is_array($keyName)) {
+            return $this->casts;
         }
 
-        return $this->casts;
+        $keyCasts = [];
+        if (is_string($keyName)) {
+            $keyCasts[$keyName] = is_string($keyType) ? $keyType : 'int';
+        } else {
+            foreach ($keyName as $index => $part) {
+                $keyCasts[$part] = is_array($keyType) ? ($keyType[$index] ?? 'int') : $keyType;
+            }
+        }
+
+        return array_merge($this->casts, $keyCasts);
+    }
+
+    public function getEmbeddables(): array
+    {
+        $class = static::class;
+
+        if (isset(self::$embeddableMap[$class])) {
+            return self::$embeddableMap[$class];
+        }
+
+        $map = [];
+        $reflection = new ReflectionClass($class);
+
+        foreach ($reflection->getProperties() as $property) {
+            $attributes = $property->getAttributes(Embedded::class);
+
+            if ($attributes === []) {
+                continue;
+            }
+
+            $attribute = $attributes[0]->newInstance();
+            $map[$property->getName()] = [
+                'class' => $attribute->class,
+                'prefix' => $attribute->prefix,
+            ];
+        }
+
+        return self::$embeddableMap[$class] = $map;
+    }
+
+    public function isEmbedded(string $key): bool
+    {
+        return array_key_exists($key, $this->getEmbeddables());
+    }
+
+    public function getEmbedded(string $key): ?object
+    {
+        if (array_key_exists($key, $this->embeddedObjects)) {
+            return $this->embeddedObjects[$key];
+        }
+
+        if (!$this->isEmbedded($key)) {
+            return null;
+        }
+
+        $spec = $this->getEmbeddables()[$key];
+        $instance = $this->buildEmbedded($spec['class'], $spec['prefix']);
+
+        if ($instance !== null) {
+            $this->embeddedObjects[$key] = $instance;
+        }
+
+        return $instance;
+    }
+
+    public function setEmbedded(string $key, mixed $value): self
+    {
+        $spec = $this->getEmbeddables()[$key] ?? null;
+
+        if ($spec === null) {
+            return $this;
+        }
+
+        $class = $spec['class'];
+        $prefix = $spec['prefix'];
+
+        if (is_array($value)) {
+            $instance = new $class();
+            foreach ($value as $property => $propertyValue) {
+                $this->setEmbeddedProperty($instance, $property, $propertyValue);
+            }
+        } elseif (is_object($value) && $value instanceof $class) {
+            $instance = $value;
+        } else {
+            $instance = new $class();
+        }
+
+        $this->embeddedObjects[$key] = $instance;
+
+        foreach ($this->getEmbeddedColumns($class, $prefix) as $column => $property) {
+            $this->attributes[$column] = $this->getEmbeddedProperty($instance, $property);
+        }
+
+        return $this;
+    }
+
+    private function buildEmbedded(string $class, string $prefix): ?object
+    {
+        $instance = new $class();
+        $hasValues = false;
+
+        foreach ($this->getEmbeddedColumns($class, $prefix) as $column => $property) {
+            if (array_key_exists($column, $this->attributes)) {
+                $hasValues = true;
+                $this->setEmbeddedProperty($instance, $property, $this->attributes[$column]);
+            }
+        }
+
+        return $hasValues ? $instance : null;
+    }
+
+    private function getEmbeddedColumns(string $class, string $prefix): array
+    {
+        $columns = [];
+
+        foreach ((new ReflectionClass($class))->getProperties() as $property) {
+            if ($property->isStatic()) {
+                continue;
+            }
+
+            $columns[$prefix . $property->getName()] = $property->getName();
+        }
+
+        return $columns;
+    }
+
+    private function getEmbeddedProperty(object $instance, string $property): mixed
+    {
+        $reflection = new ReflectionProperty($instance, $property);
+
+        return $reflection->isInitialized($instance) ? $reflection->getValue($instance) : null;
+    }
+
+    private function setEmbeddedProperty(object $instance, string $property, mixed $value): void
+    {
+        $reflection = new ReflectionProperty($instance, $property);
+        $reflection->setValue($instance, $value);
     }
 
     public function getCreatedAtColumn(): string
@@ -541,10 +728,11 @@ abstract class Model
             return true;
         }
 
-        $id = $this->newQuery()->insertGetId($attributes, $this->primaryKey);
-
         if ($this->isIncrementing()) {
-            $this->setAttribute($this->primaryKey, $id);
+            $id = $this->newQuery()->insertGetId($attributes, $this->getKeyName());
+            $this->setAttribute($this->getKeyName(), $id);
+        } else {
+            $this->newQuery()->insert($attributes);
         }
 
         $this->exists = true;
@@ -569,7 +757,7 @@ abstract class Model
             return true;
         }
 
-        $this->newQuery()->where($this->primaryKey, $this->getKey())->update($dirty);
+        $this->newQuery()->where($this->getKeyName(), '=', $this->getKey())->update($dirty);
         $this->syncOriginal();
 
         return true;
@@ -579,14 +767,16 @@ abstract class Model
     {
         $this->exists = false;
 
-        return $this->newQuery()->where($this->primaryKey, $this->getKey())->delete();
+        return $this->newQuery()->where($this->getKeyName(), '=', $this->getKey())->delete();
     }
 
     protected function getAttributesForInsert(): array
     {
+        $primaryKey = $this->getKeyName();
+
         $attributes = [];
         foreach ($this->attributes as $key => $value) {
-            if ($this->isIncrementing() && $key === $this->primaryKey && $value === null) {
+            if ($this->isIncrementing() && $key === $primaryKey && $value === null) {
                 continue;
             }
             $attributes[$key] = $this->castToDatabase($key, $value);

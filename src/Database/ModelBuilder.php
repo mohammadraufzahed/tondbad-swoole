@@ -191,9 +191,9 @@ class ModelBuilder extends Builder
         }
 
         $class = $this->model;
-        $key = $row[(new $class())->getKeyName()] ?? null;
+        $key = (new $class())->getKeyFromRow($row);
 
-        if ($this->entityManager !== null && $key !== null) {
+        if ($this->entityManager !== null && $key !== null && $key !== []) {
             $managed = $this->entityManager->getManaged($class, $key);
 
             if ($managed instanceof $class) {
