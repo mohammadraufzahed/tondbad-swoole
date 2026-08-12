@@ -29,7 +29,15 @@ beforeEach(function () {
 
     $this->container = $this->app->container;
 
-    eval('namespace App\\Models; class User extends \\TondbadSwoole\\Database\\Model { protected ?string $table = "users"; public bool $timestamps = false; protected array $guarded = []; }');
+    eval('namespace App\\Models;
+        use TondbadSwoole\\Routing\\Concerns\\HasRouteBinding;
+        use TondbadSwoole\\Routing\\Contracts\\UrlRoutable;
+        class User extends \\TondbadSwoole\\Database\\Model implements UrlRoutable {
+            use HasRouteBinding;
+            protected ?string $table = "users";
+            public bool $timestamps = false;
+            protected array $guarded = [];
+        }');
 });
 
 it('resolves a model from a route parameter', function () {

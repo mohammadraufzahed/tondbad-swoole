@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Support\Hash\HashManager;
+
 class HashMakeCommand extends Command
 {
     public function getName(): string
@@ -26,7 +28,15 @@ class HashMakeCommand extends Command
             return 1;
         }
 
-        fwrite(STDOUT, hash()->make($value) . PHP_EOL);
+        $manager = app()?->container->make(HashManager::class);
+
+        if (!$manager instanceof HashManager) {
+            fwrite(STDERR, "HashManager is not available.\n");
+
+            return 1;
+        }
+
+        fwrite(STDOUT, $manager->make($value) . PHP_EOL);
 
         return 0;
     }

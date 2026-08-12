@@ -12,6 +12,7 @@ use TondbadSwoole\Auth\Guards\ApiKeyGuard;
 use TondbadSwoole\Auth\Guards\BasicAuthGuard;
 use TondbadSwoole\Auth\Guards\SessionGuard;
 use TondbadSwoole\Auth\Guards\TokenGuard;
+use TondbadSwoole\Auth\UserProviders\ApiKeyUserProvider;
 use TondbadSwoole\Auth\UserProviders\DatabaseUserProvider;
 use TondbadSwoole\Auth\UserProviders\EloquentUserProvider;
 use TondbadSwoole\Contracts\CacheInterface;
@@ -192,6 +193,16 @@ class AuthManager
 
         return match ($driver) {
             'eloquent' => new EloquentUserProvider($config['model'] ?? ''),
+            'api_keys' => new ApiKeyUserProvider(
+                $this->container->make(DatabaseManager::class),
+                $config['users_table'] ?? 'users',
+                $config['api_keys_table'] ?? 'api_keys',
+                $config['key_column'] ?? 'key',
+                $config['user_id_column'] ?? 'user_id',
+                $config['expires_at_column'] ?? null,
+                $config['auth_identifier'] ?? 'id',
+                $config['auth_password'] ?? 'password',
+            ),
             'database' => new DatabaseUserProvider(
                 $this->container->make(DatabaseManager::class),
                 $config['table'] ?? 'users',

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Support\Hash\HashManager;
+
 class HashCheckCommand extends Command
 {
     public function getName(): string
@@ -27,7 +29,15 @@ class HashCheckCommand extends Command
             return 1;
         }
 
-        fwrite(STDOUT, (hash()->check($value, $hash) ? 'true' : 'false') . PHP_EOL);
+        $manager = app()?->container->make(HashManager::class);
+
+        if (!$manager instanceof HashManager) {
+            fwrite(STDERR, "HashManager is not available.\n");
+
+            return 1;
+        }
+
+        fwrite(STDOUT, ($manager->check($value, $hash) ? 'true' : 'false') . PHP_EOL);
 
         return 0;
     }

@@ -15,7 +15,6 @@ use TondbadSwoole\Events\Dispatcher;
 use TondbadSwoole\Queue\QueueInterface;
 use TondbadSwoole\Queue\QueueManager;
 use TondbadSwoole\Scheduling\Schedule;
-use TondbadSwoole\Support\Hash\HashManager;
 
 if (!function_exists('app')) {
     function app(): ?App
@@ -107,15 +106,3 @@ if (!function_exists('gate')) {
     }
 }
 
-if (!function_exists('hash')) {
-    function hash(): HashManager
-    {
-        $manager = app()?->container->make(HashManager::class);
-
-        if ($manager === null) {
-            throw new \RuntimeException('HashManager not available.');
-        }
-
-        return $manager;
-    }
-}

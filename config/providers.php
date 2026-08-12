@@ -26,6 +26,7 @@ return [
     PhpRedisCacheProvider::class,
     CacheServiceProvider::class,
     DatabaseServiceProvider::class,
+    HashServiceProvider::class,
     QueueServiceProvider::class,
     EventServiceProvider::class,
     AuthServiceProvider::class,

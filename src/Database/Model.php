@@ -13,10 +13,9 @@ use TondbadSwoole\Database\Relations\BelongsTo;
 use TondbadSwoole\Database\Relations\HasMany;
 use TondbadSwoole\Database\Relations\HasOne;
 use TondbadSwoole\Database\Relations\Relation;
-use TondbadSwoole\Routing\Contracts\UrlRoutable;
 use UnitEnum;
 
-abstract class Model implements UrlRoutable
+abstract class Model
 {
     protected ?string $table = null;
 
@@ -182,23 +181,6 @@ abstract class Model implements UrlRoutable
     public function getForeignKey(): string
     {
         return $this->snake($this->getClassBasename()) . '_' . $this->primaryKey;
-    }
-
-    public function getRouteKey(): mixed
-    {
-        return $this->getKey();
-    }
-
-    public function getRouteKeyName(): string
-    {
-        return $this->primaryKey;
-    }
-
-    public function resolveRouteBinding(mixed $value, ?string $field = null): ?static
-    {
-        $field = $field ?? $this->getRouteKeyName();
-
-        return static::firstWhere([$field => $value]);
     }
 
     public function getConnection(): ConnectionInterface
