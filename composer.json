@@ -61,7 +61,8 @@
     "psr/simple-cache": "^3.0"
   },
   "require-dev": {
-    "pestphp/pest": "^5.0"
+    "pestphp/pest": "^5.0",
+    "testcontainers/testcontainers": "^1.0"
   },
   "config": {
     "allow-plugins": {

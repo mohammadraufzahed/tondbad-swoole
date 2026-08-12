@@ -13,6 +13,7 @@ use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Route\Contracts\RouteInterface;
+use TondbadSwoole\Database\DatabaseManager;
 
 class Route implements RouteInterface
 {
@@ -42,7 +43,8 @@ class Route implements RouteInterface
         $invoker = new HandlerInvoker($this->container);
         $errorHandler = new ErrorHandler($this->config, $this->logger);
         $middlewares = $this->config->get('app.middlewares', []);
-        $this->dispatcher = new RouteDispatcher($this->registrar, $invoker, $errorHandler, $this->container, $this->context, $middlewares);
+        $databaseManager = $this->container->make(DatabaseManager::class);
+        $this->dispatcher = new RouteDispatcher($this->registrar, $invoker, $errorHandler, $this->container, $this->context, $databaseManager, $middlewares);
     }
 
     public function addRoute(
@@ -158,6 +160,11 @@ class Route implements RouteInterface
     public function getRoutes(): array
     {
         return $this->registrar->getRoutes();
+    }
+
+    public function getHandler(int $id): array|callable
+    {
+        return $this->registrar->getHandler($id);
     }
 
     public function getDispatcher(): Dispatcher

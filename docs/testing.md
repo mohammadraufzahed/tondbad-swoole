@@ -121,6 +121,27 @@ $queue = queue();
 $events = event('test.event', $payload);
 ```
 
+## Architecture tests
+
+The `tests/Architecture` suite uses Pest 5 `arch()` expectations to enforce project-wide rules such as:
+
+- `TondbadSwoole\Contracts` does not depend on concrete framework modules.
+- Every source file uses strict types.
+- The database `Grammar` delegates dialect work to `DatabaseOperations` and `DatabaseFeatures`.
+- Database engines implement `DatabaseEngine` and `DatabaseWrapper` implements `ConnectionInterface`.
+
+## Integration tests
+
+Integration tests live in `tests/Integration`. The database integration suite uses `testcontainers/testcontainers` to spin up real MySQL and PostgreSQL containers and verifies the framework can connect and run queries through `DatabaseManager`.
+
+Run integration tests locally when Docker is available:
+
+```bash
+RUN_INTEGRATION_TESTS=1 composer test
+```
+
+The tests skip automatically when `RUN_INTEGRATION_TESTS` is not `1` or when the required PDO extension (`pdo_mysql` / `pdo_pgsql`) is missing, so the default suite stays fast and dependency-free.
+
 ## CI
 
 The repository includes a GitHub Actions workflow that runs:

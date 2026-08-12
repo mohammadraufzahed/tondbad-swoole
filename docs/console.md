@@ -20,8 +20,10 @@ When called as `php bin/tondbad <command>`, the framework boots in `console` mod
 |---|---|
 | `serve` | Start the OpenSwoole HTTP server |
 | `serve:grpc` | Start the OpenSwoole gRPC server |
+| `route:list` | List all registered routes |
 | `route:cache` | Compile routes to a cache file |
 | `cache:clear` | Clear compiled route and framework caches |
+| `--version` / `-V` | Print the framework version |
 | `migrate` | Run pending migrations |
 | `migrate:fresh` | Drop all tables and run migrations |
 | `migrate:rollback` | Rollback the last batch |

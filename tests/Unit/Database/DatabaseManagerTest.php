@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use TondbadSwoole\Database\DatabaseManager;
-use TondbadSwoole\Database\PdoConnection;
+use TondbadSwoole\Database\DatabaseWrapper;
 use TondbadSwoole\Database\Query\Grammars\MySqlGrammar;
 use TondbadSwoole\Database\Query\Grammars\SqliteGrammar;
 
@@ -11,7 +11,7 @@ it('resolves the default connection with mysql grammar', function () {
     $manager = new DatabaseManager($this->config);
     $connection = $manager->connection();
 
-    expect($connection)->toBeInstanceOf(PdoConnection::class);
+    expect($connection)->toBeInstanceOf(DatabaseWrapper::class);
     expect($connection->getGrammar())->toBeInstanceOf(MySqlGrammar::class);
 });
 
