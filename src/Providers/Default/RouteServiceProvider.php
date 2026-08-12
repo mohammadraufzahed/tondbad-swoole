@@ -6,6 +6,7 @@ namespace TondbadSwoole\Providers\Default;
 
 use Monolog\Logger;
 use TondbadSwoole\Bootstrap\App;
+use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Route\Route;
@@ -20,7 +21,8 @@ class RouteServiceProvider extends ServiceProvider
             $route = new Route(
                 $container->make(Container::class),
                 $container->make(Config::class),
-                $container->make(Logger::class)
+                $container->make(Logger::class),
+                $container->make(ContextInterface::class)
             );
 
             $basePath = $container->make(App::class)->basePath();
@@ -28,12 +30,15 @@ class RouteServiceProvider extends ServiceProvider
             $appType = $config->get('app.type', 'http');
             $loader = new RouteLoader();
 
-            if ($appType === 'http' && file_exists($basePath . '/routes/http.php')) {
-                $loader->load($basePath . '/routes/http.php', $route);
+            $httpRouteFile = $config->get('routes.http', 'routes/http.php');
+            $grpcRouteFile = $config->get('routes.grpc', 'routes/grpc.php');
+
+            if ($appType === 'http' && file_exists($basePath . '/' . $httpRouteFile)) {
+                $loader->load($basePath . '/' . $httpRouteFile, $route);
             }
 
-            if ($appType === 'grpc' && file_exists($basePath . '/routes/grpc.php')) {
-                $loader->load($basePath . '/routes/grpc.php', $route);
+            if ($appType === 'grpc' && file_exists($basePath . '/' . $grpcRouteFile)) {
+                $loader->load($basePath . '/' . $grpcRouteFile, $route);
             }
 
             $route->registerAnnotatedRoutes($config->get('routes', []));

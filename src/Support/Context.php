@@ -4,54 +4,56 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Support;
 
-class Context
+use TondbadSwoole\Contracts\ContextInterface;
+
+class Context implements ContextInterface
 {
     /**
      * @var array<int, array<string, mixed>>
      */
-    private static array $storage = [];
+    private array $storage = [];
 
-    public static function get(string $key, mixed $default = null): mixed
+    public function get(string $key, mixed $default = null): mixed
     {
-        $cid = self::cid();
+        $cid = $this->cid();
 
-        return self::$storage[$cid][$key] ?? $default;
+        return $this->storage[$cid][$key] ?? $default;
     }
 
-    public static function set(string $key, mixed $value): void
+    public function set(string $key, mixed $value): void
     {
-        $cid = self::cid();
+        $cid = $this->cid();
 
-        self::$storage[$cid][$key] = $value;
+        $this->storage[$cid][$key] = $value;
     }
 
-    public static function delete(string $key): void
+    public function delete(string $key): void
     {
-        $cid = self::cid();
+        $cid = $this->cid();
 
-        unset(self::$storage[$cid][$key]);
+        unset($this->storage[$cid][$key]);
     }
 
-    public static function has(string $key): bool
+    public function has(string $key): bool
     {
-        $cid = self::cid();
+        $cid = $this->cid();
 
-        return isset(self::$storage[$cid][$key]);
+        return isset($this->storage[$cid][$key]);
     }
 
-    public static function clear(): void
+    public function clear(): void
     {
-        $cid = self::cid();
+        $cid = $this->cid();
 
-        unset(self::$storage[$cid]);
+        unset($this->storage[$cid]);
     }
 
-    public static function clearAll(): void
+    public function clearAll(): void
     {
-        self::$storage = [];
+        $this->storage = [];
     }
 
-    private static function cid(): int
+    private function cid(): int
     {
         if (class_exists(\OpenSwoole\Coroutine::class)) {
             return \OpenSwoole\Coroutine::getCid();

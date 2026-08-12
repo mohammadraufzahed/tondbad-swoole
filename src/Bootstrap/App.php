@@ -8,12 +8,14 @@ use Exception;
 use Monolog\Logger;
 use OpenSwoole\GRPC\Server as GrpcServer;
 use OpenSwoole\Http\Server as HttpServer;
+use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Env;
 use TondbadSwoole\Core\Exceptions\ConfigurationException;
 use TondbadSwoole\Core\Route\Route;
 use TondbadSwoole\Providers\Contracts\ServiceProvider;
+use TondbadSwoole\Support\Context;
 
 class App
 {
@@ -51,6 +53,7 @@ class App
         $this->container->singleton(Container::class, fn() => $this->container);
         $this->container->singleton(Env::class, fn() => $this->env);
         $this->container->singleton(Config::class, fn() => $this->config);
+        $this->container->singleton(ContextInterface::class, fn() => new Context());
         $this->container->singleton(App::class, fn() => $this);
 
         $this->providers = $this->loadProviders();

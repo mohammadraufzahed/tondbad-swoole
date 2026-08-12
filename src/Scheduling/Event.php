@@ -11,6 +11,7 @@ use DateTimeZone;
 use Exception;
 use Monolog\Logger;
 use Throwable;
+use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 
 class Event
@@ -282,7 +283,7 @@ class Event
 
     public function run(Container $container, string $basePath): bool
     {
-        if ($this->withoutOverlapping && !$this->acquireLock($basePath)) {
+        if ($this->withoutOverlapping && !$this->acquireLock($this->lockFile($container, $basePath))) {
             return false;
         }
 
@@ -354,9 +355,15 @@ class Event
         return $current >= $startValue || $current <= $endValue;
     }
 
-    private function acquireLock(string $basePath): bool
+    private function lockFile(Container $container, string $basePath): string
     {
-        $lockFile = $basePath . '/storage/framework/schedule-' . md5($this->getDescription()) . '.lock';
+        $frameworkDir = $container->make(Config::class)->get('app.framework_cache_dir', $basePath . '/storage/framework');
+
+        return $frameworkDir . '/schedule-' . md5($this->getDescription()) . '.lock';
+    }
+
+    private function acquireLock(string $lockFile): bool
+    {
         $this->ensureDirectory(dirname($lockFile));
 
         $this->lockHandle = @fopen($lockFile, 'c');

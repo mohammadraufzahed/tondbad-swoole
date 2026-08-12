@@ -7,14 +7,15 @@ namespace TondbadSwoole\Auth\Guards;
 use TondbadSwoole\Auth\Contracts\Authenticatable;
 use TondbadSwoole\Auth\Contracts\Guard;
 use TondbadSwoole\Auth\Contracts\UserProvider;
+use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Http\Request;
-use TondbadSwoole\Support\Context;
 
 class ApiKeyGuard implements Guard
 {
     public function __construct(
         private readonly string $name,
         private readonly UserProvider $provider,
+        private readonly ContextInterface $context,
         private readonly string $storageKey = 'api_key',
     ) {
     }
@@ -39,21 +40,21 @@ class ApiKeyGuard implements Guard
 
         $cacheKey = $this->cacheKey($request);
 
-        if (Context::has($cacheKey)) {
-            return Context::get($cacheKey);
+        if ($this->context->has($cacheKey)) {
+            return $this->context->get($cacheKey);
         }
 
         $key = $this->getKeyForRequest($request);
 
         if ($key === null || $key === '') {
-            Context::set($cacheKey, null);
+            $this->context->set($cacheKey, null);
 
             return null;
         }
 
         $user = $this->provider->retrieveByCredentials([$this->storageKey => $key]);
 
-        Context::set($cacheKey, $user);
+        $this->context->set($cacheKey, $user);
 
         return $user;
     }
@@ -68,7 +69,7 @@ class ApiKeyGuard implements Guard
         $request = $this->request();
 
         if ($request !== null) {
-            Context::set($this->cacheKey($request), $user);
+            $this->context->set($this->cacheKey($request), $user);
         }
 
         return $this;
@@ -96,7 +97,7 @@ class ApiKeyGuard implements Guard
 
     private function request(): ?Request
     {
-        return Context::get('request');
+        return $this->context->get('request');
     }
 
     private function cacheKey(Request $request): string

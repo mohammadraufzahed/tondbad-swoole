@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Bootstrap\App;
+
 class CacheClearCommand extends Command
 {
     public function getName(): string
@@ -18,9 +20,11 @@ class CacheClearCommand extends Command
 
     public function run(array $args): int
     {
-        $this->deleteFiles($this->basePath . '/storage/cache/routes.cache.php');
+        [$routeCacheFile, $frameworkDir] = $this->cachePaths();
 
-        foreach (glob($this->basePath . '/storage/framework/*') ?: [] as $file) {
+        $this->deleteFiles($routeCacheFile);
+
+        foreach (glob($frameworkDir . '/*') ?: [] as $file) {
             if (is_file($file)) {
                 $this->deleteFiles($file);
             }
@@ -29,6 +33,27 @@ class CacheClearCommand extends Command
         fwrite(STDOUT, "Caches cleared.\n");
 
         return 0;
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    private function cachePaths(): array
+    {
+        $app = app();
+
+        if ($app instanceof App) {
+            $basePath = $app->basePath();
+            $routeCacheFile = $app->config->get('app.route_cache_file', $basePath . '/storage/cache/routes.cache.php');
+            $frameworkDir = $app->config->get('app.framework_cache_dir', $basePath . '/storage/framework');
+
+            return [$routeCacheFile, $frameworkDir];
+        }
+
+        return [
+            $this->basePath . '/storage/cache/routes.cache.php',
+            $this->basePath . '/storage/framework',
+        ];
     }
 
     private function deleteFiles(string ...$paths): void

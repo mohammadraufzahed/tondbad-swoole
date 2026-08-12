@@ -49,41 +49,50 @@ class ConsoleServiceProvider extends ServiceProvider
 
             $console = new Application($basePath);
 
-            $this->registerBuiltInCommands($console, $basePath);
+            $this->registerBuiltInCommands($console, $basePath, $container);
             $this->registerConfiguredCommands($console, $container, $config, $basePath);
-            $this->discoverCommands($console, $basePath, $container);
+            $this->discoverCommands($console, $basePath, $container, $config);
 
             return $console;
         });
     }
 
-    private function registerBuiltInCommands(Application $console, string $basePath): void
+    private function registerBuiltInCommands(Application $console, string $basePath, Container $container): void
     {
-        $console
-            ->register(new ServeCommand($basePath))
-            ->register(new GrpcServeCommand($basePath))
-            ->register(new RouteCacheCommand($basePath))
-            ->register(new CacheClearCommand($basePath))
-            ->register(new MakeControllerCommand($basePath))
-            ->register(new MakeEventCommand($basePath))
-            ->register(new MakeListenerCommand($basePath))
-            ->register(new MakeMiddlewareCommand($basePath))
-            ->register(new MakeModelCommand($basePath))
-            ->register(new MakeProviderCommand($basePath))
-            ->register(new MakeRequestCommand($basePath))
-            ->register(new MakeJobCommand($basePath))
-            ->register(new MakeGuardCommand($basePath))
-            ->register(new MakePolicyCommand($basePath))
-            ->register(new HashMakeCommand($basePath))
-            ->register(new HashCheckCommand($basePath))
-            ->register(new QueueWorkCommand($basePath))
-            ->register(new MakeMigrationCommand($basePath))
-            ->register(new MigrateCommand($basePath))
-            ->register(new MigrateFreshCommand($basePath))
-            ->register(new MigrateRollbackCommand($basePath))
-            ->register(new MigrateStatusCommand($basePath))
-            ->register(new ScheduleWorkCommand($basePath))
-            ->register(new ScheduleListCommand($basePath));
+        $commands = [
+            ServeCommand::class,
+            GrpcServeCommand::class,
+            RouteCacheCommand::class,
+            CacheClearCommand::class,
+            MakeControllerCommand::class,
+            MakeEventCommand::class,
+            MakeListenerCommand::class,
+            MakeMiddlewareCommand::class,
+            MakeModelCommand::class,
+            MakeProviderCommand::class,
+            MakeRequestCommand::class,
+            MakeJobCommand::class,
+            MakeGuardCommand::class,
+            MakePolicyCommand::class,
+            HashMakeCommand::class,
+            HashCheckCommand::class,
+            QueueWorkCommand::class,
+            MakeMigrationCommand::class,
+            MigrateCommand::class,
+            MigrateFreshCommand::class,
+            MigrateRollbackCommand::class,
+            MigrateStatusCommand::class,
+            ScheduleWorkCommand::class,
+            ScheduleListCommand::class,
+        ];
+
+        foreach ($commands as $class) {
+            $command = $this->resolveCommand($class, $basePath, $container);
+
+            if ($command !== null) {
+                $console->register($command);
+            }
+        }
     }
 
     private function registerConfiguredCommands(Application $console, Container $container, Config $config, string $basePath): void
@@ -103,16 +112,16 @@ class ConsoleServiceProvider extends ServiceProvider
         }
     }
 
-    private function discoverCommands(Application $console, string $basePath, Container $container): void
+    private function discoverCommands(Application $console, string $basePath, Container $container, Config $config): void
     {
-        $commandsDir = $basePath . '/app/Console/Commands';
+        $commandsDir = $basePath . '/' . trim($config->get('app.paths.commands', 'app/Console/Commands'), '/');
 
         if (!is_dir($commandsDir)) {
             return;
         }
 
         foreach (glob($commandsDir . '/*.php') ?: [] as $file) {
-            $class = $this->classNameFromFile($file);
+            $class = $this->classNameFromFile($file, $config->get('app.namespaces.commands', 'App\\Console\\Commands\\'));
 
             if ($class === null || !class_exists($class)) {
                 continue;
@@ -132,11 +141,11 @@ class ConsoleServiceProvider extends ServiceProvider
         }
     }
 
-    private function classNameFromFile(string $file): ?string
+    private function classNameFromFile(string $file, string $namespace): ?string
     {
         $name = basename($file, '.php');
 
-        return 'App\\Console\\Commands\\' . $name;
+        return $namespace . $name;
     }
 
     private function resolveCommand(string $class, string $basePath, Container $container): ?CommandInterface

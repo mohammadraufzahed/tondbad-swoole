@@ -8,8 +8,8 @@ use TondbadSwoole\Auth\Contracts\Authenticatable;
 use TondbadSwoole\Auth\Contracts\Guard;
 use TondbadSwoole\Auth\Contracts\UserProvider;
 use TondbadSwoole\Contracts\CacheInterface;
+use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Http\Request;
-use TondbadSwoole\Support\Context;
 
 class SessionGuard implements Guard
 {
@@ -21,6 +21,7 @@ class SessionGuard implements Guard
         private readonly string $name,
         private readonly UserProvider $provider,
         private readonly CacheInterface $cache,
+        private readonly ContextInterface $context,
         private readonly string $sessionKey = 'session_id',
         private readonly int $lifetime = 7200,
     ) {
@@ -46,14 +47,14 @@ class SessionGuard implements Guard
 
         $cacheKey = $this->cacheKey($request);
 
-        if (Context::has($cacheKey)) {
-            return Context::get($cacheKey);
+        if ($this->context->has($cacheKey)) {
+            return $this->context->get($cacheKey);
         }
 
         $sessionId = $request->cookie($this->sessionKey);
 
         if (!is_string($sessionId) || $sessionId === '') {
-            Context::set($cacheKey, null);
+            $this->context->set($cacheKey, null);
 
             return null;
         }
@@ -61,7 +62,7 @@ class SessionGuard implements Guard
         $userId = $this->cache->get(self::CACHE_PREFIX . $sessionId);
 
         if ($userId === null) {
-            Context::set($cacheKey, null);
+            $this->context->set($cacheKey, null);
 
             return null;
         }
@@ -69,7 +70,7 @@ class SessionGuard implements Guard
         $this->sessionId = $sessionId;
         $user = $this->provider->retrieveById($userId);
 
-        Context::set($cacheKey, $user);
+        $this->context->set($cacheKey, $user);
 
         return $user;
     }
@@ -84,7 +85,7 @@ class SessionGuard implements Guard
         $request = $this->request();
 
         if ($request !== null) {
-            Context::set($this->cacheKey($request), $user);
+            $this->context->set($this->cacheKey($request), $user);
         }
 
         return $this;
@@ -101,17 +102,17 @@ class SessionGuard implements Guard
         $request = $this->request();
 
         if ($request !== null) {
-            Context::set($this->cacheKey($request), $user);
+            $this->context->set($this->cacheKey($request), $user);
         }
 
-        Context::set('session.id', $sessionId);
+        $this->context->set('session.id', $sessionId);
 
         return $sessionId;
     }
 
     public function logout(): void
     {
-        $sessionId = $this->sessionId ?? Context::get('session.id');
+        $sessionId = $this->sessionId ?? $this->context->get('session.id');
 
         if (is_string($sessionId) && $sessionId !== '') {
             $this->cache->delete(self::CACHE_PREFIX . $sessionId);
@@ -120,10 +121,10 @@ class SessionGuard implements Guard
         $request = $this->request();
 
         if ($request !== null) {
-            Context::delete($this->cacheKey($request));
+            $this->context->delete($this->cacheKey($request));
         }
 
-        Context::delete('session.id');
+        $this->context->delete('session.id');
     }
 
     public function validate(array $credentials = []): bool
@@ -135,7 +136,7 @@ class SessionGuard implements Guard
 
     private function request(): ?Request
     {
-        return Context::get('request');
+        return $this->context->get('request');
     }
 
     private function cacheKey(Request $request): string

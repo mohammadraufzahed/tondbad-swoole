@@ -6,9 +6,9 @@ use TondbadSwoole\Auth\Access\AuthorizationException;
 use TondbadSwoole\Bootstrap\AppFactory;
 use TondbadSwoole\Database\DatabaseManager;
 use TondbadSwoole\Http\Middleware\Authenticate;
+use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Http\Request;
 use TondbadSwoole\Http\Response;
-use TondbadSwoole\Support\Context;
 
 beforeEach(function () {
     $this->tmpDir = $this->tempDir('tondbad_auth_middleware_test');
@@ -31,7 +31,7 @@ beforeEach(function () {
         'password' => password_hash('secret', PASSWORD_BCRYPT),
     ]);
 
-    Context::clear();
+    $this->app->container->make(ContextInterface::class)->clear();
 });
 
 it('allows the request when authenticated', function () {
@@ -44,7 +44,7 @@ it('allows the request when authenticated', function () {
 
     $request = new Request($swoole);
     $response = new Response(new OpenSwoole\Http\Response());
-    Context::set('request', $request);
+    $this->app->container->make(ContextInterface::class)->set('request', $request);
 
     $called = false;
     $next = function (Request $req, Response $res) use (&$called) { $called = true; };
@@ -64,7 +64,7 @@ it('throws when not authenticated', function () {
 
     $request = new Request($swoole);
     $response = new Response(new OpenSwoole\Http\Response());
-    Context::set('request', $request);
+    $this->app->container->make(ContextInterface::class)->set('request', $request);
 
     (new Authenticate())->process($request, $response, function () {});
 })->throws(AuthorizationException::class);
@@ -89,7 +89,7 @@ it('uses a specific guard', function () {
 
     $request = new Request($swoole);
     $response = new Response(new OpenSwoole\Http\Response());
-    Context::set('request', $request);
+    $this->app->container->make(ContextInterface::class)->set('request', $request);
 
     $called = false;
     $next = function (Request $req, Response $res) use (&$called) { $called = true; };

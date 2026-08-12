@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace TondbadSwoole\Tests\Unit;
 
 use PHPUnit\Framework\TestCase as BaseTestCase;
+use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Env;
-use TondbadSwoole\Support\Context;
 
 class TestCase extends BaseTestCase
 {
@@ -39,7 +39,9 @@ class TestCase extends BaseTestCase
             \OpenSwoole\Timer::clearAll();
         }
 
-        Context::clear();
+        if (function_exists('app') && app() !== null) {
+            app()->container->make(ContextInterface::class)->clear();
+        }
 
         parent::tearDown();
     }

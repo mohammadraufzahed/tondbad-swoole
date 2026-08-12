@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace TondbadSwoole\Providers\Default;
 
 use TondbadSwoole\Bootstrap\App;
+use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Events\Dispatcher;
 use TondbadSwoole\Events\Listener as ListenerAttribute;
@@ -26,15 +27,16 @@ class EventServiceProvider extends ServiceProvider
     public function boot(Container $container): void
     {
         $app = $container->make(App::class);
+        $config = $container->make(Config::class);
         $dispatcher = $container->make(Dispatcher::class);
-        $listenersDir = $app->basePath('/app/Listeners');
+        $listenersDir = $app->basePath($config->get('app.paths.listeners', 'app/Listeners'));
 
         if (!is_dir($listenersDir)) {
             return;
         }
 
         foreach (glob($listenersDir . '/*.php') ?: [] as $file) {
-            $class = $this->classNameFromFile($file);
+            $class = $this->classNameFromFile($file, $config->get('app.namespaces.listeners', 'App\\Listeners\\'));
 
             if ($class === null || !class_exists($class)) {
                 continue;
@@ -56,10 +58,10 @@ class EventServiceProvider extends ServiceProvider
         }
     }
 
-    private function classNameFromFile(string $file): ?string
+    private function classNameFromFile(string $file, string $namespace): ?string
     {
         $name = basename($file, '.php');
 
-        return 'App\\Listeners\\' . $name;
+        return $namespace . $name;
     }
 }

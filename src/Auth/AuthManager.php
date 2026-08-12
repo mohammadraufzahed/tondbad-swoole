@@ -16,11 +16,11 @@ use TondbadSwoole\Auth\UserProviders\ApiKeyUserProvider;
 use TondbadSwoole\Auth\UserProviders\DatabaseUserProvider;
 use TondbadSwoole\Auth\UserProviders\EloquentUserProvider;
 use TondbadSwoole\Contracts\CacheInterface;
+use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Database\DatabaseManager;
 use TondbadSwoole\Http\Request;
-use TondbadSwoole\Support\Context;
 use Closure;
 use InvalidArgumentException;
 
@@ -39,6 +39,7 @@ class AuthManager
     public function __construct(
         private readonly Container $container,
         private readonly Config $config,
+        private readonly ContextInterface $context,
     ) {
     }
 
@@ -74,7 +75,7 @@ class AuthManager
 
     public function setRequest(Request $request): self
     {
-        Context::set('request', $request);
+        $this->context->set('request', $request);
 
         return $this;
     }
@@ -153,22 +154,26 @@ class AuthManager
                 $name,
                 $provider,
                 $this->container->make(CacheInterface::class),
+                $this->context,
                 $config['session_key'] ?? 'session_id',
                 $config['lifetime'] ?? 7200,
             ),
             'token' => new TokenGuard(
                 $name,
                 $provider,
+                $this->context,
                 $config['storage_key'] ?? 'api_token',
             ),
             'api_key' => new ApiKeyGuard(
                 $name,
                 $provider,
+                $this->context,
                 $config['storage_key'] ?? 'api_key',
             ),
             'basic' => new BasicAuthGuard(
                 $name,
                 $provider,
+                $this->context,
                 $config['username_key'] ?? 'email',
             ),
             default => throw new InvalidArgumentException("Auth driver [{$driver}] is not supported."),

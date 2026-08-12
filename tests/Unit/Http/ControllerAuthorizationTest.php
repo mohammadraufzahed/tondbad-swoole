@@ -6,9 +6,9 @@ use TondbadSwoole\Auth\Access\AuthorizationException;
 use TondbadSwoole\Bootstrap\AppFactory;
 use TondbadSwoole\Core\Route\HandlerInvoker;
 use TondbadSwoole\Database\DatabaseManager;
+use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Http\Request;
 use TondbadSwoole\Http\Response;
-use TondbadSwoole\Support\Context;
 
 beforeEach(function () {
     $this->tmpDir = $this->tempDir('tondbad_controller_auth_test');
@@ -31,7 +31,7 @@ beforeEach(function () {
         'password' => password_hash('secret', PASSWORD_BCRYPT),
     ]);
 
-    Context::clear();
+    $this->app->container->make(ContextInterface::class)->clear();
 });
 
 it('allows a controller method without authenticate attribute', function () {
@@ -52,7 +52,7 @@ it('allows a controller method without authenticate attribute', function () {
     $swoole->cookie = [];
     $request = new Request($swoole);
     $response = new Response(new OpenSwoole\Http\Response());
-    Context::set('request', $request);
+    $this->app->container->make(ContextInterface::class)->set('request', $request);
 
     $captured = null;
     $handler = [get_class($controller), 'index'];
@@ -80,7 +80,7 @@ it('throws when controller method requires authentication', function () {
     $swoole->cookie = [];
     $request = new Request($swoole);
     $response = new Response(new OpenSwoole\Http\Response());
-    Context::set('request', $request);
+    $this->app->container->make(ContextInterface::class)->set('request', $request);
 
     $invoker->invoke([get_class($controller), 'secret'], $request, $response, []);
 })->throws(AuthorizationException::class);
@@ -104,7 +104,7 @@ it('allows controller method with valid authentication', function () {
     $swoole->cookie = [];
     $request = new Request($swoole);
     $response = new Response(new OpenSwoole\Http\Response());
-    Context::set('request', $request);
+    $this->app->container->make(ContextInterface::class)->set('request', $request);
 
     $invoker->invoke([get_class($controller), 'secret'], $request, $response, []);
 
