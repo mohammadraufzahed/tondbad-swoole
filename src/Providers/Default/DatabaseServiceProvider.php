@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace TondbadSwoole\Providers\Default;
 
 use TondbadSwoole\Bootstrap\App;
+use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Database\ConnectionInterface;
 use TondbadSwoole\Database\DatabaseManager;
+use TondbadSwoole\Database\EntityManager;
+use TondbadSwoole\Database\EntityManagerInterface;
 use TondbadSwoole\Database\Migrations\MigrationCreator;
 use TondbadSwoole\Database\Migrations\MigrationPathManager;
 use TondbadSwoole\Database\Migrations\MigrationRepository;
@@ -20,7 +23,10 @@ class DatabaseServiceProvider extends ServiceProvider
     public function register(Container $container): void
     {
         $container->singleton(DatabaseManager::class, function () use ($container): DatabaseManager {
-            return new DatabaseManager($container->make(Config::class));
+            return new DatabaseManager(
+                $container->make(Config::class),
+                $container->make(ContextInterface::class),
+            );
         });
 
         $container->singleton(ConnectionInterface::class, function () use ($container): ConnectionInterface {
@@ -55,6 +61,19 @@ class DatabaseServiceProvider extends ServiceProvider
         });
 
         $container->singleton(MigrationCreator::class, fn () => new MigrationCreator());
+
+        $container->bind(EntityManagerInterface::class, function () use ($container): EntityManagerInterface {
+            $context = $container->make(ContextInterface::class);
+            $key = EntityManagerInterface::class;
+            $entityManager = $context->get($key);
+
+            if (!$entityManager instanceof EntityManagerInterface) {
+                $entityManager = new EntityManager($container->make(ConnectionInterface::class));
+                $context->set($key, $entityManager);
+            }
+
+            return $entityManager;
+        });
     }
 
     public function boot(Container $container): void

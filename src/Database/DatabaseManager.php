@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Database;
 
+use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Database\Query\Builder;
+use TondbadSwoole\Support\Context;
 
 class DatabaseManager
 {
@@ -14,8 +16,14 @@ class DatabaseManager
      */
     private array $connections = [];
 
-    public function __construct(private readonly Config $config)
+    private readonly Config $config;
+
+    private readonly ContextInterface $context;
+
+    public function __construct(Config $config, ?ContextInterface $context = null)
     {
+        $this->config = $config;
+        $this->context = $context ?? new Context();
     }
 
     public function connection(?string $name = null): ConnectionInterface
@@ -57,6 +65,6 @@ class DatabaseManager
             throw new \RuntimeException("Database connection [{$name}] is not configured.");
         }
 
-        return (new ConnectionFactory())->make($config, $name);
+        return (new ConnectionFactory())->make($config, $name, $this->context);
     }
 }
