@@ -1,0 +1,33 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Policies;
+
+use TondbadSwoole\Auth\Access\HandlesAuthorization;
+use TondbadSwoole\Auth\Access\Policy;
+
+class {Name}Policy implements Policy
+{
+    use HandlesAuthorization;
+
+    public function view(mixed $user, mixed $model): bool
+    {
+        return $this->allow();
+    }
+
+    public function create(mixed $user): bool
+    {
+        return $this->allow();
+    }
+
+    public function update(mixed $user, mixed $model): bool
+    {
+        $this->deny();
+    }
+
+    public function delete(mixed $user, mixed $model): bool
+    {
+        $this->deny();
+    }
+}

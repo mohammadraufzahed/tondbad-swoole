@@ -10,6 +10,7 @@ use TondbadSwoole\Providers\Default\{
     EventServiceProvider,
     GateServiceProvider,
     GrpcServiceProvider,
+    HashServiceProvider,
     HttpServiceProvider,
     LoggerServiceProvider,
     PhpRedisCacheProvider,

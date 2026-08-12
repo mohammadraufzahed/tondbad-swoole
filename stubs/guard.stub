@@ -1,0 +1,54 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Auth\Guards;
+
+use TondbadSwoole\Auth\Contracts\Authenticatable;
+use TondbadSwoole\Auth\Contracts\Guard;
+use TondbadSwoole\Auth\Contracts\GuardFactory;
+use TondbadSwoole\Auth\Contracts\UserProvider;
+use TondbadSwoole\Core\Container;
+
+class {Name}GuardFactory implements GuardFactory
+{
+    public function create(Container $container, UserProvider $provider, array $config, string $name): Guard
+    {
+        return new class($provider) implements Guard {
+            public function __construct(private readonly UserProvider $provider)
+            {
+            }
+
+            public function check(): bool
+            {
+                return $this->user() !== null;
+            }
+
+            public function guest(): bool
+            {
+                return !$this->check();
+            }
+
+            public function user(): ?Authenticatable
+            {
+                // TODO: resolve the user from the current request
+                return null;
+            }
+
+            public function id(): string|int|null
+            {
+                return $this->user()?->getAuthIdentifier();
+            }
+
+            public function setUser(Authenticatable $user): self
+            {
+                return $this;
+            }
+
+            public function validate(array $credentials = []): bool
+            {
+                return $this->user() !== null;
+            }
+        };
+    }
+}

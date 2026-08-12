@@ -8,6 +8,8 @@ use TondbadSwoole\Auth\Contracts\Authenticatable;
 use TondbadSwoole\Auth\Contracts\Guard;
 use TondbadSwoole\Auth\Contracts\GuardFactory;
 use TondbadSwoole\Auth\Contracts\UserProvider;
+use TondbadSwoole\Auth\Guards\ApiKeyGuard;
+use TondbadSwoole\Auth\Guards\BasicAuthGuard;
 use TondbadSwoole\Auth\Guards\SessionGuard;
 use TondbadSwoole\Auth\Guards\TokenGuard;
 use TondbadSwoole\Auth\UserProviders\DatabaseUserProvider;
@@ -157,6 +159,16 @@ class AuthManager
                 $name,
                 $provider,
                 $config['storage_key'] ?? 'api_token',
+            ),
+            'api_key' => new ApiKeyGuard(
+                $name,
+                $provider,
+                $config['storage_key'] ?? 'api_key',
+            ),
+            'basic' => new BasicAuthGuard(
+                $name,
+                $provider,
+                $config['username_key'] ?? 'email',
             ),
             default => throw new InvalidArgumentException("Auth driver [{$driver}] is not supported."),
         };
