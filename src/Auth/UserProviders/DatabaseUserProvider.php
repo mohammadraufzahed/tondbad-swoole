@@ -25,7 +25,7 @@ class DatabaseUserProvider implements UserProvider
             ->where($this->authIdentifierName, '=', $id)
             ->first();
 
-        return $row === null ? null : new GenericUser($row, $this->authIdentifierName, $this->authPasswordName);
+        return $row === null ? null : new GenericUser($this->table, $row, $this->authIdentifierName, $this->authPasswordName);
     }
 
     public function retrieveByCredentials(array $credentials): ?Authenticatable
@@ -42,7 +42,7 @@ class DatabaseUserProvider implements UserProvider
 
         $row = $query->first();
 
-        return $row === null ? null : new GenericUser($row, $this->authIdentifierName, $this->authPasswordName);
+        return $row === null ? null : new GenericUser($this->table, $row, $this->authIdentifierName, $this->authPasswordName);
     }
 
     public function validateCredentials(Authenticatable $user, array $credentials): bool

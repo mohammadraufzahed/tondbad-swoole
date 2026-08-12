@@ -10,5 +10,7 @@ interface Authenticatable
 
     public function getAuthIdentifierName(): string;
 
+    public function getAuthPasswordName(): string;
+
     public function getAuthPassword(): ?string;
 }

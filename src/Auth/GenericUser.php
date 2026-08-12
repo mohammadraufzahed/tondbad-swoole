@@ -4,39 +4,39 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Auth;
 
-use TondbadSwoole\Auth\Contracts\Authenticatable;
+use TondbadSwoole\Auth\Concerns\Authenticatable;
+use TondbadSwoole\Auth\Contracts\Authenticatable as AuthenticatableContract;
+use TondbadSwoole\Database\Model;
 
-class GenericUser implements Authenticatable
+/**
+ * A generic Authenticatable user object backed by the ORM Model.
+ *
+ * This is used by DatabaseUserProvider to wrap a plain database row in an
+ * entity that still benefits from Model attribute access and casting.
+ */
+class GenericUser extends Model implements AuthenticatableContract
 {
-    /**
-     * @param array<string, mixed> $attributes
-     */
+    use Authenticatable;
+
+    public bool $timestamps = false;
+
     public function __construct(
-        private readonly array $attributes,
-        private readonly string $authIdentifierName = 'id',
-        private readonly string $authPasswordName = 'password',
+        string $table,
+        array $attributes,
+        string $authIdentifierName = 'id',
+        string $authPasswordName = 'password',
     ) {
-    }
+        $this->table = $table;
+        $this->primaryKey = $authIdentifierName;
+        $this->authPasswordName = $authPasswordName;
 
-    public function getAuthIdentifier(): string|int|null
-    {
-        return $this->attributes[$this->authIdentifierName] ?? null;
-    }
+        parent::__construct();
 
-    public function getAuthIdentifierName(): string
-    {
-        return $this->authIdentifierName;
-    }
-
-    public function getAuthPassword(): ?string
-    {
-        $password = $this->attributes[$this->authPasswordName] ?? null;
-
-        return is_string($password) ? $password : null;
+        $this->forceFill($attributes);
     }
 
     public function get(string $key, mixed $default = null): mixed
     {
-        return $this->attributes[$key] ?? $default;
+        return $this->getAttribute($key) ?? $default;
     }
 }

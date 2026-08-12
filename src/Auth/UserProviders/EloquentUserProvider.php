@@ -21,7 +21,7 @@ class EloquentUserProvider implements UserProvider
     {
         $model = $this->model;
 
-        if (!class_exists($model) || !is_subclass_of($model, \TondbadSwoole\Database\Model::class) && !is_subclass_of($model, Authenticatable::class)) {
+        if (!class_exists($model) || !is_subclass_of($model, \TondbadSwoole\Database\Model::class) || !is_subclass_of($model, Authenticatable::class)) {
             return null;
         }
 
@@ -32,14 +32,15 @@ class EloquentUserProvider implements UserProvider
     {
         $model = $this->model;
 
-        if (!class_exists($model) || !is_subclass_of($model, \TondbadSwoole\Database\Model::class) && !is_subclass_of($model, Authenticatable::class)) {
+        if (!class_exists($model) || !is_subclass_of($model, \TondbadSwoole\Database\Model::class) || !is_subclass_of($model, Authenticatable::class)) {
             return null;
         }
 
+        $passwordName = (new $model())->getAuthPasswordName();
         $conditions = [];
 
         foreach ($credentials as $key => $value) {
-            if ($key === 'password') {
+            if ($key === 'password' || $key === $passwordName) {
                 continue;
             }
 
