@@ -9,6 +9,11 @@ use TondbadSwoole\Queue\Jobs\Job;
 
 abstract class Queue implements QueueInterface
 {
+    public function __construct(
+        protected readonly QueueEvents $events = new QueueEvents(),
+    ) {
+    }
+
     public function add(Job $job, ?string $queue = null, array $options = []): mixed
     {
         if ($queue !== null) {
@@ -51,6 +56,12 @@ abstract class Queue implements QueueInterface
 
     public function on(string $event, Closure $callback): void
     {
+        $this->events->on($event, $callback);
+    }
+
+    public function emit(string $event, array $data = []): void
+    {
+        $this->events->emit($event, $data);
     }
 
     abstract public function push(Job $job, ?string $queue = null): mixed;
@@ -66,6 +77,8 @@ abstract class Queue implements QueueInterface
     abstract public function markCompleted(int $id): bool;
 
     abstract public function markFailed(int $id): bool;
+
+    abstract public function progress(int $id, int $progress): bool;
 
     abstract public function getJob(int $id): ?Job;
 

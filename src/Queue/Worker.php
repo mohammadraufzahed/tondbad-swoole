@@ -42,6 +42,8 @@ class Worker
             $job->incrementAttempts();
         }
 
+        $job->setConnection($connection);
+
         try {
             $this->container->call([$job, 'handle']);
 
@@ -51,9 +53,13 @@ class Worker
                 } else {
                     $connection->markCompleted($job->getJobId());
                 }
+
+                $connection->emit('completed', ['job' => $job, 'result' => null]);
             }
         } catch (Throwable $e) {
             $this->handleException($job, $connection, $e, $maxTries);
+        } finally {
+            $job->setConnection(null);
         }
     }
 
@@ -62,6 +68,8 @@ class Worker
         $tries = $job->getMaxTries() ?? $maxTries;
 
         if ($job->hasFailed($tries)) {
+            $connection?->emit('failed', ['job' => $job, 'exception' => $e]);
+
             if ($job->shouldRemoveOnFail()) {
                 $this->fail($job, $e);
             }

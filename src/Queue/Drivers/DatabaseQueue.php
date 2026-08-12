@@ -8,6 +8,7 @@ use TondbadSwoole\Database\ConnectionInterface;
 use TondbadSwoole\Queue\Jobs\Job;
 use TondbadSwoole\Queue\Jobs\JobStatus;
 use TondbadSwoole\Queue\Queue;
+use TondbadSwoole\Queue\QueueEvents;
 
 class DatabaseQueue extends Queue
 {
@@ -18,7 +19,9 @@ class DatabaseQueue extends Queue
         private readonly int $retryAfter = 60,
         private readonly ?string $failedTable = null,
         private readonly string $pauseTable = 'queue_pauses',
+        ?QueueEvents $events = null,
     ) {
+        parent::__construct($events ?? new QueueEvents());
     }
 
     public function push(Job $job, ?string $queue = null): mixed
@@ -40,7 +43,7 @@ class DatabaseQueue extends Queue
         $status = $delay > 0 ? JobStatus::Delayed : JobStatus::Waiting;
         $backoff = $job->getBackoff();
 
-        return (int) $this->connection->table($this->table)->insertGetId([
+        $id = (int) $this->connection->table($this->table)->insertGetId([
             'queue' => $queueName,
             'payload' => $this->createPayload($job),
             'attempts' => $job->getAttempts(),
@@ -55,6 +58,10 @@ class DatabaseQueue extends Queue
             'deduplication_id' => $customId,
             'status' => $status->value,
         ]);
+
+        $this->emit($status === JobStatus::Delayed ? 'delayed' : 'added', ['job' => $job, 'queue' => $queueName, 'id' => $id]);
+
+        return $id;
     }
 
     public function pop(?string $queue = null): ?Job
@@ -83,6 +90,12 @@ class DatabaseQueue extends Queue
             if ($reserved > 0) {
                 $instance = $this->createJob($job);
                 $instance->setAttempts((int) $job['attempts'] + 1);
+
+                if ($job['status'] === JobStatus::Active->value) {
+                    $this->emit('stalled', ['job' => $instance, 'queue' => $queueName]);
+                }
+
+                $this->emit('active', ['job' => $instance, 'queue' => $queueName]);
 
                 return $instance;
             }
@@ -114,15 +127,21 @@ class DatabaseQueue extends Queue
             return false;
         }
 
-        $status = $delay > 0 ? JobStatus::Delayed->value : JobStatus::Waiting->value;
+        $status = $delay > 0 ? JobStatus::Delayed : JobStatus::Waiting;
 
-        return $this->connection->table($this->table)
+        $updated = $this->connection->table($this->table)
             ->where('id', $id)
             ->update([
                 'reserved_at' => null,
                 'available_at' => time() + $delay,
-                'status' => $status,
+                'status' => $status->value,
             ]) > 0;
+
+        if ($updated) {
+            $this->emit($status === JobStatus::Delayed ? 'delayed' : 'waiting', ['id' => $id]);
+        }
+
+        return $updated;
     }
 
     public function getJob(int $id): ?Job
@@ -173,8 +192,13 @@ class DatabaseQueue extends Queue
     public function drain(?string $queue = null): int
     {
         $queueName = $queue ?? $this->defaultQueue;
+        $count = $this->connection->table($this->table)->where('queue', $queueName)->delete();
 
-        return $this->connection->table($this->table)->where('queue', $queueName)->delete();
+        if ($count > 0) {
+            $this->emit('drained', ['queue' => $queueName, 'count' => $count]);
+        }
+
+        return $count;
     }
 
     public function clean(int $gracePeriod = 86400, ?string $queue = null): int
@@ -193,6 +217,10 @@ class DatabaseQueue extends Queue
                 ->delete();
         }
 
+        if ($count > 0) {
+            $this->emit('cleaned', ['queue' => $queueName, 'count' => $count]);
+        }
+
         return $count;
     }
 
@@ -209,16 +237,16 @@ class DatabaseQueue extends Queue
             $this->connection->table($this->pauseTable)
                 ->where('queue', $queueName)
                 ->update(['paused' => 1, 'updated_at' => $now]);
-
-            return;
+        } else {
+            $this->connection->table($this->pauseTable)->insert([
+                'queue' => $queueName,
+                'paused' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
         }
 
-        $this->connection->table($this->pauseTable)->insert([
-            'queue' => $queueName,
-            'paused' => 1,
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]);
+        $this->emit('paused', ['queue' => $queueName]);
     }
 
     public function resume(?string $queue = null): void
@@ -228,6 +256,8 @@ class DatabaseQueue extends Queue
         $this->connection->table($this->pauseTable)
             ->where('queue', $queueName)
             ->update(['paused' => 0, 'updated_at' => time()]);
+
+        $this->emit('resumed', ['queue' => $queueName]);
     }
 
     public function isPaused(string $queue): bool
@@ -258,6 +288,13 @@ class DatabaseQueue extends Queue
                 'reserved_at' => null,
                 'status' => JobStatus::Failed->value,
             ]) > 0;
+    }
+
+    public function progress(int $id, int $progress): bool
+    {
+        return $this->connection->table($this->table)
+            ->where('id', $id)
+            ->update(['progress' => max(0, min(100, $progress))]) > 0;
     }
 
     protected function getNextAvailableJob(string $queue, int $expiration): ?array

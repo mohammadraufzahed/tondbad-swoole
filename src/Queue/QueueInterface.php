@@ -40,4 +40,8 @@ interface QueueInterface
     public function getMetrics(?string $queue = null): array;
 
     public function on(string $event, Closure $callback): void;
+
+    public function emit(string $event, array $data = []): void;
+
+    public function progress(int $id, int $progress): bool;
 }
