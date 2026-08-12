@@ -95,10 +95,32 @@ class Builder
         return $this;
     }
 
-    public function where(string|Closure $column, mixed $operator = null, mixed $value = null, string $boolean = 'and'): self
+    public function where(string|array|Closure $column, mixed $operator = null, mixed $value = null, string $boolean = 'and'): self
     {
         if ($column instanceof Closure) {
             return $this->whereNested($column, $boolean);
+        }
+
+        if (is_array($column)) {
+            if ($operator === null && $value === null) {
+                foreach ($column as $key => $val) {
+                    $this->where($key, '=', $val, $boolean);
+                }
+
+                return $this;
+            }
+
+            foreach ($column as $index => $col) {
+                if (is_array($value) && array_key_exists($col, $value)) {
+                    $val = $value[$col];
+                } else {
+                    $val = is_array($value) ? ($value[$index] ?? null) : $value;
+                }
+
+                $this->where($col, $operator, $val, $boolean);
+            }
+
+            return $this;
         }
 
         if (func_num_args() === 2) {
@@ -119,7 +141,7 @@ class Builder
         return $this;
     }
 
-    public function orWhere(string|Closure $column, mixed $operator = null, mixed $value = null): self
+    public function orWhere(string|array|Closure $column, mixed $operator = null, mixed $value = null): self
     {
         if (func_num_args() === 2) {
             $value = $operator;

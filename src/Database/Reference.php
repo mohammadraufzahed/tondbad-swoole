@@ -10,7 +10,7 @@ class Reference
 {
     private ?Model $entity = null;
 
-    private readonly string $primaryKey;
+    private readonly string|array $primaryKey;
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
@@ -32,7 +32,7 @@ class Reference
         return $this->identifier;
     }
 
-    public function getPrimaryKey(): string
+    public function getPrimaryKey(): string|array
     {
         return $this->primaryKey;
     }
@@ -64,8 +64,12 @@ class Reference
 
     public function __get(string $name): mixed
     {
-        if ($name === $this->primaryKey) {
+        if (is_string($this->primaryKey) && $name === $this->primaryKey) {
             return $this->identifier;
+        }
+
+        if (is_array($this->primaryKey) && in_array($name, $this->primaryKey, true)) {
+            return $this->identifier[$name] ?? null;
         }
 
         return $this->load()->$name;
@@ -78,8 +82,12 @@ class Reference
 
     public function __isset(string $name): bool
     {
-        if ($name === $this->primaryKey) {
+        if (is_string($this->primaryKey) && $name === $this->primaryKey) {
             return true;
+        }
+
+        if (is_array($this->primaryKey) && in_array($name, $this->primaryKey, true)) {
+            return isset($this->identifier[$name]);
         }
 
         return isset($this->load()->$name);
