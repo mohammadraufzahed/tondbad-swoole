@@ -23,7 +23,16 @@ Set the app type to `grpc` in `config/app.php` or via `APP_TYPE=grpc`.
 
 ## Defining services
 
-Place `.proto` files in `protos/` and generate PHP classes with `protoc`. Generated classes live in `generated/`.
+Place `.proto` files in `protos/` and generate PHP classes with `protoc` or the bundled `composer compile-proto` script. Generated classes live in `generated/` and must be autoloaded from the consumer's `composer.json`, for example:
+
+```json
+"autoload": {
+    "psr-4": {
+        "TondbadExample\\": "generated/TondbadExample/",
+        "GPBMetadata\\": "generated/GPBMetadata/"
+    }
+}
+```
 
 ## Registering gRPC services
 
@@ -50,8 +59,8 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use TondbadExample\Greeter\SayHelloRequest;
-use TondbadExample\Greeter\SayHelloReply;
+use TondbadExample\HelloRequest;
+use TondbadExample\HelloResponse;
 
 class GreeterService
 {
@@ -60,9 +69,9 @@ class GreeterService
     ) {
     }
 
-    public function sayHello(SayHelloRequest $request): SayHelloReply
+    public function sayHello(HelloRequest $request): HelloResponse
     {
-        $reply = new SayHelloReply();
+        $reply = new HelloResponse();
         $reply->setMessage('Hello, ' . $request->getName());
 
         return $reply;
@@ -81,12 +90,6 @@ Register gRPC middleware in `config/grpc.php`:
 ```
 
 ## Running the server
-
-```bash
-php public/grpc.php
-```
-
-or
 
 ```bash
 php bin/tondbad serve:grpc --host=0.0.0.0 --port=9502

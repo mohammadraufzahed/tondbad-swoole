@@ -18,9 +18,7 @@
   ],
   "autoload": {
     "psr-4": {
-      "TondbadSwoole\\": "src/",
-      "TondbadExample\\": "generated/TondbadExample/",
-      "GPBMetadata\\": "generated/GPBMetadata/"
+      "TondbadSwoole\\": "src/"
     },
     "files": [
       "src/Support/helpers.php"
@@ -28,8 +26,7 @@
   },
   "autoload-dev": {
     "psr-4": {
-      "TondbadSwoole\\Tests\\": "tests/",
-      "App\\": "app/"
+      "TondbadSwoole\\Tests\\": "tests/"
     }
   },
   "authors": [
@@ -39,8 +36,8 @@
     }
   ],
   "scripts": {
-    "server": "php public/server.php",
-    "grpc": "php public/grpc.php",
+    "server": "php bin/tondbad serve",
+    "grpc": "php bin/tondbad serve:grpc",
     "test": "pest",
     "compile-proto": [
       "sh -c 'protoc $(find ./protos -name \"*.proto\") --proto_path=./protos --php_out=./generated --openswoole-grpc_out=./generated --plugin=protoc-gen-openswoole-grpc=$(which protoc-gen-openswoole-grpc)'"
