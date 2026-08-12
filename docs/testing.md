@@ -1,6 +1,8 @@
 # Testing
 
-Tondbād uses [Pest](https://pestphp.com/) for testing.
+Tondbād uses [Pest](https://pestphp.com/) v5 for testing.
+
+> Pest 5 and the framework test suite require **PHP 8.4+**.
 
 ## Running tests
 
@@ -10,7 +12,19 @@ composer test
 
 ## Test configuration
 
-`pest.xml` lives in the package root. The test suite is configured to use an in-memory SQLite database by default.
+`tests/Pest.php` configures the base test case for the suite:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use TondbadSwoole\Tests\Unit\TestCase;
+
+pest()->extend(TestCase::class)->in('Unit');
+```
+
+`phpunit.xml` provides PHPUnit 13 configuration and the test suite uses an in-memory SQLite database by default.
 
 ## Writing a test
 
@@ -18,10 +32,6 @@ composer test
 <?php
 
 declare(strict_types=1);
-
-use TondbadSwoole\Tests\TestCase;
-
-uses(TestCase::class);
 
 it('creates a user', function () {
     $user = User::create([
@@ -51,7 +61,7 @@ it('resolves a service', function () {
 Use an in-memory SQLite database for fast, isolated tests:
 
 ```php
-uses(TestCase::class)->beforeEach(function () {
+beforeEach(function () {
     db('sqlite')->statement('create table if not exists users (id integer primary key, name text)');
 });
 ```
