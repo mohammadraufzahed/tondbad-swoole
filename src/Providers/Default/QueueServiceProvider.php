@@ -11,6 +11,7 @@ use TondbadSwoole\Providers\Contracts\ServiceProvider;
 use TondbadSwoole\Queue\Drivers\DatabaseQueue;
 use TondbadSwoole\Queue\Failed\DatabaseFailedJobProvider;
 use TondbadSwoole\Queue\Failed\FailedJobProviderInterface;
+use TondbadSwoole\Queue\FlowProducer;
 use TondbadSwoole\Queue\QueueInterface;
 use TondbadSwoole\Queue\QueueManager;
 use TondbadSwoole\Queue\Worker;
@@ -38,6 +39,10 @@ class QueueServiceProvider extends ServiceProvider
                 $container,
                 $container->make(FailedJobProviderInterface::class),
             );
+        });
+
+        $container->singleton(FlowProducer::class, function () use ($container): FlowProducer {
+            return new FlowProducer($container->make(QueueManager::class));
         });
 
         $container->singleton(FailedJobProviderInterface::class, function () use ($container): FailedJobProviderInterface {

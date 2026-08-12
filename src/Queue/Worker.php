@@ -48,13 +48,15 @@ class Worker
             $this->container->call([$job, 'handle']);
 
             if ($connection !== null && $job->getJobId() !== null) {
-                if ($job->shouldRemoveOnComplete()) {
-                    $connection->delete($job->getJobId());
-                } else {
-                    $connection->markCompleted($job->getJobId());
+                if ($job->getResult() !== null) {
+                    $connection->setResult($job->getJobId(), $job->getResult());
                 }
 
-                $connection->emit('completed', ['job' => $job, 'result' => null]);
+                $connection->markCompleted($job->getJobId());
+
+                if ($job->shouldRemoveOnComplete()) {
+                    $connection->delete($job->getJobId());
+                }
             }
         } catch (Throwable $e) {
             $this->handleException($job, $connection, $e, $maxTries);
@@ -68,17 +70,15 @@ class Worker
         $tries = $job->getMaxTries() ?? $maxTries;
 
         if ($job->hasFailed($tries)) {
-            $connection?->emit('failed', ['job' => $job, 'exception' => $e]);
-
             if ($job->shouldRemoveOnFail()) {
                 $this->fail($job, $e);
             }
 
             if ($connection !== null && $job->getJobId() !== null) {
+                $connection->markFailed($job->getJobId(), $e);
+
                 if ($job->shouldRemoveOnFail()) {
                     $connection->delete($job->getJobId());
-                } else {
-                    $connection->markFailed($job->getJobId());
                 }
             }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Queue\Drivers;
 
+use Throwable;
 use TondbadSwoole\Database\ConnectionInterface;
 use TondbadSwoole\Queue\Jobs\Job;
 use TondbadSwoole\Queue\Jobs\JobStatus;
@@ -40,7 +41,13 @@ class DatabaseQueue extends Queue
         }
 
         $delay = $job->getDelay();
-        $status = $delay > 0 ? JobStatus::Delayed : JobStatus::Waiting;
+        $childrenCount = $job->getChildrenCount() ?? 0;
+        $status = match (true) {
+            $childrenCount > 0 => JobStatus::WaitingChildren,
+            $delay > 0 => JobStatus::Delayed,
+            default => JobStatus::Waiting,
+        };
+        $availableAt = $childrenCount > 0 ? PHP_INT_MAX : time() + $delay;
         $backoff = $job->getBackoff();
 
         $id = (int) $this->connection->table($this->table)->insertGetId([
@@ -48,7 +55,7 @@ class DatabaseQueue extends Queue
             'payload' => $this->createPayload($job),
             'attempts' => $job->getAttempts(),
             'reserved_at' => null,
-            'available_at' => time() + $delay,
+            'available_at' => $availableAt,
             'created_at' => time(),
             'priority' => $job->getPriority() ?? 0,
             'delay' => $delay > 0 ? $delay : null,
@@ -56,6 +63,9 @@ class DatabaseQueue extends Queue
             'backoff_value' => $backoff?->getValueForStorage(),
             'timeout' => $job->getTimeout(),
             'deduplication_id' => $customId,
+            'parent_id' => $job->getParentId(),
+            'children_count' => $job->getChildrenCount() ?? 0,
+            'completed_children_count' => 0,
             'status' => $status->value,
         ]);
 
@@ -118,6 +128,12 @@ class DatabaseQueue extends Queue
 
     public function delete(int $id): bool
     {
+        $row = $this->connection->table($this->table)->where('id', $id)->first();
+
+        if ($row !== null && (int) $row['children_count'] > 0) {
+            $this->connection->table($this->table)->where('parent_id', $id)->delete();
+        }
+
         return $this->connection->table($this->table)->where('id', $id)->delete() > 0;
     }
 
@@ -142,6 +158,103 @@ class DatabaseQueue extends Queue
         }
 
         return $updated;
+    }
+
+    public function markCompleted(int $id): bool
+    {
+        $row = $this->connection->table($this->table)->where('id', $id)->first();
+
+        if ($row === null) {
+            return false;
+        }
+
+        $updated = $this->connection->table($this->table)
+            ->where('id', $id)
+            ->update([
+                'reserved_at' => null,
+                'status' => JobStatus::Completed->value,
+            ]) > 0;
+
+        if (!$updated) {
+            return false;
+        }
+
+        $instance = $this->createJob($row);
+        $this->emit('completed', ['job' => $instance, 'result' => $instance->getResult()]);
+
+        $parentId = $row['parent_id'] ?? null;
+
+        if ($parentId !== null) {
+            $this->completeChild((int) $parentId);
+        }
+
+        return true;
+    }
+
+    public function markFailed(int $id, ?Throwable $exception = null): bool
+    {
+        $row = $this->connection->table($this->table)->where('id', $id)->first();
+
+        if ($row === null) {
+            return false;
+        }
+
+        $updated = $this->connection->table($this->table)
+            ->where('id', $id)
+            ->update([
+                'reserved_at' => null,
+                'status' => JobStatus::Failed->value,
+            ]) > 0;
+
+        if (!$updated) {
+            return false;
+        }
+
+        $instance = $this->createJob($row);
+        $this->emit('failed', ['job' => $instance, 'exception' => $exception]);
+
+        $parentId = $row['parent_id'] ?? null;
+
+        if ($parentId !== null) {
+            $this->failParent((int) $parentId, $exception);
+        }
+
+        return true;
+    }
+
+    public function progress(int $id, int $progress): bool
+    {
+        return $this->connection->table($this->table)
+            ->where('id', $id)
+            ->update(['progress' => max(0, min(100, $progress))]) > 0;
+    }
+
+    public function setResult(int $id, mixed $value): bool
+    {
+        return $this->connection->table($this->table)
+            ->where('id', $id)
+            ->update(['result' => serialize($value)]) > 0;
+    }
+
+    public function getChildren(int $parentId): array
+    {
+        $rows = $this->connection->table($this->table)
+            ->where('parent_id', $parentId)
+            ->get();
+
+        $children = [];
+
+        foreach ($rows as $row) {
+            $job = $this->createJob($row);
+
+            $children[(int) $row['id']] = [
+                'job' => $job,
+                'result' => $row['result'] !== null ? unserialize($row['result']) : null,
+                'status' => $row['status'],
+            ];
+        }
+
+        return $children;
     }
 
     public function getJob(int $id): ?Job
@@ -270,31 +383,54 @@ class DatabaseQueue extends Queue
         return $row !== null;
     }
 
-    public function markCompleted(int $id): bool
+    protected function completeChild(int $parentId): void
     {
-        return $this->connection->table($this->table)
-            ->where('id', $id)
-            ->update([
-                'reserved_at' => null,
-                'status' => JobStatus::Completed->value,
-            ]) > 0;
+        $table = $this->connection->getGrammar()->wrapTable($this->table);
+
+        $this->connection->update(
+            "update {$table} set completed_children_count = completed_children_count + 1 where id = ?",
+            [$parentId]
+        );
+
+        $parent = $this->connection->table($this->table)->where('id', $parentId)->first();
+
+        if ($parent === null) {
+            return;
+        }
+
+        $completed = (int) $parent['completed_children_count'];
+        $total = (int) $parent['children_count'];
+
+        if ($completed >= $total && $total > 0) {
+            $this->connection->table($this->table)
+                ->where('id', $parentId)
+                ->update([
+                    'reserved_at' => null,
+                    'available_at' => time(),
+                    'status' => JobStatus::Waiting->value,
+                ]);
+
+            $this->emit('waiting', ['id' => $parentId, 'queue' => $parent['queue']]);
+        }
     }
 
-    public function markFailed(int $id): bool
+    protected function failParent(int $parentId, ?Throwable $exception): void
     {
-        return $this->connection->table($this->table)
-            ->where('id', $id)
+        $parent = $this->connection->table($this->table)->where('id', $parentId)->first();
+
+        if ($parent === null) {
+            return;
+        }
+
+        $this->connection->table($this->table)
+            ->where('id', $parentId)
             ->update([
                 'reserved_at' => null,
                 'status' => JobStatus::Failed->value,
-            ]) > 0;
-    }
+            ]);
 
-    public function progress(int $id, int $progress): bool
-    {
-        return $this->connection->table($this->table)
-            ->where('id', $id)
-            ->update(['progress' => max(0, min(100, $progress))]) > 0;
+        $instance = $this->createJob($parent);
+        $this->emit('failed', ['job' => $instance, 'exception' => $exception]);
     }
 
     protected function getNextAvailableJob(string $queue, int $expiration): ?array
@@ -327,6 +463,18 @@ class DatabaseQueue extends Queue
         $instance->setJobId((int) $job['id']);
         $instance->setAttempts((int) $job['attempts']);
         $instance->onQueue($job['queue']);
+
+        if ($job['parent_id'] !== null) {
+            $instance->setParentId((int) $job['parent_id']);
+        }
+
+        if ($job['children_count'] !== null) {
+            $instance->setChildrenCount((int) $job['children_count']);
+        }
+
+        if ($job['result'] !== null) {
+            $instance->setResult(unserialize($job['result']));
+        }
 
         return $instance;
     }

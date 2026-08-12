@@ -15,6 +15,10 @@ abstract class Job
 
     protected ?int $jobId = null;
 
+    protected ?int $parentId = null;
+
+    protected ?int $childrenCount = null;
+
     protected int $attempts = 0;
 
     public ?int $tries = null;
@@ -38,6 +42,8 @@ abstract class Job
     protected bool $removeOnFail = true;
 
     protected int $progress = 0;
+
+    protected mixed $result = null;
 
     /**
      * @var array<string, string>
@@ -215,6 +221,55 @@ abstract class Job
     public function getConnection(): ?QueueInterface
     {
         return $this->connection;
+    }
+
+    public function setParentId(?int $parentId): self
+    {
+        $this->parentId = $parentId;
+
+        return $this;
+    }
+
+    public function getParentId(): ?int
+    {
+        return $this->parentId;
+    }
+
+    public function setChildrenCount(?int $childrenCount): self
+    {
+        $this->childrenCount = $childrenCount;
+
+        return $this;
+    }
+
+    public function getChildrenCount(): ?int
+    {
+        return $this->childrenCount;
+    }
+
+    public function setResult(mixed $result): self
+    {
+        $this->result = $result;
+
+        if ($this->connection !== null && $this->jobId !== null) {
+            $this->connection->setResult($this->jobId, $result);
+        }
+
+        return $this;
+    }
+
+    public function getResult(): mixed
+    {
+        return $this->result;
+    }
+
+    public function getChildrenValues(): array
+    {
+        if ($this->connection === null || $this->jobId === null) {
+            return [];
+        }
+
+        return $this->connection->getChildren($this->jobId);
     }
 
     public function __serialize(): array

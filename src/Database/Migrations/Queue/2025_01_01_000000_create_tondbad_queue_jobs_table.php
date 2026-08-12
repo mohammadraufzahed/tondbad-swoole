@@ -26,6 +26,7 @@ class CreateTondbadQueueJobsTable extends Migration
             $table->integer('parent_id', false, true)->nullable();
             $table->integer('children_count', false, true)->default(0);
             $table->integer('completed_children_count', false, true)->default(0);
+            $table->text('result')->nullable();
             $table->string('status', 20)->default('waiting');
         });
     }

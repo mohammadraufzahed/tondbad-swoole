@@ -109,6 +109,8 @@ use TondbadSwoole\Queue\Jobs\Backoff\ExponentialBackoff;
 - `removeOnComplete(bool $remove)` — keep or remove the job row on success (default: true).
 - `removeOnFail(bool $remove)` — keep or remove the job row on failure (default: true).
 - `progress(int $value)` — update the job's progress (0-100); persisted to the `progress` column and emits a `progress` event when a queue connection is available.
+- `setResult(mixed $value)` — store a return value for the job; persisted to the `result` column when a queue connection is available.
+- `getChildrenValues()` — for flow parents, returns an associative array of child results keyed by child job id: `[$id => ['job' => Job, 'result' => mixed, 'status' => string]]`.
 
 ## Sync driver
 
@@ -220,6 +222,55 @@ php bin/tondbad queue:retry <id> --connection=database --queue=default
 php bin/tondbad queue:retry-failed --connection=database --queue=default
 ```
 
+## Flow jobs
+
+`FlowProducer` builds a parent job that waits until all child jobs finish, then runs and receives the child results:
+
+```php
+use TondbadSwoole\Queue\Flow\Flow;
+use TondbadSwoole\Queue\Flow\FlowChild;
+use TondbadSwoole\Queue\FlowProducer;
+
+$flow = Flow::create(
+    new GenerateReport(),
+    [
+        FlowChild::create(new FetchUsers()),
+        FlowChild::create(new FetchOrders()),
+    ]
+);
+
+$producer = app()->container->make(FlowProducer::class);
+$producer->add($flow, 'database', 'default');
+```
+
+Children can call `setResult()` inside `handle()`:
+
+```php
+class FetchUsers extends Job
+{
+    public function handle(): void
+    {
+        $users = // ...
+        $this->setResult($users);
+    }
+}
+```
+
+The parent reads the values in its `handle()`:
+
+```php
+public function handle(): void
+{
+    $children = $this->getChildrenValues();
+
+    foreach ($children as $id => ['job' => $job, 'result' => $result]) {
+        // $job is the child Job instance, $result is the value from setResult()
+    }
+}
+```
+
+If any child fails after exhausting its `tries`, the parent is marked `failed` automatically.
+
 ## Redis queue
 
 The `redis` driver pushes jobs to a Redis list and pops them in the worker:
@@ -240,3 +291,4 @@ Jobs that fail after the configured number of tries are stored in a `failed_jobs
 4. `handle()` may call `$this->progress($value)` to update the `progress` column and emit a `progress` event.
 5. On success, the job is deleted by default. If `removeOnComplete(false)` was used, the row is kept with `status = completed` and a `completed` event is emitted.
 6. On failure, the attempts counter is checked; if the maximum is reached the job is moved to failed jobs (or kept with `status = failed` when `removeOnFail(false)`) and a `failed` event is emitted, otherwise it is released with the configured backoff delay.
+7. For flow jobs, the parent waits in `waiting_children` until all children complete. Children pass results back to the parent via `setResult()`. If any child fails, the parent is marked `failed` too.

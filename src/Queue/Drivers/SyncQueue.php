@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Queue\Drivers;
 
+use Throwable;
 use TondbadSwoole\Queue\Jobs\Job;
 use TondbadSwoole\Queue\Jobs\JobStatus;
 use TondbadSwoole\Queue\Queue;
@@ -51,7 +52,7 @@ class SyncQueue extends Queue
         return true;
     }
 
-    public function markFailed(int $id): bool
+    public function markFailed(int $id, ?Throwable $exception = null): bool
     {
         return true;
     }
@@ -59,6 +60,16 @@ class SyncQueue extends Queue
     public function progress(int $id, int $progress): bool
     {
         return true;
+    }
+
+    public function setResult(int $id, mixed $value): bool
+    {
+        return true;
+    }
+
+    public function getChildren(int $parentId): array
+    {
+        return [];
     }
 
     public function getJob(int $id): ?Job
