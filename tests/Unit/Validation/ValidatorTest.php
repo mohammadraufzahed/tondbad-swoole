@@ -134,3 +134,32 @@ it('uses custom error messages', function () {
 
     expect($validator->errors()['email'][0])->toBe('We need your email.');
 });
+
+it('supports custom rules via extend', function () {
+    $custom = new class() implements \TondbadSwoole\Validation\Contracts\Rule {
+        public function getName(): string
+        {
+            return 'uppercase';
+        }
+
+        public function passes(mixed $value, string $attribute, array $parameters, array $data, ?\TondbadSwoole\Database\DatabaseManager $databaseManager): bool
+        {
+            return is_string($value) && strtoupper($value) === $value;
+        }
+
+        public function message(string $attribute, array $parameters): string
+        {
+            return 'The :attribute must be uppercase.';
+        }
+    };
+
+    $validator = new Validator(
+        ['code' => 'abc'],
+        ['code' => 'required|uppercase'],
+    );
+
+    $validator->extend('uppercase', $custom);
+
+    expect($validator->fails())->toBeTrue();
+    expect($validator->errors()['code'][0])->toBe('The code must be uppercase.');
+});

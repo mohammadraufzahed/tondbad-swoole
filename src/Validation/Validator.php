@@ -4,8 +4,38 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Validation;
 
-use DateTimeImmutable;
 use TondbadSwoole\Database\DatabaseManager;
+use TondbadSwoole\Validation\Contracts\Rule;
+use TondbadSwoole\Validation\Rules\After;
+use TondbadSwoole\Validation\Rules\Alpha;
+use TondbadSwoole\Validation\Rules\AlphaDash;
+use TondbadSwoole\Validation\Rules\AlphaNum;
+use TondbadSwoole\Validation\Rules\ArrayRule;
+use TondbadSwoole\Validation\Rules\Before;
+use TondbadSwoole\Validation\Rules\Boolean;
+use TondbadSwoole\Validation\Rules\Confirmed;
+use TondbadSwoole\Validation\Rules\Date;
+use TondbadSwoole\Validation\Rules\DateFormat;
+use TondbadSwoole\Validation\Rules\Different;
+use TondbadSwoole\Validation\Rules\Digits;
+use TondbadSwoole\Validation\Rules\DigitsBetween;
+use TondbadSwoole\Validation\Rules\Email;
+use TondbadSwoole\Validation\Rules\Exists;
+use TondbadSwoole\Validation\Rules\In;
+use TondbadSwoole\Validation\Rules\IntRule;
+use TondbadSwoole\Validation\Rules\Ip;
+use TondbadSwoole\Validation\Rules\Json;
+use TondbadSwoole\Validation\Rules\Max;
+use TondbadSwoole\Validation\Rules\Min;
+use TondbadSwoole\Validation\Rules\NotIn;
+use TondbadSwoole\Validation\Rules\Numeric;
+use TondbadSwoole\Validation\Rules\Regex;
+use TondbadSwoole\Validation\Rules\Required;
+use TondbadSwoole\Validation\Rules\Same;
+use TondbadSwoole\Validation\Rules\StringRule;
+use TondbadSwoole\Validation\Rules\Unique;
+use TondbadSwoole\Validation\Rules\Url;
+use TondbadSwoole\Validation\Rules\Uuid;
 
 class Validator
 {
@@ -13,6 +43,11 @@ class Validator
      * @var array<string, list<string>>
      */
     private array $errors = [];
+
+    /**
+     * @var array<string, Rule>
+     */
+    private array $ruleRegistry = [];
 
     /**
      * @param array<string, mixed> $data
@@ -25,6 +60,17 @@ class Validator
         private readonly array $messages = [],
         private readonly ?DatabaseManager $databaseManager = null,
     ) {
+        $this->registerDefaultRules();
+    }
+
+    /**
+     * Register a custom rule or override a built-in one.
+     */
+    public function extend(string $name, Rule $rule): self
+    {
+        $this->ruleRegistry[trim($name)] = $rule;
+
+        return $this;
     }
 
     public function fails(): bool
@@ -113,13 +159,13 @@ class Validator
                 continue;
             }
 
-            if ($rule === 'bail') {
-                $bail = true;
-
+            if ($rule === 'sometimes') {
                 continue;
             }
 
-            if (in_array($rule, ['sometimes'], true)) {
+            if ($rule === 'bail') {
+                $bail = true;
+
                 continue;
             }
 
@@ -145,39 +191,13 @@ class Validator
     {
         [$name, $parameters] = $this->parseRule($rule);
 
-        return match ($name) {
-            'required' => $this->validateRequired($value),
-            'email' => is_string($value) && filter_var($value, FILTER_VALIDATE_EMAIL) !== false,
-            'string' => is_string($value),
-            'int', 'integer' => filter_var($value, FILTER_VALIDATE_INT) !== false,
-            'numeric' => is_numeric($value),
-            'bool', 'boolean' => filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) !== null,
-            'array' => is_array($value),
-            'min' => $this->validateMin($value, $parameters),
-            'max' => $this->validateMax($value, $parameters),
-            'in' => in_array($value, $parameters, true),
-            'not_in' => !in_array($value, $parameters, true),
-            'regex' => $this->validateRegex($value, $parameters),
-            'confirmed' => isset($this->data["{$attribute}_confirmation"]) && $this->data["{$attribute}_confirmation"] === $value,
-            'same' => isset($this->data[$parameters[0] ?? '']) && $this->data[$parameters[0] ?? ''] === $value,
-            'different' => !isset($this->data[$parameters[0] ?? '']) || $this->data[$parameters[0] ?? ''] !== $value,
-            'unique' => $this->validateUnique($attribute, $value, $parameters),
-            'exists' => $this->validateExists($attribute, $value, $parameters),
-            'date' => is_string($value) && strtotime($value) !== false,
-            'date_format' => $this->validateDateFormat($value, $parameters),
-            'before' => $this->validateBefore($value, $parameters),
-            'after' => $this->validateAfter($value, $parameters),
-            'uuid' => $this->validateUuid($value),
-            'ip' => filter_var($value, FILTER_VALIDATE_IP) !== false,
-            'url' => filter_var($value, FILTER_VALIDATE_URL) !== false,
-            'alpha' => is_string($value) && ctype_alpha($value),
-            'alpha_num' => is_string($value) && ctype_alnum($value),
-            'alpha_dash' => is_string($value) && preg_match('/^[A-Za-z0-9_-]+$/', $value) === 1,
-            'json' => $this->validateJson($value),
-            'digits' => is_string($value) && ctype_digit($value),
-            'digits_between' => $this->validateDigitsBetween($value, $parameters),
-            default => true,
-        };
+        $ruleInstance = $this->ruleRegistry[$name] ?? null;
+
+        if ($ruleInstance === null) {
+            return false;
+        }
+
+        return $ruleInstance->passes($value, $attribute, $parameters, $this->data, $this->databaseManager);
     }
 
     /**
@@ -194,223 +214,6 @@ class Validator
         return [trim($rule), []];
     }
 
-    private function validateRequired(mixed $value): bool
-    {
-        if ($value === null) {
-            return false;
-        }
-
-        if (is_string($value) && trim($value) === '') {
-            return false;
-        }
-
-        if (is_array($value) && count($value) === 0) {
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * @param list<string> $parameters
-     */
-    private function validateMin(mixed $value, array $parameters): bool
-    {
-        $limit = (int) ($parameters[0] ?? 0);
-
-        if (is_array($value)) {
-            return count($value) >= $limit;
-        }
-
-        if (is_numeric($value) && !is_bool($value)) {
-            return (float) $value >= $limit;
-        }
-
-        if (is_string($value)) {
-            return mb_strlen($value) >= $limit;
-        }
-
-        return true;
-    }
-
-    /**
-     * @param list<string> $parameters
-     */
-    private function validateMax(mixed $value, array $parameters): bool
-    {
-        $limit = (int) ($parameters[0] ?? 0);
-
-        if (is_array($value)) {
-            return count($value) <= $limit;
-        }
-
-        if (is_numeric($value) && !is_bool($value)) {
-            return (float) $value <= $limit;
-        }
-
-        if (is_string($value)) {
-            return mb_strlen($value) <= $limit;
-        }
-
-        return true;
-    }
-
-    /**
-     * @param list<string> $parameters
-     */
-    private function validateRegex(mixed $value, array $parameters): bool
-    {
-        if (!is_string($value) || count($parameters) === 0) {
-            return false;
-        }
-
-        return @preg_match($parameters[0], $value) === 1;
-    }
-
-    /**
-     * @param list<string> $parameters
-     */
-    private function validateDateFormat(mixed $value, array $parameters): bool
-    {
-        if (!is_string($value) || count($parameters) === 0) {
-            return false;
-        }
-
-        $date = DateTimeImmutable::createFromFormat($parameters[0], $value);
-
-        return $date !== false && $date->format($parameters[0]) === $value;
-    }
-
-    /**
-     * @param list<string> $parameters
-     */
-    private function validateBefore(mixed $value, array $parameters): bool
-    {
-        if (!is_string($value) || count($parameters) === 0) {
-            return false;
-        }
-
-        $other = $parameters[0];
-
-        if (array_key_exists($other, $this->data)) {
-            $other = $this->data[$other];
-        }
-
-        return strtotime($value) < strtotime($other);
-    }
-
-    /**
-     * @param list<string> $parameters
-     */
-    private function validateAfter(mixed $value, array $parameters): bool
-    {
-        if (!is_string($value) || count($parameters) === 0) {
-            return false;
-        }
-
-        $other = $parameters[0];
-
-        if (array_key_exists($other, $this->data)) {
-            $other = $this->data[$other];
-        }
-
-        return strtotime($value) > strtotime($other);
-    }
-
-    private function validateUuid(mixed $value): bool
-    {
-        if (!is_string($value)) {
-            return false;
-        }
-
-        return preg_match('/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/', $value) === 1;
-    }
-
-    private function validateJson(mixed $value): bool
-    {
-        if (!is_string($value)) {
-            return false;
-        }
-
-        json_decode($value);
-
-        return json_last_error() === JSON_ERROR_NONE;
-    }
-
-    /**
-     * @param list<string> $parameters
-     */
-    private function validateDigitsBetween(mixed $value, array $parameters): bool
-    {
-        if (!is_string($value) || count($parameters) < 2) {
-            return false;
-        }
-
-        if (!ctype_digit($value)) {
-            return false;
-        }
-
-        $min = (int) $parameters[0];
-        $max = (int) $parameters[1];
-        $length = strlen($value);
-
-        return $length >= $min && $length <= $max;
-    }
-
-    /**
-     * @param list<string> $parameters
-     */
-    private function validateUnique(string $attribute, mixed $value, array $parameters): bool
-    {
-        if ($this->databaseManager === null) {
-            return true;
-        }
-
-        if (!is_string($value) && !is_numeric($value) && !is_bool($value)) {
-            return false;
-        }
-
-        $table = $parameters[0] ?? '';
-        $column = $parameters[1] ?? $attribute;
-
-        if ($table === '') {
-            return true;
-        }
-
-        $connection = $this->databaseManager->connection();
-
-        $result = $connection->table($table)->where($column, '=', (string) $value)->count();
-
-        return $result === 0;
-    }
-
-    /**
-     * @param list<string> $parameters
-     */
-    private function validateExists(string $attribute, mixed $value, array $parameters): bool
-    {
-        if ($this->databaseManager === null) {
-            return true;
-        }
-
-        if ($value === null) {
-            return false;
-        }
-
-        $table = $parameters[0] ?? '';
-        $column = $parameters[1] ?? $attribute;
-
-        if ($table === '') {
-            return true;
-        }
-
-        $connection = $this->databaseManager->connection();
-
-        $result = $connection->table($table)->where($column, '=', (string) $value)->count();
-
-        return $result > 0;
-    }
-
     private function addError(string $attribute, string $rule): void
     {
         $this->errors[$attribute][] = $this->resolveMessage($attribute, $rule);
@@ -421,68 +224,87 @@ class Validator
         $key = "{$attribute}.{$rule}";
 
         if (isset($this->messages[$key])) {
-            return $this->messages[$key];
+            return $this->replacePlaceholders($this->messages[$key], $attribute, $this->parseRule($rule)[1]);
         }
 
-        if (isset($this->messages[$rule])) {
-            return $this->messages[$rule];
+        [$name, $parameters] = $this->parseRule($rule);
+
+        if (isset($this->messages[$name])) {
+            return $this->replacePlaceholders($this->messages[$name], $attribute, $parameters);
         }
 
-        $name = $this->parseRule($rule)[0];
+        $ruleInstance = $this->ruleRegistry[$name] ?? null;
 
+        $message = $ruleInstance !== null
+            ? $ruleInstance->message($attribute, $parameters)
+            : 'The :attribute field is invalid.';
+
+        return $this->replacePlaceholders($message, $attribute, $parameters);
+    }
+
+    /**
+     * @param list<string> $parameters
+     */
+    private function replacePlaceholders(string $message, string $attribute, array $parameters): string
+    {
         $replacements = [
             ':attribute' => str_replace(['_', '.'], ' ', $attribute),
         ];
 
-        if (str_contains($rule, ':')) {
-            [, $params] = explode(':', $rule, 2);
-            $params = explode(',', $params);
-
-            foreach ($params as $index => $param) {
-                $replacements[":param{$index}"] = $param;
-                $replacements[[':min', ':max', ':value', ':other'][$index] ?? ":param{$index}"] = $param;
-            }
+        foreach ($parameters as $index => $parameter) {
+            $replacements[":param{$index}"] = $parameter;
         }
 
-        $message = $this->defaultMessage($name);
+        $aliases = [':min', ':max', ':value', ':format', ':other'];
+        foreach ($parameters as $index => $parameter) {
+            if (isset($aliases[$index])) {
+                $replacements[$aliases[$index]] = $parameter;
+            }
+        }
 
         return strtr($message, $replacements);
     }
 
-    private function defaultMessage(string $rule): string
+    private function registerDefaultRules(): void
     {
-        return match ($rule) {
-            'required' => 'The :attribute field is required.',
-            'email' => 'The :attribute must be a valid email address.',
-            'string' => 'The :attribute must be a string.',
-            'int', 'integer' => 'The :attribute must be an integer.',
-            'numeric' => 'The :attribute must be numeric.',
-            'bool', 'boolean' => 'The :attribute must be a boolean.',
-            'array' => 'The :attribute must be an array.',
-            'min' => 'The :attribute must be at least :min.',
-            'max' => 'The :attribute may not be greater than :max.',
-            'in' => 'The selected :attribute is invalid.',
-            'not_in' => 'The selected :attribute is invalid.',
-            'regex' => 'The :attribute format is invalid.',
-            'confirmed' => 'The :attribute confirmation does not match.',
-            'same' => 'The :attribute and :other must match.',
-            'different' => 'The :attribute and :other must be different.',
-            'unique' => 'The :attribute has already been taken.',
-            'exists' => 'The selected :attribute is invalid.',
-            'date' => 'The :attribute is not a valid date.',
-            'date_format' => 'The :attribute does not match the format :value.',
-            'before' => 'The :attribute must be a date before :value.',
-            'after' => 'The :attribute must be a date after :value.',
-            'uuid' => 'The :attribute must be a valid UUID.',
-            'ip' => 'The :attribute must be a valid IP address.',
-            'url' => 'The :attribute must be a valid URL.',
-            'alpha' => 'The :attribute may only contain letters.',
-            'alpha_num' => 'The :attribute may only contain letters and numbers.',
-            'alpha_dash' => 'The :attribute may only contain letters, numbers, dashes and underscores.',
-            'json' => 'The :attribute must be a valid JSON string.',
-            'digits' => 'The :attribute must be digits.',
-            'digits_between' => 'The :attribute must have between :param0 and :param1 digits.',
-            default => 'The :attribute field is invalid.',
-        };
+        $rules = [
+            new Required(),
+            new Email(),
+            new StringRule(),
+            new IntRule(),
+            new Numeric(),
+            new Boolean(),
+            new ArrayRule(),
+            new Min(),
+            new Max(),
+            new In(),
+            new NotIn(),
+            new Regex(),
+            new Confirmed(),
+            new Same(),
+            new Different(),
+            new Unique(),
+            new Exists(),
+            new Date(),
+            new DateFormat(),
+            new Before(),
+            new After(),
+            new Uuid(),
+            new Ip(),
+            new Url(),
+            new Alpha(),
+            new AlphaNum(),
+            new AlphaDash(),
+            new Json(),
+            new Digits(),
+            new DigitsBetween(),
+        ];
+
+        foreach ($rules as $rule) {
+            $this->ruleRegistry[$rule->getName()] = $rule;
+        }
+
+        $this->ruleRegistry['integer'] = $this->ruleRegistry['int'] ?? new IntRule();
+        $this->ruleRegistry['boolean'] = $this->ruleRegistry['bool'] ?? new Boolean();
     }
 }
