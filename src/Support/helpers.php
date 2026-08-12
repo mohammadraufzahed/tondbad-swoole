@@ -8,6 +8,7 @@ use TondbadSwoole\Core\Config;
 use TondbadSwoole\Database\ConnectionInterface;
 use TondbadSwoole\Database\DatabaseManager;
 use TondbadSwoole\Database\Schema\Builder as SchemaBuilder;
+use TondbadSwoole\Events\Dispatcher;
 use TondbadSwoole\Queue\QueueInterface;
 use TondbadSwoole\Queue\QueueManager;
 use TondbadSwoole\Scheduling\Schedule;
@@ -72,5 +73,12 @@ if (!function_exists('schedule')) {
     function schedule(): ?Schedule
     {
         return app()?->container->make(Schedule::class);
+    }
+}
+
+if (!function_exists('event')) {
+    function event(string|object $event, mixed $payload = null): array
+    {
+        return app()?->container->make(Dispatcher::class)->dispatch($event, $payload) ?? [];
     }
 }

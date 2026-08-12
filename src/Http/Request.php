@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace TondbadSwoole\Http;
 
 use OpenSwoole\Http\Request as SwooleRequest;
+use TondbadSwoole\Database\DatabaseManager;
+use TondbadSwoole\Validation\ValidationException;
+use TondbadSwoole\Validation\Validator;
 
 class Request
 {
@@ -93,7 +96,13 @@ class Request
 
     public function json(): ?array
     {
-        $raw = $this->request->rawContent();
+        $contentType = $this->header('Content-Type', '');
+
+        if (!str_contains(strtolower($contentType), 'application/json')) {
+            return null;
+        }
+
+        $raw = @$this->request->rawContent();
 
         if ($raw === '' || $raw === false || $raw === null) {
             return null;
@@ -146,5 +155,20 @@ class Request
     public function __isset(string $name): bool
     {
         return isset($this->request->$name);
+    }
+
+    /**
+     * @param array<string, string|list<string>> $rules
+     * @param array<string, string> $messages
+     * @return array<string, mixed>
+     * @throws ValidationException
+     */
+    public function validate(array $rules, array $messages = []): array
+    {
+        $manager = function_exists('app') ? app()?->container->make(DatabaseManager::class) : null;
+
+        $validator = new Validator($this->all(), $rules, $messages, $manager);
+
+        return $validator->validated();
     }
 }
