@@ -12,11 +12,14 @@ class EntityManager implements EntityManagerInterface
 
     private readonly IdentityMap $identityMap;
 
+    private readonly EntityEventManager $eventManager;
+
     public function __construct(
         private readonly ConnectionInterface $connection,
     ) {
         $this->identityMap = new IdentityMap();
-        $this->unitOfWork = new UnitOfWork($this, $this->identityMap);
+        $this->eventManager = new EntityEventManager();
+        $this->unitOfWork = new UnitOfWork($this, $this->identityMap, $this->eventManager);
     }
 
     public function persist(object $entity): self
@@ -94,6 +97,11 @@ class EntityManager implements EntityManagerInterface
     public function getUnitOfWork(): UnitOfWorkInterface
     {
         return $this->unitOfWork;
+    }
+
+    public function getEventManager(): EntityEventManager
+    {
+        return $this->eventManager;
     }
 
     public function getConnection(): ConnectionInterface

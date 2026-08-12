@@ -24,5 +24,7 @@ interface EntityManagerInterface
 
     public function getUnitOfWork(): UnitOfWorkInterface;
 
+    public function getEventManager(): EntityEventManager;
+
     public function getConnection(): ConnectionInterface;
 }

@@ -20,6 +20,7 @@ class UnitOfWork implements UnitOfWorkInterface
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly IdentityMap $identityMap,
+        private readonly ?EntityEventManager $eventManager = null,
     ) {
         $this->states = new WeakMap();
     }
@@ -46,6 +47,7 @@ class UnitOfWork implements UnitOfWorkInterface
         if ($entity->exists) {
             $this->identityMap->add($entity);
             $this->states[$entity] = self::STATE_MANAGED;
+            $this->eventManager?->dispatchEvent('postLoad', $entity);
         } else {
             $this->states[$entity] = self::STATE_NEW;
         }
@@ -74,24 +76,42 @@ class UnitOfWork implements UnitOfWorkInterface
         $entities = $this->getTrackedEntities();
 
         foreach ($entities as $entity) {
+            $this->eventManager?->dispatchEvent('preFlush', $entity);
+        }
+
+        foreach ($entities as $entity) {
             $state = $this->states[$entity] ?? self::STATE_DETACHED;
 
             switch ($state) {
                 case self::STATE_NEW:
+                    $this->eventManager?->dispatchEvent('prePersist', $entity);
                     $this->executeInsert($entity);
+                    $this->eventManager?->dispatchEvent('postPersist', $entity);
                     break;
 
                 case self::STATE_MANAGED:
+                    $this->eventManager?->dispatchEvent('preUpdate', $entity);
                     $this->executeUpdate($entity);
+                    $this->eventManager?->dispatchEvent('postUpdate', $entity);
                     break;
 
                 case self::STATE_REMOVED:
+                    $this->eventManager?->dispatchEvent('preRemove', $entity);
                     $this->executeDelete($entity);
+                    $this->eventManager?->dispatchEvent('postRemove', $entity);
                     break;
             }
         }
 
+        foreach ($entities as $entity) {
+            $this->eventManager?->dispatchEvent('onFlush', $entity);
+        }
+
         $this->cleanupAfterFlush($entities);
+
+        foreach ($entities as $entity) {
+            $this->eventManager?->dispatchEvent('postFlush', $entity);
+        }
     }
 
     public function clear(?object $entity = null): void
