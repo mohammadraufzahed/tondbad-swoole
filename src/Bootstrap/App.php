@@ -172,6 +172,8 @@ class App
     {
         $this->boot();
 
+        $this->enableSwooleHooks();
+
         $server = $this->config->get('app.type', 'http') === 'http'
             ? $this->container->make(HttpServer::class)
             : $this->container->make(GrpcServer::class);
@@ -195,6 +197,19 @@ class App
 
             pcntl_signal($sigterm, fn() => $server->shutdown());
             pcntl_signal($sigint, fn() => $server->shutdown());
+        }
+    }
+
+    private function enableSwooleHooks(): void
+    {
+        if (!class_exists(\OpenSwoole\Runtime::class)) {
+            return;
+        }
+
+        $flags = (int) \OpenSwoole\Runtime::getHookFlags();
+
+        if (($flags & \OpenSwoole\Runtime::HOOK_TCP) === 0) {
+            \OpenSwoole\Runtime::enableCoroutine(\OpenSwoole\Runtime::HOOK_TCP);
         }
     }
 }

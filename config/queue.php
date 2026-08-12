@@ -21,9 +21,15 @@ return [
 
         'redis' => [
             'driver' => 'redis',
-            'connection' => $env->get('queue.redis.connection', 'default'),
+            'scheme' => $env->get('queue.redis.scheme', 'tcp'),
+            'host' => $env->get('queue.redis.host', '127.0.0.1'),
+            'port' => (int) $env->get('queue.redis.port', 6379),
+            'password' => $env->get('queue.redis.password', null),
+            'database' => (int) $env->get('queue.redis.database', 0),
+            'prefix' => $env->get('queue.redis.prefix', 'tondbad'),
             'queue' => $env->get('queue.redis.queue', 'default'),
             'retry_after' => (int) $env->get('queue.redis.retry_after', 60),
+            'block_for' => (int) $env->get('queue.redis.block_for', 1),
         ],
     ],
 
