@@ -109,6 +109,13 @@ class EntityManager implements EntityManagerInterface
         return $this->connection;
     }
 
+    public function getRepository(string $class): EntityRepository
+    {
+        $this->assertModelClass($class);
+
+        return new EntityRepository($this, $class);
+    }
+
     private function assertModel(object $entity): void
     {
         if (!$entity instanceof Model) {
