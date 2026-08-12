@@ -10,6 +10,7 @@ use TondbadSwoole\Database\DatabaseManager;
 use TondbadSwoole\Database\Schema\Builder as SchemaBuilder;
 use TondbadSwoole\Queue\QueueInterface;
 use TondbadSwoole\Queue\QueueManager;
+use TondbadSwoole\Scheduling\Schedule;
 
 if (!function_exists('app')) {
     function app(): ?App
@@ -64,5 +65,12 @@ if (!function_exists('queue')) {
         $manager = app()?->container->make(QueueManager::class);
 
         return $manager?->connection($connection);
+    }
+}
+
+if (!function_exists('schedule')) {
+    function schedule(): ?Schedule
+    {
+        return app()?->container->make(Schedule::class);
     }
 }
