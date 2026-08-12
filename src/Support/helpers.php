@@ -10,6 +10,7 @@ use TondbadSwoole\Contracts\CacheInterface;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Database\ConnectionInterface;
 use TondbadSwoole\Database\DatabaseManager;
+use TondbadSwoole\Database\EntityManagerInterface;
 use TondbadSwoole\Database\Schema\Builder as SchemaBuilder;
 use TondbadSwoole\Events\Dispatcher;
 use TondbadSwoole\Queue\QueueInterface;
@@ -47,6 +48,13 @@ if (!function_exists('db')) {
         }
 
         return $connection !== null ? $manager->connection($connection) : $manager;
+    }
+}
+
+if (!function_exists('em')) {
+    function em(): ?EntityManagerInterface
+    {
+        return app()?->container->make(EntityManagerInterface::class);
     }
 }
 

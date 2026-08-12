@@ -6,6 +6,7 @@ namespace TondbadSwoole\Database;
 
 use PDO;
 use RuntimeException;
+use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Database\Query\Grammar;
 use TondbadSwoole\Database\Query\Grammars\MySqlGrammar;
 use TondbadSwoole\Database\Query\Grammars\PostgresGrammar;
@@ -16,7 +17,7 @@ class ConnectionFactory
     /**
      * @param array<string, mixed> $config
      */
-    public function make(array $config, string $name): ConnectionInterface
+    public function make(array $config, string $name, ContextInterface $context): ConnectionInterface
     {
         $driver = $config['driver'] ?? 'mysql';
         $grammar = $this->createGrammar($driver);
@@ -37,7 +38,7 @@ class ConnectionFactory
 
         $pool = $this->createPool($factory, $config['pool'] ?? []);
 
-        return new PdoConnection($pool, $grammar, $name);
+        return new PdoConnection($pool, $grammar, $name, $context);
     }
 
     private function createGrammar(string $driver): Grammar

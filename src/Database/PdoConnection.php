@@ -7,20 +7,18 @@ namespace TondbadSwoole\Database;
 use PDO;
 use PDOStatement;
 use Throwable;
+use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Database\Query\Builder;
 use TondbadSwoole\Database\Query\Grammar;
 use TondbadSwoole\Database\Schema\Builder as SchemaBuilder;
 
 class PdoConnection implements ConnectionInterface
 {
-    private ?PDO $transactionPdo = null;
-
-    private ?PDO $queryPdo = null;
-
     public function __construct(
         private readonly PoolInterface $pool,
         private readonly Grammar $grammar,
         private readonly string $name,
+        private readonly ContextInterface $context,
     ) {
     }
 
@@ -84,7 +82,7 @@ class PdoConnection implements ConnectionInterface
             $attempt++;
 
             $pdo = $this->pool->get();
-            $this->transactionPdo = $pdo;
+            $this->context->set($this->transactionKey(), $pdo);
 
             try {
                 $pdo->beginTransaction();
@@ -99,7 +97,7 @@ class PdoConnection implements ConnectionInterface
                     throw $e;
                 }
             } finally {
-                $this->transactionPdo = null;
+                $this->context->delete($this->transactionKey());
                 $this->pool->put($pdo);
             }
         }
@@ -124,23 +122,36 @@ class PdoConnection implements ConnectionInterface
 
     public function getPdo(): PDO
     {
-        if ($this->transactionPdo !== null) {
-            return $this->transactionPdo;
+        $transactionPdo = $this->context->get($this->transactionKey());
+
+        if ($transactionPdo instanceof PDO) {
+            return $transactionPdo;
         }
 
-        $this->queryPdo = $this->pool->get();
+        $queryPdo = $this->context->get($this->queryKey());
 
-        return $this->queryPdo;
+        if (!$queryPdo instanceof PDO) {
+            $queryPdo = $this->pool->get();
+            $this->context->set($this->queryKey(), $queryPdo);
+        }
+
+        return $queryPdo;
     }
 
     public function putPdo(PDO $pdo): void
     {
-        if ($this->transactionPdo !== null || $this->queryPdo === null || $this->queryPdo !== $pdo) {
+        $transactionPdo = $this->context->get($this->transactionKey());
+
+        if ($transactionPdo instanceof PDO) {
             return;
         }
 
-        $this->pool->put($pdo);
-        $this->queryPdo = null;
+        $queryPdo = $this->context->get($this->queryKey());
+
+        if ($queryPdo instanceof PDO && $queryPdo === $pdo) {
+            $this->pool->put($pdo);
+            $this->context->delete($this->queryKey());
+        }
     }
 
     protected function run(string $sql, array $bindings, callable $callback): mixed
@@ -166,4 +177,13 @@ class PdoConnection implements ConnectionInterface
         });
     }
 
+    private function transactionKey(): string
+    {
+        return "database.connection.{$this->name}.transaction_pdo";
+    }
+
+    private function queryKey(): string
+    {
+        return "database.connection.{$this->name}.query_pdo";
+    }
 }
