@@ -24,6 +24,10 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - `php bin/tondbad make:middleware <Name>` — create `app/Http/Middleware/<Name>Middleware.php`.
 - `php bin/tondbad make:provider <Name>` — create `app/Providers/<Name>ServiceProvider.php`.
 - `php bin/tondbad make:job <Name>` — create `app/Jobs/<Name>.php` extending `TondbadSwoole\Queue\Jobs\Job`.
+- `php bin/tondbad make:guard <Name>` — create `app/Auth/Guards/<Name>GuardFactory.php` implementing `GuardFactory`.
+- `php bin/tondbad make:policy <Name>` — create `app/Policies/<Name>Policy.php` implementing `Policy` and using `HandlesAuthorization`.
+- `php bin/tondbad hash:make <value>` — generate a bcrypt/argon hash.
+- `php bin/tondbad hash:check <value> <hash>` — verify a value against a hash.
 - `php bin/tondbad migrate` — run migrations, including the `jobs` and `failed_jobs` tables from the queue provider.
 - `php bin/tondbad queue:work --connection=<name> --queue=<name> --max-jobs=<n> --sleep=<sec>` — process queued jobs.
 
@@ -53,6 +57,26 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - `$job->dispatch()` uses the sync driver by default and processes `handle()` in the same process.
 - `queue:work --connection=database --queue=default --max-jobs=1` pops one job from `jobs` and calls `handle()`.
 - A failing `Job` with `tries` set is retried up to that number, then logged to `failed_jobs` and deleted from `jobs`.
+
+# Hashing verification
+- `HashManager` is bound as a singleton via `HashServiceProvider` and supports `bcrypt` and `argon`/`argon2id`/`argon2i` drivers.
+- Resolve it from the container: `app()->container->make(TondbadSwoole\Support\Hash\HashManager::class)`.
+- `$manager->make('secret')` produces a bcrypt hash starting with `$2y$` by default.
+- `$manager->check('secret', $hash)` returns `true` for the matching value, `false` otherwise.
+- The `hash:make` and `hash:check` CLI commands resolve `HashManager` from the container because PHP's built-in `hash()` function makes a global `hash()` helper impossible.
+
+# Auth/gate/route-binding verification
+- Create a `users` table with `id`, `email`, `api_token`, `api_key`, `password`, `name` columns and seed a test user.
+- The default auth config uses `guard=token` and `provider=users` (`database` driver), so `TokenGuard` looks for an `Authorization: Bearer <token>` header or an `api_token` query parameter.
+- `ApiKeyGuard` looks for an `X-Api-Key` header or an `api_key` query parameter.
+- `BasicAuthGuard` looks for an `Authorization: Basic <base64(email:password)>` header and validates the bcrypt password against the `users` table.
+- `Authenticate::class` middleware enforces the default guard; `Authenticate::guard('...')` enforces a named guard.
+- `#[\TondbadSwoole\Http\Attributes\Authenticate]` on a controller class or method is evaluated by `HandlerInvoker` for array handlers (`[Class::class, 'method']`).
+- `auth()` returns the `AuthManager`; `auth('guard')->check()` returns a guard. `gate()` returns the `Gate` service for ability/policy checks.
+- Route model binding works for `TondbadSwoole\Database\Model` subclasses that implement `TondbadSwoole\Routing\Contracts\UrlRoutable` (usually via `TondbadSwoole\Routing\Concerns\HasRouteBinding`): type-hint a route parameter, e.g. `function (User $user, Response $response) { ... }` on a route with `/user/{user}`.
+- For separate `api_keys` table support, use the `api_keys` provider driver (`TondbadSwoole\Auth\UserProviders\ApiKeyUserProvider`) which allows many keys per user and optional expiration.
+- `AuthManager::extend()` accepts a closure or a class implementing `GuardFactory` to register custom guards.
+- Missing-token requests throw `AuthorizationException`, which the `ErrorHandler` converts to a `403` response with the message `This action is unauthorized.`.
 
 # Golden-path verification
 - `curl http://127.0.0.1:<port>/hello` should return `Hello ` (note the trailing space from the default `name`).

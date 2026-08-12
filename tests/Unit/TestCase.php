@@ -7,6 +7,7 @@ namespace TondbadSwoole\Tests\Unit;
 use PHPUnit\Framework\TestCase as BaseTestCase;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Env;
+use TondbadSwoole\Support\Context;
 
 class TestCase extends BaseTestCase
 {
@@ -37,6 +38,8 @@ class TestCase extends BaseTestCase
         if (class_exists(\OpenSwoole\Timer::class) && method_exists(\OpenSwoole\Timer::class, 'clearAll')) {
             \OpenSwoole\Timer::clearAll();
         }
+
+        Context::clear();
 
         parent::tearDown();
     }

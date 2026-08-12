@@ -8,6 +8,7 @@ use Monolog\Logger;
 use OpenSwoole\Http\Response;
 use Throwable;
 use TondbadSwoole\Core\Config;
+use TondbadSwoole\Auth\Access\AuthorizationException;
 use TondbadSwoole\Validation\ValidationException;
 
 class ErrorHandler
@@ -30,6 +31,13 @@ class ErrorHandler
             $response->status(422);
             $response->header('Content-Type', 'application/json');
             $response->end(json_encode(['message' => $e->getMessage(), 'errors' => $e->getErrors()], JSON_THROW_ON_ERROR));
+
+            return;
+        }
+
+        if ($e instanceof AuthorizationException) {
+            $response->status(403);
+            $response->end($e->getMessage());
 
             return;
         }

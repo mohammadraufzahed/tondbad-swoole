@@ -12,11 +12,15 @@ use TondbadSwoole\Console\CommandInterface;
 use TondbadSwoole\Console\Commands\Command;
 use TondbadSwoole\Console\Commands\CacheClearCommand;
 use TondbadSwoole\Console\Commands\GrpcServeCommand;
+use TondbadSwoole\Console\Commands\HashCheckCommand;
+use TondbadSwoole\Console\Commands\HashMakeCommand;
 use TondbadSwoole\Console\Commands\MakeControllerCommand;
 use TondbadSwoole\Console\Commands\MakeEventCommand;
+use TondbadSwoole\Console\Commands\MakeGuardCommand;
 use TondbadSwoole\Console\Commands\MakeListenerCommand;
 use TondbadSwoole\Console\Commands\MakeMigrationCommand;
 use TondbadSwoole\Console\Commands\MakeJobCommand;
+use TondbadSwoole\Console\Commands\MakePolicyCommand;
 use TondbadSwoole\Console\Commands\MakeRequestCommand;
 use TondbadSwoole\Console\Commands\MakeMiddlewareCommand;
 use TondbadSwoole\Console\Commands\MakeModelCommand;
@@ -68,6 +72,10 @@ class ConsoleServiceProvider extends ServiceProvider
             ->register(new MakeProviderCommand($basePath))
             ->register(new MakeRequestCommand($basePath))
             ->register(new MakeJobCommand($basePath))
+            ->register(new MakeGuardCommand($basePath))
+            ->register(new MakePolicyCommand($basePath))
+            ->register(new HashMakeCommand($basePath))
+            ->register(new HashCheckCommand($basePath))
             ->register(new QueueWorkCommand($basePath))
             ->register(new MakeMigrationCommand($basePath))
             ->register(new MigrateCommand($basePath))
