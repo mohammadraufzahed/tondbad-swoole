@@ -47,6 +47,8 @@ class QueueManager
                 $config['table'] ?? 'jobs',
                 $config['queue'] ?? 'default',
                 (int) ($config['retry_after'] ?? 60),
+                $this->config->get('queue.failed.table', 'failed_jobs'),
+                $config['pause_table'] ?? 'queue_pauses',
             ),
             default => new SyncQueue($this->container->make(Worker::class)),
         };

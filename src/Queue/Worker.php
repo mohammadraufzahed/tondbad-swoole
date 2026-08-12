@@ -38,11 +38,19 @@ class Worker
     {
         $maxTries ??= 1;
 
+        if ($connection === null) {
+            $job->incrementAttempts();
+        }
+
         try {
             $this->container->call([$job, 'handle']);
 
             if ($connection !== null && $job->getJobId() !== null) {
-                $connection->delete($job->getJobId());
+                if ($job->shouldRemoveOnComplete()) {
+                    $connection->delete($job->getJobId());
+                } else {
+                    $connection->markCompleted($job->getJobId());
+                }
             }
         } catch (Throwable $e) {
             $this->handleException($job, $connection, $e, $maxTries);
@@ -51,25 +59,35 @@ class Worker
 
     protected function handleException(Job $job, ?QueueInterface $connection, Throwable $e, ?int $maxTries = null): void
     {
-        $job->incrementAttempts();
-
         $tries = $job->getMaxTries() ?? $maxTries;
 
         if ($job->hasFailed($tries)) {
-            $this->fail($job, $e);
+            if ($job->shouldRemoveOnFail()) {
+                $this->fail($job, $e);
+            }
 
             if ($connection !== null && $job->getJobId() !== null) {
-                $connection->delete($job->getJobId());
+                if ($job->shouldRemoveOnFail()) {
+                    $connection->delete($job->getJobId());
+                } else {
+                    $connection->markFailed($job->getJobId());
+                }
+            }
+
+            if ($connection === null) {
+                throw $e;
             }
 
             return;
         }
 
         if ($connection !== null) {
-            $connection->release($job->getJobId(), $job->getDelay());
-        } else {
-            throw $e;
+            $connection->release($job->getJobId(), $job->getBackoffDelay());
+
+            return;
         }
+
+        throw $e;
     }
 
     protected function fail(Job $job, Throwable $e): void

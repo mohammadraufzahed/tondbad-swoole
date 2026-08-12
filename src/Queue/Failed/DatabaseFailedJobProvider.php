@@ -20,7 +20,7 @@ class DatabaseFailedJobProvider implements FailedJobProviderInterface
     {
         return $this->connection->table($this->table)->insertGetId([
             'connection' => 'database',
-            'queue' => $job->getJobId() ? 'default' : null,
+            'queue' => $job->getQueue() ?? 'default',
             'payload' => serialize($job),
             'exception' => $exception->getMessage(),
             'failed_at' => time(),

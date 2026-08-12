@@ -23,6 +23,17 @@ beforeEach(function () {
         $table->integer('reserved_at')->nullable();
         $table->integer('available_at', false, true);
         $table->integer('created_at', false, true);
+        $table->integer('priority', false, true)->default(0);
+        $table->integer('delay', false, true)->nullable();
+        $table->string('backoff_type', 20)->nullable();
+        $table->integer('backoff_value', false, true)->nullable();
+        $table->integer('timeout', false, true)->nullable();
+        $table->integer('progress', false, true)->default(0);
+        $table->string('deduplication_id', 255)->nullable();
+        $table->integer('parent_id', false, true)->nullable();
+        $table->integer('children_count', false, true)->default(0);
+        $table->integer('completed_children_count', false, true)->default(0);
+        $table->string('status', 20)->default('waiting');
     });
 
     schema()->create('failed_jobs', function (Blueprint $table) {
@@ -33,9 +44,19 @@ beforeEach(function () {
         $table->text('exception');
         $table->integer('failed_at', false, true);
     });
+
+    schema()->create('queue_pauses', function (Blueprint $table) {
+        $table->string('queue', 255);
+        $table->boolean('paused')->default(false);
+        $table->integer('created_at', false, true);
+        $table->integer('updated_at', false, true);
+
+        $table->unique('queue');
+    });
 });
 
 afterEach(function () {
+    schema()->dropIfExists('queue_pauses');
     schema()->dropIfExists('failed_jobs');
     schema()->dropIfExists('jobs');
 });
@@ -48,13 +69,13 @@ it('processes a job synchronously with the sync queue', function () {
     expect(TestQueueJob::$ran)->toBeTrue();
 });
 
-it('pops and processes a job from the database queue', function () {
+it('adds and processes a job from the database queue', function () {
     $queue = queue('database');
 
     expect($queue)->toBeInstanceOf(DatabaseQueue::class);
 
     $job = new TestQueueJob();
-    $queue->push($job);
+    $queue->add($job);
 
     expect($queue->size())->toBe(1);
 
@@ -68,7 +89,7 @@ it('pops and processes a job from the database queue', function () {
 it('retries failed jobs up to the configured number of tries', function () {
     $queue = queue('database');
     $job = new TestFailingJob(tries: 3);
-    $queue->push($job);
+    $queue->add($job);
 
     $worker = app()->container->make(Worker::class);
     for ($i = 0; $i < 3; $i++) {
@@ -89,6 +110,112 @@ it('dispatches a job onto the default queue', function () {
     (new TestQueueJob())->dispatch();
 
     expect(TestQueueJob::$ran)->toBeTrue();
+});
+
+it('delays jobs and does not process them before the available time', function () {
+    $queue = queue('database');
+    $queue->add(new TestQueueJob(), options: ['delay' => 3600]);
+
+    expect($queue->size())->toBe(1);
+
+    $job = $queue->pop('default');
+
+    expect($job)->toBeNull();
+});
+
+it('processes higher priority jobs first', function () {
+    $queue = queue('database');
+
+    $first = new TestQueueJob();
+    $second = new TestQueueJob();
+
+    $queue->add($first, options: ['priority' => 10, 'jobId' => 'low']);
+    $queue->add($second, options: ['priority' => 1, 'jobId' => 'high']);
+
+    $popped = $queue->pop('default');
+
+    expect($popped)->not->toBeNull();
+    expect($popped->getCustomJobId())->toBe('high');
+});
+
+it('applies exponential backoff to failed jobs', function () {
+    $queue = queue('database');
+    $job = new TestFailingJob(tries: 3)->backoff(['type' => 'exponential', 'delay' => 10]);
+    $queue->add($job);
+
+    $worker = app()->container->make(Worker::class);
+    $worker->runNextJob($queue, 'default', 3, 0);
+
+    $row = db()->table('jobs')->first();
+    expect($row['attempts'])->toBe(1);
+    expect($row['available_at'])->toBeGreaterThan(time());
+});
+
+it('deduplicates jobs by custom job id', function () {
+    $queue = queue('database');
+    $job = new TestQueueJob();
+
+    $first = $queue->add($job, options: ['jobId' => 'unique']);
+    $second = $queue->add(new TestQueueJob(), options: ['jobId' => 'unique']);
+
+    expect($first)->toBe($second);
+    expect($queue->size())->toBe(1);
+});
+
+it('returns metrics for the queue', function () {
+    $queue = queue('database');
+    $queue->add(new TestQueueJob());
+
+    $metrics = $queue->getMetrics('default');
+
+    expect($metrics['waiting'])->toBe(1);
+    expect($metrics['active'])->toBe(0);
+    expect($metrics['delayed'])->toBe(0);
+});
+
+it('drains all jobs from the queue', function () {
+    $queue = queue('database');
+    $queue->add(new TestQueueJob());
+    $queue->add(new TestQueueJob());
+
+    expect($queue->drain('default'))->toBe(2);
+    expect($queue->size())->toBe(0);
+});
+
+it('gets a job by id', function () {
+    $queue = queue('database');
+    $id = $queue->add(new TestQueueJob());
+
+    $job = $queue->getJob((int) $id);
+
+    expect($job)->toBeInstanceOf(TestQueueJob::class);
+    expect($job->getJobId())->toBe((int) $id);
+});
+
+it('supports bulk add', function () {
+    $queue = queue('database');
+
+    $ids = $queue->addBulk([
+        new TestQueueJob(),
+        new TestQueueJob(),
+    ]);
+
+    expect($ids)->toHaveCount(2);
+    expect($queue->size())->toBe(2);
+});
+
+it('pauses and resumes a queue', function () {
+    $queue = queue('database');
+    $queue->add(new TestQueueJob());
+
+    $queue->pause('default');
+
+    expect($queue->pop('default'))->toBeNull();
+
+    $queue->resume('default');
+
+    $job = $queue->pop('default');
+    expect($job)->not->toBeNull();
 });
 
 class TestQueueJob extends \TondbadSwoole\Queue\Jobs\Job

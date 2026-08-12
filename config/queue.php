@@ -16,6 +16,7 @@ return [
             'table' => $env->get('queue.database.table', 'jobs'),
             'queue' => $env->get('queue.database.queue', 'default'),
             'retry_after' => (int) $env->get('queue.database.retry_after', 60),
+            'pause_table' => $env->get('queue.database.pause_table', 'queue_pauses'),
         ],
 
         'redis' => [
