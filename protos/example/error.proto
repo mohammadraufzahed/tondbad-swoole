@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package TondbadSwoole;
+package TondbadExample;
 
 message ErrorResponse {
     string error_message = 1;
