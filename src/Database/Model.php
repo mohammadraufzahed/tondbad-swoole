@@ -401,6 +401,31 @@ abstract class Model
         return $this->relations[$relation] ?? null;
     }
 
+    public function getRelations(): array
+    {
+        return $this->relations;
+    }
+
+    public function load(array|string $relations): self
+    {
+        if (is_string($relations)) {
+            $relations = func_get_args();
+        }
+
+        $fresh = $this->newQuery()
+            ->where($this->getKeyName(), '=', $this->getKey())
+            ->with($relations)
+            ->first();
+
+        if ($fresh instanceof Model) {
+            foreach ($fresh->getRelations() as $name => $value) {
+                $this->setRelation($name, $value);
+            }
+        }
+
+        return $this;
+    }
+
     public function __get(string $key): mixed
     {
         if (array_key_exists($key, $this->attributes)) {

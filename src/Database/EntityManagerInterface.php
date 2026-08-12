@@ -14,7 +14,7 @@ interface EntityManagerInterface
 
     public function clear(?object $entity = null): self;
 
-    public function find(string $class, mixed $id): ?object;
+    public function find(string $class, mixed $id, array $populate = []): ?object;
 
     public function getReference(string $class, mixed $id): ?object;
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use TondbadSwoole\Bootstrap\App;
 use TondbadSwoole\Database\Schema\Blueprint;
+use TondbadSwoole\Tests\Unit\Database\Fixtures\Comment;
 use TondbadSwoole\Tests\Unit\Database\Fixtures\Post;
 use TondbadSwoole\Tests\Unit\Database\Fixtures\Profile;
 use TondbadSwoole\Tests\Unit\Database\Fixtures\User;
@@ -39,12 +40,21 @@ beforeEach(function () {
         $table->text('bio')->nullable();
         $table->timestamps();
     });
+
+    schema()->create('comments', function (Blueprint $table) {
+        $table->id();
+        $table->unsignedBigInteger('post_id');
+        $table->foreign('post_id')->references('id')->on('posts');
+        $table->text('body')->nullable();
+        $table->timestamps();
+    });
 });
 
 afterEach(function () {
     schema()->dropIfExists('users');
     schema()->dropIfExists('posts');
     schema()->dropIfExists('profiles');
+    schema()->dropIfExists('comments');
 });
 
 it('creates and retrieves a model', function () {
@@ -184,6 +194,39 @@ it('uses firstOrCreate and updateOrCreate', function () {
     );
 
     expect($updated->name)->toBe('Gwendolyn');
+});
+
+it('eager loads nested relations through with', function () {
+    $user = User::create([
+        'name' => 'Ivy',
+        'email' => 'ivy@example.com',
+    ]);
+
+    $post = Post::create(['user_id' => $user->id, 'title' => 'Hello']);
+    Comment::create(['post_id' => $post->id, 'body' => 'First']);
+    Comment::create(['post_id' => $post->id, 'body' => 'Second']);
+
+    $found = User::with('posts.comments')->find($user->id);
+
+    expect($found->posts)->toHaveCount(1);
+    expect($found->posts[0]->comments)->toHaveCount(2);
+    expect($found->posts[0]->comments[0]->body)->toBe('First');
+});
+
+it('loads relations on demand with load', function () {
+    $user = User::create([
+        'name' => 'Jack',
+        'email' => 'jack@example.com',
+    ]);
+
+    Post::create(['user_id' => $user->id, 'title' => 'Hello']);
+
+    $user = User::find($user->id);
+    expect($user->getRelation('posts'))->toBeNull();
+
+    $user->load('posts');
+
+    expect($user->getRelation('posts'))->toHaveCount(1);
 });
 
 it('converts a model to array and json', function () {

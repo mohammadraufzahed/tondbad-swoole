@@ -141,17 +141,72 @@ class ModelBuilder extends Builder
         return $row !== null ? ($row['aggregate'] ?? null) : null;
     }
 
+    public function loadRelations(array $models, array|string $relations): array
+    {
+        $relations = is_string($relations) ? [$relations] : $relations;
+
+        return $this->newQuery()
+            ->setModel($this->model ?? static::class)
+            ->from($this->from)
+            ->with($relations)
+            ->eagerLoadRelations($models);
+    }
+
     protected function eagerLoadRelations(array $models): array
     {
         if ($models === [] || $this->eagerLoad === [] || $this->model === null) {
             return $models;
         }
 
-        foreach ($this->eagerLoad as $relation) {
-            $this->eagerLoadRelation($models, $relation);
-        }
+        $relations = $this->eagerLoad;
+        $this->eagerLoad = [];
+
+        $this->eagerLoadRelationsFor($models, $relations);
 
         return $models;
+    }
+
+    /**
+     * @param list<Model> $models
+     * @param list<string> $relations
+     */
+    private function eagerLoadRelationsFor(array $models, array $relations): void
+    {
+        if ($models === [] || $relations === []) {
+            return;
+        }
+
+        $groups = [];
+
+        foreach ($relations as $relation) {
+            $segments = explode('.', $relation, 2);
+            $first = $segments[0];
+            $rest = $segments[1] ?? null;
+
+            $groups[$first][] = $rest;
+        }
+
+        foreach ($groups as $relation => $rests) {
+            $this->eagerLoadRelation($models, $relation);
+
+            $related = $this->relatedModels($models, $relation);
+
+            if ($related === []) {
+                continue;
+            }
+
+            $nested = array_values(array_filter($rests, fn (?string $r): bool => $r !== null));
+
+            if ($nested === []) {
+                continue;
+            }
+
+            $relatedModel = $related[0]::class;
+
+            (new static($this->connection, $this->grammar))
+                ->setModel($relatedModel)
+                ->eagerLoadRelationsFor($related, $nested);
+        }
     }
 
     protected function eagerLoadRelation(array $models, string $relation): void
@@ -171,5 +226,34 @@ class ModelBuilder extends Builder
         $relationObj->addEagerConstraints($models);
         $results = $relationObj->getEager();
         $relationObj->match($models, $results);
+    }
+
+    /**
+     * @param list<Model> $models
+     * @return list<Model>
+     */
+    private function relatedModels(array $models, string $relation): array
+    {
+        $related = [];
+
+        foreach ($models as $model) {
+            if (!$model instanceof Model) {
+                continue;
+            }
+
+            $value = $model->getRelation($relation);
+
+            if ($value instanceof Model) {
+                $related[] = $value;
+            } elseif (is_array($value)) {
+                foreach ($value as $item) {
+                    if ($item instanceof Model) {
+                        $related[] = $item;
+                    }
+                }
+            }
+        }
+
+        return $related;
     }
 }

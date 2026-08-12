@@ -5,7 +5,10 @@ declare(strict_types=1);
 use TondbadSwoole\Bootstrap\App;
 use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Database\EntityManagerInterface;
+use TondbadSwoole\Database\Reference;
 use TondbadSwoole\Database\Schema\Blueprint;
+use TondbadSwoole\Tests\Unit\Database\Fixtures\Comment;
+use TondbadSwoole\Tests\Unit\Database\Fixtures\Post;
 use TondbadSwoole\Tests\Unit\Database\Fixtures\User;
 
 beforeEach(function () {
@@ -22,10 +25,27 @@ beforeEach(function () {
         $table->boolean('is_admin')->default(false);
         $table->timestamps();
     });
+
+    schema()->create('posts', function (Blueprint $table) {
+        $table->id();
+        $table->unsignedBigInteger('user_id');
+        $table->string('title');
+        $table->text('body')->nullable();
+        $table->timestamps();
+    });
+
+    schema()->create('comments', function (Blueprint $table) {
+        $table->id();
+        $table->unsignedBigInteger('post_id');
+        $table->text('body')->nullable();
+        $table->timestamps();
+    });
 });
 
 afterEach(function () {
     schema()->dropIfExists('users');
+    schema()->dropIfExists('posts');
+    schema()->dropIfExists('comments');
 
     if ($this->app instanceof App) {
         $this->app->container->make(ContextInterface::class)->clear();
@@ -129,4 +149,95 @@ it('reuses the same entity manager within a request context', function () {
     $em2 = app()->container->make(EntityManagerInterface::class);
 
     expect($em1)->toBe($em2);
+});
+
+it('returns a lazy reference from getReference', function () {
+    User::create([
+        'name' => 'Grace',
+        'email' => 'grace@example.com',
+    ]);
+
+    $em = em();
+    $reference = $em->getReference(User::class, 1);
+
+    expect($reference)->toBeInstanceOf(Reference::class);
+    expect($reference->isInitialized())->toBeFalse();
+    expect($reference->getId())->toBe(1);
+    expect($reference->getClassName())->toBe(User::class);
+    expect((string) $reference)->toBe('1');
+
+    expect($reference->name)->toBe('Grace');
+    expect($reference->isInitialized())->toBeTrue();
+});
+
+it('returns an initialized reference when the entity is already loaded', function () {
+    User::create([
+        'name' => 'Hank',
+        'email' => 'hank@example.com',
+    ]);
+
+    $em = em();
+    $loaded = $em->find(User::class, 1);
+    $reference = $em->getReference(User::class, 1);
+
+    expect($reference->isInitialized())->toBeTrue();
+    expect($reference->getValue())->toBe($loaded);
+});
+
+it('eager loads nested relations through find populate', function () {
+    $user = new User([
+        'name' => 'Liam',
+        'email' => 'liam@example.com',
+    ]);
+    em()->persist($user)->flush();
+
+    $post = Post::create(['user_id' => $user->id, 'title' => 'Hello']);
+    Comment::create(['post_id' => $post->id, 'body' => 'First']);
+
+    $found = em()->find(User::class, $user->id, ['posts.comments']);
+
+    expect($found->posts)->toHaveCount(1);
+    expect($found->posts[0]->comments)->toHaveCount(1);
+    expect($found->posts[0]->comments[0]->body)->toBe('First');
+});
+
+it('loads a reference lazily when a property is accessed', function () {
+    User::create([
+        'name' => 'Ivy',
+        'email' => 'ivy@example.com',
+    ]);
+
+    $reference = em()->getReference(User::class, 1);
+
+    expect($reference->isInitialized())->toBeFalse();
+    expect($reference->id)->toBe(1);
+    expect($reference->isInitialized())->toBeFalse();
+
+    expect($reference->name)->toBe('Ivy');
+    expect($reference->isInitialized())->toBeTrue();
+});
+
+it('delegates model methods through a reference', function () {
+    User::create([
+        'name' => 'Jack',
+        'email' => 'jack@example.com',
+    ]);
+
+    $reference = em()->getReference(User::class, 1);
+
+    $array = $reference->toArray();
+
+    expect($array['name'])->toBe('Jack');
+});
+
+it('can read the primary key from a reference without loading', function () {
+    User::create([
+        'name' => 'Ivy',
+        'email' => 'ivy@example.com',
+    ]);
+
+    $reference = em()->getReference(User::class, 1);
+
+    expect($reference->id)->toBe(1);
+    expect($reference->isInitialized())->toBeFalse();
 });
