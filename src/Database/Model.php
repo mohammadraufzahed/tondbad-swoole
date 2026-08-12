@@ -1071,7 +1071,7 @@ abstract class Model
         return $date?->getTimestamp();
     }
 
-    protected function fromDateTime(mixed $value, string $format = null): mixed
+    protected function fromDateTime(mixed $value, ?string $format = null): mixed
     {
         if ($value === null) {
             return null;
