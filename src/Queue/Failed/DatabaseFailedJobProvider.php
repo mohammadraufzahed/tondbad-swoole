@@ -26,4 +26,32 @@ class DatabaseFailedJobProvider implements FailedJobProviderInterface
             'failed_at' => time(),
         ]);
     }
+
+    public function find(int $id): ?array
+    {
+        $row = $this->connection->table($this->table)->where('id', $id)->first();
+
+        return $row !== null ? $row : null;
+    }
+
+    public function forQueue(string $queue): array
+    {
+        return $this->connection->table($this->table)->where('queue', $queue)->get();
+    }
+
+    public function delete(int $id): bool
+    {
+        return $this->connection->table($this->table)->where('id', $id)->delete() > 0;
+    }
+
+    public function flush(?string $queue = null): int
+    {
+        $query = $this->connection->table($this->table);
+
+        if ($queue !== null) {
+            $query->where('queue', $queue);
+        }
+
+        return $query->delete();
+    }
 }

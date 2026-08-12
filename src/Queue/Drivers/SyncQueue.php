@@ -7,6 +7,7 @@ namespace TondbadSwoole\Queue\Drivers;
 use TondbadSwoole\Queue\Jobs\Job;
 use TondbadSwoole\Queue\Jobs\JobStatus;
 use TondbadSwoole\Queue\Queue;
+use TondbadSwoole\Queue\QueueEvents;
 use TondbadSwoole\Queue\Worker;
 
 class SyncQueue extends Queue
@@ -15,6 +16,7 @@ class SyncQueue extends Queue
         private readonly Worker $worker,
         private readonly string $defaultQueue = 'default',
     ) {
+        parent::__construct(new QueueEvents());
     }
 
     public function push(Job $job, ?string $queue = null): mixed
@@ -50,6 +52,11 @@ class SyncQueue extends Queue
     }
 
     public function markFailed(int $id): bool
+    {
+        return true;
+    }
+
+    public function progress(int $id, int $progress): bool
     {
         return true;
     }

@@ -7,6 +7,7 @@ namespace TondbadSwoole\Queue\Jobs;
 use TondbadSwoole\Queue\Concerns\Dispatchable;
 use TondbadSwoole\Queue\Jobs\Backoff\BackoffFactory;
 use TondbadSwoole\Queue\Jobs\Backoff\BackoffStrategy;
+use TondbadSwoole\Queue\QueueInterface;
 
 abstract class Job
 {
@@ -21,6 +22,8 @@ abstract class Job
     public ?int $timeout = null;
 
     protected ?string $queue = null;
+
+    protected ?QueueInterface $connection = null;
 
     protected ?int $delay = null;
 
@@ -202,9 +205,42 @@ abstract class Job
         return $this->removeOnFail;
     }
 
+    public function setConnection(?QueueInterface $connection): self
+    {
+        $this->connection = $connection;
+
+        return $this;
+    }
+
+    public function getConnection(): ?QueueInterface
+    {
+        return $this->connection;
+    }
+
+    public function __serialize(): array
+    {
+        $data = get_object_vars($this);
+
+        unset($data['connection']);
+
+        return $data;
+    }
+
+    public function __unserialize(array $data): void
+    {
+        foreach ($data as $key => $value) {
+            $this->$key = $value;
+        }
+    }
+
     public function progress(int $progress): self
     {
         $this->progress = max(0, min(100, $progress));
+
+        if ($this->connection !== null && $this->jobId !== null) {
+            $this->connection->progress($this->jobId, $this->progress);
+            $this->connection->emit('progress', ['job' => $this, 'progress' => $this->progress]);
+        }
 
         return $this;
     }

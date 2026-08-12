@@ -26,6 +26,9 @@ use TondbadSwoole\Console\Commands\MakeMiddlewareCommand;
 use TondbadSwoole\Console\Commands\MakeModelCommand;
 use TondbadSwoole\Console\Commands\MakeProviderCommand;
 use TondbadSwoole\Console\Commands\MigrateCommand;
+use TondbadSwoole\Console\Commands\QueueRetryCommand;
+use TondbadSwoole\Console\Commands\QueueRetryFailedCommand;
+use TondbadSwoole\Console\Commands\QueueStatusCommand;
 use TondbadSwoole\Console\Commands\QueueWorkCommand;
 use TondbadSwoole\Console\Commands\MigrateFreshCommand;
 use TondbadSwoole\Console\Commands\MigrateRollbackCommand;
@@ -79,6 +82,9 @@ class ConsoleServiceProvider extends ServiceProvider
             HashMakeCommand::class,
             HashCheckCommand::class,
             QueueWorkCommand::class,
+            QueueStatusCommand::class,
+            QueueRetryCommand::class,
+            QueueRetryFailedCommand::class,
             MakeMigrationCommand::class,
             MigrateCommand::class,
             MigrateFreshCommand::class,

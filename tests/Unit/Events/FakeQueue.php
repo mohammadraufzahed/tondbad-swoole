@@ -7,6 +7,7 @@ namespace TondbadSwoole\Tests\Unit\Events;
 use TondbadSwoole\Queue\Jobs\Job;
 use TondbadSwoole\Queue\Jobs\JobStatus;
 use TondbadSwoole\Queue\Queue;
+use TondbadSwoole\Queue\QueueEvents;
 
 class FakeQueue extends Queue
 {
@@ -14,6 +15,11 @@ class FakeQueue extends Queue
      * @var list<Job>
      */
     public array $jobs = [];
+
+    public function __construct()
+    {
+        parent::__construct(new QueueEvents());
+    }
 
     public function push(Job $job, ?string $queue = null): mixed
     {
@@ -48,6 +54,11 @@ class FakeQueue extends Queue
     }
 
     public function markFailed(int $id): bool
+    {
+        return true;
+    }
+
+    public function progress(int $id, int $progress): bool
     {
         return true;
     }

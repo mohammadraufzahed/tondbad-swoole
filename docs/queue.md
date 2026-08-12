@@ -108,6 +108,7 @@ use TondbadSwoole\Queue\Jobs\Backoff\ExponentialBackoff;
 - `jobId(string $id)` — custom deduplication id; duplicate jobs are not inserted while an identical one is waiting, delayed, or active.
 - `removeOnComplete(bool $remove)` — keep or remove the job row on success (default: true).
 - `removeOnFail(bool $remove)` — keep or remove the job row on failure (default: true).
+- `progress(int $value)` — update the job's progress (0-100); persisted to the `progress` column and emits a `progress` event when a queue connection is available.
 
 ## Sync driver
 
@@ -157,6 +158,68 @@ $queue->pause('emails');
 $queue->resume('emails');
 ```
 
+## Queue events
+
+The `Queue` implementation emits lifecycle events that can be observed with `$queue->on()`:
+
+```php
+$queue->on('added', function (array $data) {
+    // $data['job'], $data['id'], $data['queue']
+});
+
+$queue->on('active', function (array $data) {
+    // $data['job'], $data['queue']
+});
+
+$queue->on('stalled', function (array $data) {
+    // a previously active job with an expired reservation was recovered
+});
+
+$queue->on('completed', function (array $data) {
+    // $data['job'], $data['result']
+});
+
+$queue->on('failed', function (array $data) {
+    // $data['job'], $data['exception']
+});
+
+$queue->on('progress', function (array $data) {
+    // $data['job'], $data['progress']
+});
+
+$queue->on('paused', function (array $data) {
+    // $data['queue']
+});
+
+$queue->on('resumed', function (array $data) {
+    // $data['queue']
+});
+
+$queue->on('drained', function (array $data) {
+    // $data['queue'], $data['count']
+});
+
+$queue->on('cleaned', function (array $data) {
+    // $data['queue'], $data['count']
+});
+```
+
+## CLI commands
+
+```bash
+# Start a worker
+php bin/tondbad queue:work --connection=database --queue=default --tries=3 --sleep=3
+
+# Show queue metrics
+php bin/tondbad queue:status --connection=database --queue=default
+
+# Retry one failed job by its failed_jobs id
+php bin/tondbad queue:retry <id> --connection=database --queue=default
+
+# Retry all failed jobs for a queue
+php bin/tondbad queue:retry-failed --connection=database --queue=default
+```
+
 ## Redis queue
 
 The `redis` driver pushes jobs to a Redis list and pops them in the worker:
@@ -171,8 +234,9 @@ Jobs that fail after the configured number of tries are stored in a `failed_jobs
 
 ## Job lifecycle
 
-1. `dispatch()` or `queue()->add()` serializes the job and pushes it to the configured connection.
-2. `queue:work` pops the next available job using an atomic reservation so only one worker can process it.
+1. `dispatch()` or `queue()->add()` serializes the job and pushes it to the configured connection. An `added` (or `delayed`) event is emitted.
+2. `queue:work` pops the next available job using an atomic reservation so only one worker can process it. An `active` event is emitted; if the job was recovered from a stale reservation, a `stalled` event is emitted first.
 3. The container builds the job and calls `handle()`.
-4. On success, the job is deleted.
-5. On failure, the attempts counter is checked; if the maximum is reached the job is moved to failed jobs, otherwise it is released with the configured backoff delay.
+4. `handle()` may call `$this->progress($value)` to update the `progress` column and emit a `progress` event.
+5. On success, the job is deleted by default. If `removeOnComplete(false)` was used, the row is kept with `status = completed` and a `completed` event is emitted.
+6. On failure, the attempts counter is checked; if the maximum is reached the job is moved to failed jobs (or kept with `status = failed` when `removeOnFail(false)`) and a `failed` event is emitted, otherwise it is released with the configured backoff delay.

@@ -40,6 +40,9 @@ When called as `php bin/tondbad <command>`, the framework boots in `console` mod
 | `make:guard` | Create a new guard factory |
 | `make:policy` | Create a new policy |
 | `queue:work` | Process queue jobs |
+| `queue:status` | Show queue metrics by status |
+| `queue:retry` | Retry a failed job by id |
+| `queue:retry-failed` | Retry all failed jobs for a queue |
 | `schedule:work` | Run the scheduler process |
 | `schedule:list` | List scheduled events |
 | `hash:make` | Hash a string |

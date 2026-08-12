@@ -218,6 +218,80 @@ it('pauses and resumes a queue', function () {
     expect($job)->not->toBeNull();
 });
 
+it('emits queue lifecycle events', function () {
+    $queue = queue('database');
+    $added = $completed = $failed = null;
+
+    $queue->on('added', function (array $data) use (&$added) {
+        $added = $data;
+    });
+
+    $queue->on('completed', function (array $data) use (&$completed) {
+        $completed = $data;
+    });
+
+    $queue->on('failed', function (array $data) use (&$failed) {
+        $failed = $data;
+    });
+
+    $job = new TestQueueJob();
+    $queue->add($job);
+
+    expect($added['job'])->toBeInstanceOf(TestQueueJob::class);
+    expect($added['id'])->toBeInt();
+
+    $worker = app()->container->make(Worker::class);
+    $worker->runNextJob($queue, 'default', 1, 0);
+
+    expect($completed['job'])->toBeInstanceOf(TestQueueJob::class);
+
+    $queue->add(new TestFailingJob(tries: 1));
+    $worker->runNextJob($queue, 'default', 1, 0);
+
+    expect($failed['job'])->toBeInstanceOf(TestFailingJob::class);
+    expect($failed['exception'])->toBeInstanceOf(\Exception::class);
+});
+
+it('persists job progress during handle', function () {
+    $queue = queue('database');
+    $progressEvent = null;
+
+    $queue->on('progress', function (array $data) use (&$progressEvent) {
+        $progressEvent = $data;
+    });
+
+    $queue->add((new TestProgressJob())->removeOnComplete(false));
+
+    $worker = app()->container->make(Worker::class);
+    $worker->runNextJob($queue, 'default', 1, 0);
+
+    $row = db()->table('jobs')->first();
+
+    expect($row['progress'])->toBe(50);
+    expect($progressEvent['progress'])->toBe(50);
+    expect($row['status'])->toBe('completed');
+});
+
+it('retries a failed job via the retry command', function () {
+    $queue = queue('database');
+    $queue->add(new TestFailingJob(tries: 1));
+
+    $worker = app()->container->make(Worker::class);
+    $worker->runNextJob($queue, 'default', 1, 0);
+
+    expect(db()->table('failed_jobs')->count())->toBe(1);
+
+    $failed = db()->table('failed_jobs')->first();
+    $failedId = (int) $failed['id'];
+
+    $command = new \TondbadSwoole\Console\Commands\QueueRetryCommand($this->app->basePath());
+    $exit = $command->run([$failedId, '--connection=database']);
+
+    expect($exit)->toBe(0);
+    expect(db()->table('failed_jobs')->count())->toBe(0);
+    expect($queue->size())->toBe(1);
+});
+
 class TestQueueJob extends \TondbadSwoole\Queue\Jobs\Job
 {
     public static bool $ran = false;
@@ -242,5 +316,13 @@ class TestFailingJob extends \TondbadSwoole\Queue\Jobs\Job
         self::$handleCount++;
 
         throw new Exception('Failed on purpose');
+    }
+}
+
+class TestProgressJob extends \TondbadSwoole\Queue\Jobs\Job
+{
+    public function handle(): void
+    {
+        $this->progress(50);
     }
 }
