@@ -32,4 +32,10 @@ return [
         'database' => $env->get('queue.failed.database', null),
         'table' => $env->get('queue.failed.table', 'failed_jobs'),
     ],
+
+    'rateLimiter' => [
+        'driver' => $env->get('queue.rateLimiter.driver', null),
+        'database' => $env->get('queue.rateLimiter.database', null),
+        'table' => $env->get('queue.rateLimiter.table', 'rate_limits'),
+    ],
 ];
