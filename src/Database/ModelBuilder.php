@@ -12,6 +12,8 @@ class ModelBuilder extends Builder
 
     protected array $eagerLoad = [];
 
+    protected ?EntityManagerInterface $entityManager = null;
+
     public function setModel(string $model): self
     {
         $this->model = $model;
@@ -22,6 +24,18 @@ class ModelBuilder extends Builder
     public function getModel(): ?string
     {
         return $this->model;
+    }
+
+    public function setEntityManager(?EntityManagerInterface $entityManager): self
+    {
+        $this->entityManager = $entityManager;
+
+        return $this;
+    }
+
+    public function getEntityManager(): ?EntityManagerInterface
+    {
+        return $this->entityManager;
     }
 
     public function with(array|string $relations): self
@@ -41,7 +55,10 @@ class ModelBuilder extends Builder
 
     public function newQuery(): self
     {
-        return new static($this->connection, $this->grammar);
+        return (new static($this->connection, $this->grammar))
+            ->setModel($this->model ?? static::class)
+            ->from($this->from)
+            ->setEntityManager($this->entityManager);
     }
 
     public function toBase(): Builder
@@ -72,7 +89,7 @@ class ModelBuilder extends Builder
 
         $models = [];
         foreach ($rows as $row) {
-            $models[] = $this->model::newFromBuilder($row);
+            $models[] = $this->hydrateModel($row);
         }
 
         return $this->eagerLoadRelations($models);
@@ -86,7 +103,7 @@ class ModelBuilder extends Builder
             return $rows[0] ?? null;
         }
 
-        $models = $this->eagerLoadRelations([$this->model::newFromBuilder($rows[0])]);
+        $models = $this->eagerLoadRelations([$this->hydrateModel($rows[0])]);
 
         return $models[0] ?? null;
     }
@@ -141,17 +158,101 @@ class ModelBuilder extends Builder
         return $row !== null ? ($row['aggregate'] ?? null) : null;
     }
 
+    public function loadRelations(array $models, array|string $relations): array
+    {
+        $relations = is_string($relations) ? [$relations] : $relations;
+
+        return $this->newQuery()
+            ->with($relations)
+            ->eagerLoadRelations($models);
+    }
+
     protected function eagerLoadRelations(array $models): array
     {
         if ($models === [] || $this->eagerLoad === [] || $this->model === null) {
             return $models;
         }
 
-        foreach ($this->eagerLoad as $relation) {
-            $this->eagerLoadRelation($models, $relation);
-        }
+        $relations = $this->eagerLoad;
+        $this->eagerLoad = [];
+
+        $this->eagerLoadRelationsFor($models, $relations);
 
         return $models;
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function hydrateModel(array $row): Model
+    {
+        if ($this->model === null) {
+            throw new \RuntimeException('Cannot hydrate a model without a model class.');
+        }
+
+        $class = $this->model;
+        $key = $row[(new $class())->getKeyName()] ?? null;
+
+        if ($this->entityManager !== null && $key !== null) {
+            $managed = $this->entityManager->getManaged($class, $key);
+
+            if ($managed instanceof $class) {
+                return $managed;
+            }
+        }
+
+        $model = $class::newFromBuilder($row);
+
+        if ($this->entityManager !== null) {
+            $this->entityManager->getUnitOfWork()->persist($model);
+        }
+
+        return $model;
+    }
+
+    /**
+     * @param list<Model> $models
+     * @param list<string> $relations
+     */
+    private function eagerLoadRelationsFor(array $models, array $relations): void
+    {
+        if ($models === [] || $relations === []) {
+            return;
+        }
+
+        $groups = [];
+
+        foreach ($relations as $relation) {
+            $segments = explode('.', $relation, 2);
+            $first = $segments[0];
+            $rest = $segments[1] ?? null;
+
+            $groups[$first][] = $rest;
+        }
+
+        foreach ($groups as $relation => $rests) {
+            $this->eagerLoadRelation($models, $relation);
+
+            $related = $this->relatedModels($models, $relation);
+
+            if ($related === []) {
+                continue;
+            }
+
+            $nested = array_values(array_filter($rests, fn (?string $r): bool => $r !== null));
+
+            if ($nested === []) {
+                continue;
+            }
+
+            $relatedModel = $related[0]::class;
+
+            (new static($this->connection, $this->grammar))
+                ->setModel($relatedModel)
+                ->from((new $relatedModel())->getTable())
+                ->setEntityManager($this->entityManager)
+                ->eagerLoadRelationsFor($related, $nested);
+        }
     }
 
     protected function eagerLoadRelation(array $models, string $relation): void
@@ -171,5 +272,34 @@ class ModelBuilder extends Builder
         $relationObj->addEagerConstraints($models);
         $results = $relationObj->getEager();
         $relationObj->match($models, $results);
+    }
+
+    /**
+     * @param list<Model> $models
+     * @return list<Model>
+     */
+    private function relatedModels(array $models, string $relation): array
+    {
+        $related = [];
+
+        foreach ($models as $model) {
+            if (!$model instanceof Model) {
+                continue;
+            }
+
+            $value = $model->getRelation($relation);
+
+            if ($value instanceof Model) {
+                $related[] = $value;
+            } elseif (is_array($value)) {
+                foreach ($value as $item) {
+                    if ($item instanceof Model) {
+                        $related[] = $item;
+                    }
+                }
+            }
+        }
+
+        return $related;
     }
 }

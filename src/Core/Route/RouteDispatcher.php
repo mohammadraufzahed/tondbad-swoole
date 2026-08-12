@@ -60,6 +60,8 @@ class RouteDispatcher
             }
         } catch (Throwable $e) {
             $this->errorHandler->handle($e, $swooleResponse);
+        } finally {
+            $this->context->clear();
         }
     }
 

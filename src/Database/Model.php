@@ -67,9 +67,25 @@ abstract class Model
     {
         $connection = $this->getConnection();
 
-        return (new ModelBuilder($connection, $connection->getGrammar()))
+        $builder = (new ModelBuilder($connection, $connection->getGrammar()))
             ->from($this->getTable())
             ->setModel(static::class);
+
+        $entityManager = $this->getEntityManager();
+        if ($entityManager !== null) {
+            $builder->setEntityManager($entityManager);
+        }
+
+        return $builder;
+    }
+
+    public function getEntityManager(): ?EntityManagerInterface
+    {
+        if (!function_exists('em')) {
+            return null;
+        }
+
+        return em();
     }
 
     public static function newFromBuilder(array $attributes = []): static
@@ -315,6 +331,14 @@ abstract class Model
 
     public function save(): bool
     {
+        $entityManager = $this->getEntityManager();
+
+        if ($entityManager !== null) {
+            $entityManager->persist($this)->flush();
+
+            return true;
+        }
+
         if ($this->exists) {
             return $this->performUpdate();
         }
@@ -337,9 +361,15 @@ abstract class Model
             return 0;
         }
 
-        $this->exists = false;
+        $entityManager = $this->getEntityManager();
 
-        return $this->newQuery()->where($this->primaryKey, $this->getKey())->delete();
+        if ($entityManager !== null) {
+            $entityManager->remove($this)->flush();
+
+            return 1;
+        }
+
+        return $this->performDelete();
     }
 
     public function fresh(): ?static
@@ -399,6 +429,31 @@ abstract class Model
     public function getRelation(string $relation): mixed
     {
         return $this->relations[$relation] ?? null;
+    }
+
+    public function getRelations(): array
+    {
+        return $this->relations;
+    }
+
+    public function load(array|string $relations): self
+    {
+        if (is_string($relations)) {
+            $relations = func_get_args();
+        }
+
+        $fresh = $this->newQuery()
+            ->where($this->getKeyName(), '=', $this->getKey())
+            ->with($relations)
+            ->first();
+
+        if ($fresh instanceof Model) {
+            foreach ($fresh->getRelations() as $name => $value) {
+                $this->setRelation($name, $value);
+            }
+        }
+
+        return $this;
     }
 
     public function __get(string $key): mixed
@@ -472,7 +527,7 @@ abstract class Model
         return $this->timestamps;
     }
 
-    protected function performInsert(): bool
+    public function performInsert(): bool
     {
         if ($this->usesTimestamps()) {
             $time = $this->freshTimestampString();
@@ -498,7 +553,7 @@ abstract class Model
         return true;
     }
 
-    protected function performUpdate(): bool
+    public function performUpdate(): bool
     {
         if (!$this->isDirty()) {
             return true;
@@ -518,6 +573,13 @@ abstract class Model
         $this->syncOriginal();
 
         return true;
+    }
+
+    public function performDelete(): int
+    {
+        $this->exists = false;
+
+        return $this->newQuery()->where($this->primaryKey, $this->getKey())->delete();
     }
 
     protected function getAttributesForInsert(): array

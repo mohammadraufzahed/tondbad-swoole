@@ -47,7 +47,7 @@ class EntityManager implements EntityManagerInterface
         return $this;
     }
 
-    public function find(string $class, mixed $id): ?object
+    public function find(string $class, mixed $id, array $populate = []): ?object
     {
         $this->assertModelClass($class);
 
@@ -57,7 +57,13 @@ class EntityManager implements EntityManagerInterface
             return $entity;
         }
 
-        $entity = $this->buildFindQuery($class, $id)->first();
+        $builder = $this->buildFindQuery($class, $id);
+
+        if ($populate !== []) {
+            $builder->with($populate);
+        }
+
+        $entity = $builder->first();
 
         if ($entity !== null) {
             $this->unitOfWork->persist($entity);
@@ -68,12 +74,21 @@ class EntityManager implements EntityManagerInterface
 
     public function getReference(string $class, mixed $id): ?object
     {
-        return $this->find($class, $id);
+        $this->assertModelClass($class);
+
+        $entity = $this->identityMap->get($class, $id);
+
+        return new Reference($this, $class, $id, $entity ?? null);
     }
 
     public function contains(object $entity): bool
     {
         return $this->unitOfWork->contains($entity);
+    }
+
+    public function getManaged(string $class, mixed $id): ?object
+    {
+        return $this->identityMap->get($class, $id);
     }
 
     public function getUnitOfWork(): UnitOfWorkInterface
@@ -100,6 +115,7 @@ class EntityManager implements EntityManagerInterface
         return (new ModelBuilder($this->connection, $this->connection->getGrammar()))
             ->from($instance->getTable())
             ->setModel($class)
+            ->setEntityManager($this)
             ->where($instance->getKeyName(), '=', $id);
     }
 

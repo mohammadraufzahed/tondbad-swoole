@@ -140,7 +140,7 @@ class UnitOfWork implements UnitOfWorkInterface
     private function executeInsert(object $entity): void
     {
         /** @var Model $entity */
-        $entity->save();
+        $entity->performInsert();
         $this->identityMap->add($entity);
         $this->states[$entity] = self::STATE_MANAGED;
     }
@@ -148,14 +148,14 @@ class UnitOfWork implements UnitOfWorkInterface
     private function executeUpdate(object $entity): void
     {
         /** @var Model $entity */
-        $entity->save();
+        $entity->performUpdate();
         $this->states[$entity] = self::STATE_MANAGED;
     }
 
     private function executeDelete(object $entity): void
     {
         /** @var Model $entity */
-        $entity->delete();
+        $entity->performDelete();
         $this->identityMap->remove($entity);
         $this->states[$entity] = self::STATE_DETACHED;
     }
