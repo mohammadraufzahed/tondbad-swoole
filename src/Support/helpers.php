@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use TondbadSwoole\Auth\Access\Gate;
+use TondbadSwoole\Auth\AuthManager;
+use TondbadSwoole\Auth\Contracts\Guard as GuardContract;
 use TondbadSwoole\Bootstrap\App;
 use TondbadSwoole\Contracts\CacheInterface;
 use TondbadSwoole\Core\Config;
@@ -80,5 +83,25 @@ if (!function_exists('event')) {
     function event(string|object $event, mixed $payload = null): array
     {
         return app()?->container->make(Dispatcher::class)->dispatch($event, $payload) ?? [];
+    }
+}
+
+if (!function_exists('auth')) {
+    function auth(?string $guard = null): AuthManager|GuardContract
+    {
+        $manager = app()?->container->make(AuthManager::class);
+
+        if ($manager === null) {
+            throw new RuntimeException('AuthManager not available.');
+        }
+
+        return $guard !== null ? $manager->guard($guard) : $manager;
+    }
+}
+
+if (!function_exists('gate')) {
+    function gate(): ?Gate
+    {
+        return app()?->container->make(Gate::class);
     }
 }

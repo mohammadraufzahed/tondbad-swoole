@@ -8,14 +8,16 @@ use BackedEnum;
 use DateTimeImmutable;
 use DateTimeInterface;
 use RuntimeException;
+use TondbadSwoole\Auth\Contracts\Authenticatable;
 use TondbadSwoole\Database\Casts\CastsAttributes;
 use TondbadSwoole\Database\Relations\BelongsTo;
 use TondbadSwoole\Database\Relations\HasMany;
 use TondbadSwoole\Database\Relations\HasOne;
 use TondbadSwoole\Database\Relations\Relation;
+use TondbadSwoole\Routing\Contracts\UrlRoutable;
 use UnitEnum;
 
-abstract class Model
+abstract class Model implements Authenticatable, UrlRoutable
 {
     protected ?string $table = null;
 
@@ -181,6 +183,42 @@ abstract class Model
     public function getForeignKey(): string
     {
         return $this->snake($this->getClassBasename()) . '_' . $this->primaryKey;
+    }
+
+    public function getAuthIdentifier(): string|int|null
+    {
+        $key = $this->getKey();
+
+        return is_string($key) || is_int($key) ? $key : null;
+    }
+
+    public function getAuthIdentifierName(): string
+    {
+        return $this->primaryKey;
+    }
+
+    public function getAuthPassword(): ?string
+    {
+        $password = $this->getAttribute('password');
+
+        return is_string($password) ? $password : null;
+    }
+
+    public function getRouteKey(): mixed
+    {
+        return $this->getKey();
+    }
+
+    public function getRouteKeyName(): string
+    {
+        return $this->primaryKey;
+    }
+
+    public function resolveRouteBinding(mixed $value, ?string $field = null): ?static
+    {
+        $field = $field ?? $this->getRouteKeyName();
+
+        return static::firstWhere([$field => $value]);
     }
 
     public function getConnection(): ConnectionInterface

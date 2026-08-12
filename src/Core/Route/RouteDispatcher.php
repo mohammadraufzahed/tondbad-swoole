@@ -13,6 +13,7 @@ use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Pipeline\Pipeline;
 use TondbadSwoole\Http\Request;
 use TondbadSwoole\Http\Response;
+use TondbadSwoole\Support\Context;
 
 class RouteDispatcher
 {
@@ -31,8 +32,12 @@ class RouteDispatcher
     public function dispatch(SwooleRequest $swooleRequest, SwooleResponse $swooleResponse): void
     {
         try {
+            Context::clear();
+
             $request = new Request($swooleRequest);
             $response = new Response($swooleResponse);
+
+            Context::set('request', $request);
 
             $httpMethod = $request->method();
             $uri = $request->path();

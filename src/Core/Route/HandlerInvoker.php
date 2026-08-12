@@ -18,6 +18,7 @@ use TondbadSwoole\Core\Container;
 use TondbadSwoole\Http\FormRequest;
 use TondbadSwoole\Http\Request;
 use TondbadSwoole\Http\Response;
+use TondbadSwoole\Routing\Contracts\UrlRoutable;
 
 class HandlerInvoker
 {
@@ -134,6 +135,12 @@ class HandlerInvoker
 
         if (is_subclass_of($typeName, FormRequest::class)) {
             return new $typeName($request->getSwooleRequest());
+        }
+
+        if (is_subclass_of($typeName, UrlRoutable::class) && array_key_exists($name, $vars)) {
+            $model = new $typeName();
+
+            return $model->resolveRouteBinding($vars[$name]);
         }
 
         if (array_key_exists($name, $vars)) {
