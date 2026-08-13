@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use TondbadSwoole\Bootstrap\App;
+use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Database\Schema\Blueprint;
 use TondbadSwoole\Queue\Drivers\DatabaseQueue;
 use TondbadSwoole\Queue\QueueInterface;
@@ -74,6 +75,10 @@ afterEach(function () {
     TestFailingJob::$handleCount = 0;
     TestParentFlowJob::$ran = false;
     TestParentFlowJob::$childValues = [];
+
+    if ($this->app instanceof App) {
+        $this->app->container->make(ContextInterface::class)->clear();
+    }
 });
 
 it('processes a job synchronously with the sync queue', function () {

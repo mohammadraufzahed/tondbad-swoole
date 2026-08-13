@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use TondbadSwoole\Bootstrap\App;
+use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Database\Schema\Blueprint;
 use TondbadSwoole\Tests\Unit\Database\Fixtures\Comment;
 use TondbadSwoole\Tests\Unit\Database\Fixtures\Post;
@@ -55,6 +56,10 @@ afterEach(function () {
     schema()->dropIfExists('posts');
     schema()->dropIfExists('profiles');
     schema()->dropIfExists('comments');
+
+    if ($this->app instanceof App) {
+        $this->app->container->make(ContextInterface::class)->clear();
+    }
 });
 
 it('creates and retrieves a model', function () {

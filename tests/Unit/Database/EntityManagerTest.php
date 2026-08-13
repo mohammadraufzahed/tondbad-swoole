@@ -8,6 +8,7 @@ use TondbadSwoole\Database\EntityManagerInterface;
 use TondbadSwoole\Database\Reference;
 use TondbadSwoole\Database\Schema\Blueprint;
 use TondbadSwoole\Tests\Unit\Database\Fixtures\Comment;
+use TondbadSwoole\Tests\Unit\Database\Fixtures\EventedUser;
 use TondbadSwoole\Tests\Unit\Database\Fixtures\Post;
 use TondbadSwoole\Tests\Unit\Database\Fixtures\User;
 
@@ -283,4 +284,49 @@ it('can read the primary key from a reference without loading', function () {
 
     expect($reference->id)->toBe(1);
     expect($reference->isInitialized())->toBeFalse();
+});
+
+it('does not update unchanged managed entities on flush', function () {
+    EventedUser::create([
+        'name' => 'NoChange',
+        'email' => 'nochange@example.com',
+    ]);
+
+    $em = em();
+    $em->clear();
+
+    $user = $em->find(EventedUser::class, 1);
+    $em->flush();
+
+    expect($user->lifecycleEvents)->toContain('onLoad');
+    expect($user->lifecycleEvents)->not->toContain('onUpdate');
+});
+
+it('returns a fresh instance after the entity manager is cleared', function () {
+    User::create([
+        'name' => 'Fresh',
+        'email' => 'fresh@example.com',
+    ]);
+
+    $em = em();
+    $first = $em->find(User::class, 1);
+    $em->clear();
+    $second = $em->find(User::class, 1);
+
+    expect($first)->not->toBe($second);
+    expect($second)->toBeInstanceOf(User::class);
+    expect($second->name)->toBe('Fresh');
+});
+
+it('does not share managed instances across entity manager clears', function () {
+    User::create([
+        'name' => 'Isolate',
+        'email' => 'isolate@example.com',
+    ]);
+
+    $first = em()->find(User::class, 1);
+    em()->clear();
+    $second = em()->find(User::class, 1);
+
+    expect($first)->not->toBe($second);
 });
