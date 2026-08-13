@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Queue\Drivers\RedisQueue;
 use TondbadSwoole\Queue\QueueManager;
 use TondbadSwoole\Queue\Worker;
 use TondbadSwoole\Queue\WorkerOptions;
@@ -47,7 +48,7 @@ class QueueWorkCommand extends Command
         $workerOptions = new WorkerOptions(
             concurrency: max(1, $concurrency),
             maxTries: $tries,
-            sleep: $sleep,
+            sleep: $connection instanceof RedisQueue ? 0 : $sleep,
             maxJobs: $maxJobs > 0 ? $maxJobs : null,
             stopWhenEmpty: $stopWhenEmpty,
             rateLimiter: $rateLimiter,
@@ -59,6 +60,8 @@ class QueueWorkCommand extends Command
             && method_exists(\OpenSwoole\Coroutine::class, 'create');
 
         if ($canRunConcurrent) {
+            $this->enableSwooleTcpHooks();
+
             \OpenSwoole\Coroutine::run(function () use ($connection, $queue, $worker, $workerOptions): void {
                 $this->runConcurrent($connection, $queue, $worker, $workerOptions);
             });
@@ -175,5 +178,18 @@ class QueueWorkCommand extends Command
         }
 
         return null;
+    }
+
+    private function enableSwooleTcpHooks(): void
+    {
+        if (!class_exists(\OpenSwoole\Runtime::class)) {
+            return;
+        }
+
+        $flags = (int) \OpenSwoole\Runtime::getHookFlags();
+
+        if (($flags & \OpenSwoole\Runtime::HOOK_TCP) === 0) {
+            \OpenSwoole\Runtime::enableCoroutine(\OpenSwoole\Runtime::HOOK_TCP);
+        }
     }
 }

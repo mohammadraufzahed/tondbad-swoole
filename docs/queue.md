@@ -1,6 +1,6 @@
 # Queue & Jobs
 
-The queue system dispatches background jobs to OpenSwoole TaskWorkers, Redis, or a database table. The database driver is the default persistent backend and supports delayed jobs, priorities, retries, backoff, deduplication, metrics, and bulk dispatch.
+The queue system dispatches background jobs to OpenSwoole TaskWorkers, Redis, or a database table. The `database` and `redis` drivers are persistent backends that support delayed jobs, priorities, retries, backoff, deduplication, metrics, flow jobs, and bulk dispatch.
 
 ## Configuration
 
@@ -30,9 +30,15 @@ return [
 
         'redis' => [
             'driver' => 'redis',
-            'connection' => $env->get('queue.redis.connection', 'default'),
+            'scheme' => $env->get('queue.redis.scheme', 'tcp'),
+            'host' => $env->get('queue.redis.host', '127.0.0.1'),
+            'port' => (int) $env->get('queue.redis.port', 6379),
+            'password' => $env->get('queue.redis.password', null),
+            'database' => (int) $env->get('queue.redis.database', 0),
+            'prefix' => $env->get('queue.redis.prefix', 'tondbad'),
             'queue' => $env->get('queue.redis.queue', 'default'),
             'retry_after' => (int) $env->get('queue.redis.retry_after', 60),
+            'block_for' => (int) $env->get('queue.redis.block_for', 1),
         ],
     ],
 
@@ -276,11 +282,21 @@ If any child fails after exhausting its `tries`, the parent is marked `failed` a
 
 ## Redis queue
 
-The `redis` driver pushes jobs to a Redis list and pops them in the worker:
+The `redis` driver uses `Predis` with Redis lists and sorted sets. Jobs are atomically claimed with `RPOPLPUSH` so only one worker receives each job. Delayed jobs, stale active-job recovery, metrics, flow jobs, and rate limiting are all supported with the same API as the database driver.
 
 ```bash
 php bin/tondbad queue:work --connection=redis --queue=emails
 ```
+
+With OpenSwoole you can run multiple coroutine workers safely:
+
+```bash
+php bin/tondbad queue:work --connection=redis --queue=emails --concurrency=4
+```
+
+`--concurrency` enables `OpenSwoole\Runtime::HOOK_TCP` automatically and processes jobs inside `OpenSwoole\Coroutine::run`. Each coroutine calls the same atomic `pop()` path, so a job is never handled by more than one worker.
+
+`block_for` controls how long `pop()` blocks waiting for a job when the queue is empty. Set it to `0` to poll immediately.
 
 ## Rate limiting
 
