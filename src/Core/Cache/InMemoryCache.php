@@ -69,10 +69,31 @@ class InMemoryCache implements CacheInterface
             $expiresAt = 0;
         }
 
-        return $this->table->set($key, [
+        return $this->trySet($key, [
             'value' => $serializedValue,
             'expires_at' => $expiresAt,
         ]);
+    }
+
+    private function trySet(string $key, array $data): bool
+    {
+        if ($this->table->set($key, $data)) {
+            return true;
+        }
+
+        $this->cleanExpiredItems();
+
+        if ($this->table->set($key, $data)) {
+            return true;
+        }
+
+        foreach ($this->table as $existingKey => $row) {
+            $this->table->del((string) $existingKey);
+
+            return $this->table->set($key, $data);
+        }
+
+        return false;
     }
 
     public function delete(string $key): bool

@@ -21,6 +21,11 @@ class MakeMiddlewareCommand extends MakeCommand
         return __DIR__ . '/../../../stubs/middleware.stub';
     }
 
+    protected function getNameSuffixes(): array
+    {
+        return ['Middleware'];
+    }
+
     protected function getDefaultPath(string $name): string
     {
         return $this->basePath . '/app/Http/Middleware/' . $name . 'Middleware.php';
