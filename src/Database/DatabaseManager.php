@@ -8,6 +8,8 @@ use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Database\Engines\EngineFactory;
 use TondbadSwoole\Database\Engines\Contracts\DatabaseEngine;
+use TondbadSwoole\Database\Engines\PostgresEngine;
+use TondbadSwoole\Database\Postgres\PostgresContextPool;
 use TondbadSwoole\Database\Query\Builder;
 use TondbadSwoole\Support\Context;
 
@@ -88,7 +90,7 @@ class DatabaseManager
         }
 
         $engine = $this->engineFactory->makeForConfig($config);
-        $pool = $this->createPool($engine, $config);
+        $pool = $this->createPool($engine, $config, $name);
 
         return $engine->createConnection($pool, $this->context, $name);
     }
@@ -96,7 +98,7 @@ class DatabaseManager
     /**
      * @param array<string, mixed> $config
      */
-    private function createPool(DatabaseEngine $engine, array $config): PoolInterface
+    private function createPool(DatabaseEngine $engine, array $config, string $name): PoolInterface
     {
         $poolConfig = $config['pool'] ?? [];
         $factory = function () use ($engine, $config): \PDO {
@@ -114,10 +116,16 @@ class DatabaseManager
             'check_interval' => (float) ($poolConfig['check_interval'] ?? 30.0),
         ];
 
-        if (class_exists(\OpenSwoole\Coroutine\Channel::class) && $max > 1) {
-            return new SwoolePdoPool($factory, $min, $max, $waitTimeout, $runtimeConfig);
+        if ($engine instanceof PostgresEngine && class_exists(\OpenSwoole\Coroutine::class)) {
+            return new PostgresContextPool($factory, $name);
         }
 
-        return new SimplePdoPool($factory, $runtimeConfig);
+        return new LazyPool($factory, $min, $max, $waitTimeout, $runtimeConfig);
+    }
+
+    private function inCoroutine(): bool
+    {
+        return class_exists(\OpenSwoole\Coroutine::class)
+            && \OpenSwoole\Coroutine::getCid() >= 0;
     }
 }

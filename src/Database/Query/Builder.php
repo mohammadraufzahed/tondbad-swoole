@@ -30,6 +30,10 @@ class Builder
 
     public ?int $offset = null;
 
+    public bool $lockForUpdate = false;
+
+    public bool $skipLocked = false;
+
     public array $bindings = [
         'select' => [],
         'from' => [],
@@ -91,6 +95,20 @@ class Builder
     public function distinct(bool $distinct = true): self
     {
         $this->distinct = $distinct;
+
+        return $this;
+    }
+
+    public function lockForUpdate(): self
+    {
+        $this->lockForUpdate = true;
+
+        return $this;
+    }
+
+    public function skipLocked(): self
+    {
+        $this->skipLocked = true;
 
         return $this;
     }
@@ -518,9 +536,12 @@ class Builder
 
     public function insertGetId(array $values, ?string $sequence = null): int|string
     {
-        $this->insert($values);
+        $values = $this->prepareInsertForBindings($values);
 
-        return $this->connection->lastInsertId($sequence);
+        $sql = $this->grammar->compileInsert($this, $values);
+        $bindings = $this->getInsertBindings($values);
+
+        return $this->connection->insertGetId($sql, $bindings, $sequence);
     }
 
     public function update(array $values): int

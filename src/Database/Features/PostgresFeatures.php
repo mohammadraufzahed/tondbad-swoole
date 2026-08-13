@@ -16,6 +16,11 @@ class PostgresFeatures extends AbstractFeatures
         return true;
     }
 
+    public function supportsForUpdateSkipLocked(): bool
+    {
+        return true;
+    }
+
     public function supportsDeferrableConstraints(): bool
     {
         return true;

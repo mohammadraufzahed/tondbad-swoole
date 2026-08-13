@@ -130,6 +130,20 @@ db()->transaction(function ($connection) {
 });
 ```
 
+## Row-level locking
+
+The query builder supports pessimistic locking where the driver allows it:
+
+```php
+$user = db()->table('users')
+    ->where('id', 1)
+    ->lockForUpdate()
+    ->skipLocked()
+    ->first();
+```
+
+`lockForUpdate()` adds `FOR UPDATE`. `skipLocked()` adds `SKIP LOCKED` on drivers that support it (PostgreSQL, MySQL 8+). SQLite falls back to no locking.
+
 ## Schema builder
 
 ```php
@@ -171,7 +185,13 @@ $manager->extend('mariadb', \App\Database\Engines\MariaDbEngine::class);
 
 ## Connection pooling
 
-Under OpenSwoole, `DatabaseManager` uses a `SwoolePdoPool`. Outside Swoole it falls back to `SimplePdoPool` for local development and testing. Each coroutine (or request) gets its own connection from the pool and is returned when the request lifecycle ends.
+`DatabaseManager` creates a `LazyPool` that chooses the right implementation for the runtime:
+
+- MySQL uses `SwoolePdoPool` under OpenSwoole (PDO + `mysqlnd` + `SWOOLE_HOOK_TCP`) and `SimplePdoPool` outside coroutines.
+- PostgreSQL uses `PostgresContextPool`, which creates a per-checkout `SwoolePostgresPdo` backed by `OpenSwoole\Coroutine\PostgreSQL` inside a coroutine, and falls back to a regular PDO connection outside a coroutine. This avoids sharing the native Postgres client across coroutines, which is unsafe.
+- SQLite always uses `SimplePdoPool` and should not be used for concurrent OpenSwoole workloads.
+
+In all cases each coroutine (or request) gets its own connection and it is returned when the lifecycle ends.
 
 Pool options:
 

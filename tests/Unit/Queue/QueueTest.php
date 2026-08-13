@@ -379,12 +379,16 @@ it('rate limits job execution based on queue key', function () {
     expect(TestQueueJob::$ran)->toBeTrue();
     expect($queue->size())->toBe(1);
 
+    $before = time();
+
+    $worker->runNextJob($queue, 'default', 1, 0, $options);
+
     $row = db()->table('jobs')
-        ->where('status', 'waiting')
+        ->where('status', 'delayed')
         ->first();
 
     expect($row)->not->toBeNull();
-    expect($row['available_at'])->toBeGreaterThanOrEqual(time());
+    expect($row['available_at'])->toBeGreaterThan($before);
 });
 
 class TestQueueJob extends \TondbadSwoole\Queue\Jobs\Job
