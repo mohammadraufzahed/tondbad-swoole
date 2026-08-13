@@ -56,6 +56,7 @@ class QueueWorkCommand extends Command
 
         $canRunConcurrent = $workerOptions->concurrency > 1
             && class_exists(\OpenSwoole\Coroutine::class)
+            && class_exists(\OpenSwoole\Atomic::class)
             && method_exists(\OpenSwoole\Coroutine::class, 'run')
             && method_exists(\OpenSwoole\Coroutine::class, 'create');
 
@@ -97,45 +98,41 @@ class QueueWorkCommand extends Command
 
     private function runConcurrent(\TondbadSwoole\Queue\QueueInterface $connection, string $queue, Worker $worker, WorkerOptions $options): void
     {
-        $channel = new \OpenSwoole\Coroutine\Channel($options->concurrency);
+        $jobsProcessed = new \OpenSwoole\Atomic(0);
+        $done = new \OpenSwoole\Coroutine\Channel($options->concurrency);
 
         for ($i = 0; $i < $options->concurrency; $i++) {
-            \OpenSwoole\Coroutine::create(function () use ($channel, $connection, $worker, $options): void {
+            \OpenSwoole\Coroutine::create(function () use ($connection, $queue, $worker, $options, $jobsProcessed, $done): void {
                 while (true) {
-                    $job = $channel->pop();
-
-                    if ($job === false) {
+                    if ($options->maxJobs !== null && $jobsProcessed->get() >= $options->maxJobs) {
                         break;
                     }
 
+                    $job = $connection->pop($queue);
+
+                    if ($job === null) {
+                        if ($options->stopWhenEmpty) {
+                            break;
+                        }
+
+                        if ($options->sleep > 0) {
+                            usleep($options->sleep * 1000000);
+                        }
+
+                        continue;
+                    }
+
                     $worker->process($job, $connection, $options->maxTries, $options);
+                    $jobsProcessed->add(1);
                 }
+
+                $done->push(true);
             });
         }
 
-        $jobsProcessed = 0;
-
-        while (true) {
-            $job = $connection->pop($queue);
-
-            if ($job === null) {
-                if ($options->stopWhenEmpty) {
-                    break;
-                }
-
-                usleep($options->sleep * 1000000);
-                continue;
-            }
-
-            $channel->push($job);
-            $jobsProcessed++;
-
-            if ($options->maxJobs !== null && $jobsProcessed >= $options->maxJobs) {
-                break;
-            }
+        for ($i = 0; $i < $options->concurrency; $i++) {
+            $done->pop();
         }
-
-        $channel->close();
     }
 
     private function parseOptions(array $args): array

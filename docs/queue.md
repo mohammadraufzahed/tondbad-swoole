@@ -302,14 +302,14 @@ php bin/tondbad queue:work --connection=redis --queue=emails --concurrency=4
 
 ## Rate limiting
 
-Rate limiting is applied during `handle()` after the job has been popped. Enable it by setting `queue.rateLimiter.driver` to `database` or by passing `--rate-limit` to `queue:work`.
+Rate limiting is applied atomically when the job is popped. Enable it by setting `queue.rateLimiter.driver` to `database` or by passing `--rate-limit` to `queue:work`.
 
 ```bash
 # max 10 jobs per 60 seconds for the queue
 php bin/tondbad queue:work --connection=database --queue=default --rate-limit=10:60
 ```
 
-The limit key can be `'queue'` (default), `'class'` (job class name), or any custom string. When the limit is exceeded, the job is released with a delay equal to the remaining window and a `rate_limited` event is emitted.
+The limit key can be `'queue'` (default), `'class'` (job class name), or any custom string. `RateLimiterInterface::attempt()` increments the counter and returns whether the attempt is allowed in a single step, so concurrent workers cannot overshoot the limit. When the limit is exceeded, the job is released with a delay equal to the remaining window and a `rate_limited` event is emitted.
 
 ## Failed jobs
 

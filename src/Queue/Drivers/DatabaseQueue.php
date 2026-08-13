@@ -86,34 +86,36 @@ class DatabaseQueue extends Queue
             return $this->popAtomically($queueName);
         }
 
-        $expiration = time() - $this->retryAfter;
-        $table = $this->connection->getGrammar()->wrapTable($this->table);
+        return $this->connection->transaction(function (ConnectionInterface $connection) use ($queueName): ?Job {
+            $expiration = time() - $this->retryAfter;
+            $table = $connection->getGrammar()->wrapTable($this->table);
 
-        while (true) {
-            $job = $this->getNextAvailableJob($queueName, $expiration);
+            while (true) {
+                $job = $this->getNextAvailableJob($queueName, $expiration);
 
-            if ($job === null) {
-                return null;
-            }
-
-            $reserved = $this->connection->update(
-                "update {$table} set reserved_at = ?, status = ?, attempts = attempts + 1 where id = ? and (reserved_at is null or reserved_at <= ?)",
-                [time(), JobStatus::Active->value, $job['id'], $expiration]
-            );
-
-            if ($reserved > 0) {
-                $instance = $this->createJob($job);
-                $instance->setAttempts((int) $job['attempts'] + 1);
-
-                if ($job['status'] === JobStatus::Active->value) {
-                    $this->emit('stalled', ['job' => $instance, 'queue' => $queueName]);
+                if ($job === null) {
+                    return null;
                 }
 
-                $this->emit('active', ['job' => $instance, 'queue' => $queueName]);
+                $reserved = $connection->update(
+                    "update {$table} set reserved_at = ?, status = ?, attempts = attempts + 1 where id = ? and (reserved_at is null or reserved_at <= ?)",
+                    [time(), JobStatus::Active->value, $job['id'], $expiration]
+                );
 
-                return $instance;
+                if ($reserved > 0) {
+                    $instance = $this->createJob($job);
+                    $instance->setAttempts((int) $job['attempts'] + 1);
+
+                    if ($job['status'] === JobStatus::Active->value) {
+                        $this->emit('stalled', ['job' => $instance, 'queue' => $queueName]);
+                    }
+
+                    $this->emit('active', ['job' => $instance, 'queue' => $queueName]);
+
+                    return $instance;
+                }
             }
-        }
+        });
     }
 
     public function size(?string $queue = null): int
@@ -166,64 +168,68 @@ class DatabaseQueue extends Queue
 
     public function markCompleted(int $id): bool
     {
-        $row = $this->connection->table($this->table)->where('id', $id)->first();
+        return (bool) $this->connection->transaction(function (ConnectionInterface $connection) use ($id): bool {
+            $row = $connection->table($this->table)->where('id', $id)->first();
 
-        if ($row === null) {
-            return false;
-        }
+            if ($row === null) {
+                return false;
+            }
 
-        $updated = $this->connection->table($this->table)
-            ->where('id', $id)
-            ->update([
-                'reserved_at' => null,
-                'status' => JobStatus::Completed->value,
-            ]) > 0;
+            $updated = $connection->table($this->table)
+                ->where('id', $id)
+                ->update([
+                    'reserved_at' => null,
+                    'status' => JobStatus::Completed->value,
+                ]) > 0;
 
-        if (!$updated) {
-            return false;
-        }
+            if (!$updated) {
+                return false;
+            }
 
-        $instance = $this->createJob($row);
-        $this->emit('completed', ['job' => $instance, 'result' => $instance->getResult()]);
+            $instance = $this->createJob($row);
+            $this->emit('completed', ['job' => $instance, 'result' => $instance->getResult()]);
 
-        $parentId = $row['parent_id'] ?? null;
+            $parentId = $row['parent_id'] ?? null;
 
-        if ($parentId !== null) {
-            $this->completeChild((int) $parentId);
-        }
+            if ($parentId !== null) {
+                $this->completeChild((int) $parentId);
+            }
 
-        return true;
+            return true;
+        });
     }
 
     public function markFailed(int $id, ?Throwable $exception = null): bool
     {
-        $row = $this->connection->table($this->table)->where('id', $id)->first();
+        return (bool) $this->connection->transaction(function (ConnectionInterface $connection) use ($id, $exception): bool {
+            $row = $connection->table($this->table)->where('id', $id)->first();
 
-        if ($row === null) {
-            return false;
-        }
+            if ($row === null) {
+                return false;
+            }
 
-        $updated = $this->connection->table($this->table)
-            ->where('id', $id)
-            ->update([
-                'reserved_at' => null,
-                'status' => JobStatus::Failed->value,
-            ]) > 0;
+            $updated = $connection->table($this->table)
+                ->where('id', $id)
+                ->update([
+                    'reserved_at' => null,
+                    'status' => JobStatus::Failed->value,
+                ]) > 0;
 
-        if (!$updated) {
-            return false;
-        }
+            if (!$updated) {
+                return false;
+            }
 
-        $instance = $this->createJob($row);
-        $this->emit('failed', ['job' => $instance, 'exception' => $exception]);
+            $instance = $this->createJob($row);
+            $this->emit('failed', ['job' => $instance, 'exception' => $exception]);
 
-        $parentId = $row['parent_id'] ?? null;
+            $parentId = $row['parent_id'] ?? null;
 
-        if ($parentId !== null) {
-            $this->failParent((int) $parentId, $exception);
-        }
+            if ($parentId !== null) {
+                $this->failParent((int) $parentId, $exception);
+            }
 
-        return true;
+            return true;
+        });
     }
 
     public function progress(int $id, int $progress): bool
@@ -398,7 +404,7 @@ class DatabaseQueue extends Queue
 
         $parent = $this->connection->table($this->table)->where('id', $parentId)->first();
 
-        if ($parent === null) {
+        if ($parent === null || $parent['status'] !== JobStatus::WaitingChildren->value) {
             return;
         }
 
@@ -406,32 +412,35 @@ class DatabaseQueue extends Queue
         $total = (int) $parent['children_count'];
 
         if ($completed >= $total && $total > 0) {
-            $this->connection->table($this->table)
-                ->where('id', $parentId)
-                ->update([
-                    'reserved_at' => null,
-                    'available_at' => time(),
-                    'status' => JobStatus::Waiting->value,
-                ]);
+            $released = $this->connection->update(
+                "update {$table} set status = ?, available_at = ? where id = ? and status = ?",
+                [JobStatus::Waiting->value, time(), $parentId, JobStatus::WaitingChildren->value]
+            );
 
-            $this->emit('waiting', ['id' => $parentId, 'queue' => $parent['queue']]);
+            if ($released > 0) {
+                $this->emit('added', ['id' => $parentId, 'queue' => $parent['queue']]);
+            }
         }
     }
 
     protected function failParent(int $parentId, ?Throwable $exception): void
     {
+        $table = $this->connection->getGrammar()->wrapTable($this->table);
+
+        $released = $this->connection->update(
+            "update {$table} set status = ?, reserved_at = null where id = ? and status = ?",
+            [JobStatus::Failed->value, $parentId, JobStatus::WaitingChildren->value]
+        );
+
+        if ($released === 0) {
+            return;
+        }
+
         $parent = $this->connection->table($this->table)->where('id', $parentId)->first();
 
         if ($parent === null) {
             return;
         }
-
-        $this->connection->table($this->table)
-            ->where('id', $parentId)
-            ->update([
-                'reserved_at' => null,
-                'status' => JobStatus::Failed->value,
-            ]);
 
         $instance = $this->createJob($parent);
         $this->emit('failed', ['job' => $instance, 'exception' => $exception]);

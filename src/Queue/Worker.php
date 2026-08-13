@@ -99,15 +99,13 @@ class Worker
             default => (string) $keyStrategy,
         };
 
-        if ($rateLimiter->tooManyAttempts($key, $max, $window)) {
+        if (!$rateLimiter->attempt($key, $max, $window)) {
             $delay = $rateLimiter->availableIn($key, $window);
             $connection->release($job->getJobId(), max(1, $delay));
             $connection->emit('rate_limited', ['job' => $job, 'queue' => $job->getQueue()]);
 
             return true;
         }
-
-        $rateLimiter->hit($key, $window);
 
         return false;
     }

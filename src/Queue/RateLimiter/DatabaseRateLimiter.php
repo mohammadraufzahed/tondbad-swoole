@@ -75,6 +75,55 @@ class DatabaseRateLimiter implements RateLimiterInterface
             ]);
     }
 
+    public function attempt(string $key, int $max, int $window): bool
+    {
+        return (bool) $this->connection->transaction(function (ConnectionInterface $connection) use ($key, $max, $window): bool {
+            $now = time();
+            $query = $connection->table($this->table)->where('key', $key);
+
+            if ($connection->getGrammar()->getFeatures()->supportsForUpdateSkipLocked()) {
+                $query->lockForUpdate();
+            }
+
+            $row = $query->first();
+
+            if ($row === null) {
+                $connection->table($this->table)->insert([
+                    'key' => $key,
+                    'count' => 1,
+                    'reset_at' => $now + $window,
+                ]);
+
+                return true;
+            }
+
+            $resetAt = (int) $row['reset_at'];
+
+            if ($resetAt <= $now) {
+                $connection->table($this->table)
+                    ->where('key', $key)
+                    ->update([
+                        'count' => 1,
+                        'reset_at' => $now + $window,
+                    ]);
+
+                return true;
+            }
+
+            $count = (int) $row['count'];
+
+            if ($count >= $max) {
+                return false;
+            }
+
+            $connection->table($this->table)
+                ->where('key', $key)
+                ->update(['count' => $count + 1]);
+
+            return true;
+        });
+    }
+
     private function reset(string $key, int $resetAt): void
     {
         $this->connection->table($this->table)

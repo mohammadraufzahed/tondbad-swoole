@@ -11,4 +11,9 @@ interface RateLimiterInterface
     public function availableIn(string $key, int $window): int;
 
     public function hit(string $key, int $window): void;
+
+    /**
+     * Atomically consume one attempt and return whether the attempt is allowed.
+     */
+    public function attempt(string $key, int $max, int $window): bool;
 }
