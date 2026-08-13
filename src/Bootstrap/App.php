@@ -207,9 +207,10 @@ class App
         }
 
         $flags = (int) \OpenSwoole\Runtime::getHookFlags();
+        $desiredFlags = $this->config->get('app.hook_flags', \OpenSwoole\Runtime::HOOK_ALL);
 
-        if (($flags & \OpenSwoole\Runtime::HOOK_TCP) === 0) {
-            \OpenSwoole\Runtime::enableCoroutine(\OpenSwoole\Runtime::HOOK_TCP);
+        if (($flags & $desiredFlags) !== $desiredFlags) {
+            \OpenSwoole\Runtime::enableCoroutine($desiredFlags);
         }
     }
 }

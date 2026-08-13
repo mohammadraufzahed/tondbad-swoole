@@ -31,11 +31,12 @@ class HttpServiceProvider extends ServiceProvider
                 (int) $config->get('app.http.sock_type', defined('SWOOLE_SOCK_TCP') ? SWOOLE_SOCK_TCP : 0),
             );
 
-            $settings = $config->get('app.http.settings', []);
+            $settings = array_merge(
+                ['enable_coroutine' => true],
+                $config->get('app.http.settings', [])
+            );
 
-            if ($settings !== []) {
-                $server->set($settings);
-            }
+            $server->set($settings);
 
             $this->setupRouter($server, $container);
             $this->setupLogs($server, $container->make(Logger::class));

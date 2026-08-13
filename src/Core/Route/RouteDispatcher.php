@@ -64,6 +64,7 @@ class RouteDispatcher
             $this->errorHandler->handle($e, $swooleResponse);
         } finally {
             $this->databaseManager->closeOldConnections();
+            em()?->clear();
             $this->context->clear();
         }
     }

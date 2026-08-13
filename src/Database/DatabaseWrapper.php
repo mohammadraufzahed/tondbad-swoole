@@ -83,6 +83,7 @@ class DatabaseWrapper implements ConnectionInterface
 
             $pdo = $this->pool->get();
             $this->context->set($this->transactionKey(), $pdo);
+            $this->registerCoroutineCleanup();
 
             try {
                 $pdo->beginTransaction();
@@ -133,6 +134,7 @@ class DatabaseWrapper implements ConnectionInterface
         if (!$queryPdo instanceof PDO) {
             $queryPdo = $this->pool->get();
             $this->context->set($this->queryKey(), $queryPdo);
+            $this->registerCoroutineCleanup();
         }
 
         return $queryPdo;
@@ -202,5 +204,29 @@ class DatabaseWrapper implements ConnectionInterface
     private function queryKey(): string
     {
         return "database.connection.{$this->name}.query_pdo";
+    }
+
+    private function registerCoroutineCleanup(): void
+    {
+        if (!$this->inCoroutine() || $this->context->has($this->deferKey())) {
+            return;
+        }
+
+        $this->context->set($this->deferKey(), true);
+
+        \OpenSwoole\Coroutine::defer(function (): void {
+            $this->close();
+        });
+    }
+
+    private function inCoroutine(): bool
+    {
+        return class_exists(\OpenSwoole\Coroutine::class)
+            && \OpenSwoole\Coroutine::getCid() >= 0;
+    }
+
+    private function deferKey(): string
+    {
+        return "database.connection.{$this->name}.cleanup_defer";
     }
 }
