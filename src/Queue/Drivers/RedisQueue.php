@@ -218,8 +218,15 @@ class RedisQueue extends Queue
         }
 
         if ($parentId > 0) {
-            $this->redis->executeRaw(['SADD', $this->key('completed_children', (string) $parentId), (string) $id]);
-            $this->releaseParent($parentId);
+            $released = $this->releaseParent($parentId, $id);
+
+            if ($released === 1) {
+                $parent = $this->getJob($parentId);
+
+                if ($parent !== null) {
+                    $this->emit('added', ['job' => $parent, 'queue' => $parent->getQueue(), 'id' => $parentId]);
+                }
+            }
         }
 
         return true;
@@ -255,7 +262,16 @@ class RedisQueue extends Queue
         }
 
         if ($parentId > 0) {
-            $this->failParent($parentId);
+            $message = $exception !== null ? get_class($exception) . ': ' . $exception->getMessage() : '';
+            $failed = $this->failParent($parentId, $message);
+
+            if ($failed === 1) {
+                $parent = $this->getJob($parentId);
+
+                if ($parent !== null) {
+                    $this->emit('failed', ['job' => $parent, 'queue' => $parent->getQueue(), 'id' => $parentId, 'exception' => $exception]);
+                }
+            }
         }
 
         return true;
@@ -497,61 +513,64 @@ LUA;
         ));
     }
 
-    private function releaseParent(int $parentId): void
+    private function releaseParent(int $parentId, int $childId): int
     {
-        $childrenKey = $this->key('children', (string) $parentId);
-        $completedKey = $this->key('completed_children', (string) $parentId);
+        $script = <<<'LUA'
+local parentKey = KEYS[1]
+local completedChildrenKey = KEYS[2]
+local prefix = ARGV[1]
+local parentId = ARGV[2]
+local childId = ARGV[3]
 
-        $childrenCount = (int) $this->redis->scard($childrenKey);
-        $completedCount = (int) $this->redis->scard($completedKey);
+redis.call('SADD', completedChildrenKey, childId)
 
-        if ($completedCount < $childrenCount || $childrenCount === 0) {
-            return;
-        }
+local childrenCount = tonumber(redis.call('HGET', parentKey, 'children_count') or '0')
+local completedCount = redis.call('SCARD', completedChildrenKey)
 
-        $parentKey = $this->jobKey($parentId);
-        $parentHash = $this->redis->hgetall($parentKey);
+if childrenCount == 0 or completedCount < childrenCount then
+    return 0
+end
 
-        if ($parentHash === []) {
-            return;
-        }
+local status = redis.call('HGET', parentKey, 'status')
+if status ~= 'waiting_children' then
+    return 0
+end
 
-        if (($parentHash['status'] ?? '') !== 'waiting_children') {
-            return;
-        }
+local queue = redis.call('HGET', parentKey, 'queue') or 'default'
+local waitingKey = prefix .. ':' .. queue .. ':waiting'
 
-        $queue = $parentHash['queue'] ?? $this->defaultQueue;
+redis.call('HMSET', parentKey, 'status', 'waiting', 'reserved_at', '0')
+redis.call('LPUSH', waitingKey, parentId)
+return 1
+LUA;
 
-        $this->redis->hmset($parentKey, ['status' => 'waiting']);
-        $this->redis->executeRaw(['LPUSH', $this->queueKey($queue, 'waiting'), (string) $parentId]);
-
-        $parentJob = $this->unserializeJob($parentHash);
-
-        if ($parentJob !== null) {
-            $this->emit('added', ['job' => $parentJob, 'queue' => $queue, 'id' => $parentId]);
-        }
+        return (int) $this->redis->executeRaw(array_merge(
+            ['EVAL', $script, '2'],
+            [$this->jobKey($parentId), $this->key('completed_children', (string) $parentId)],
+            [$this->key(), (string) $parentId, (string) $childId]
+        ));
     }
 
-    private function failParent(int $parentId): void
+    private function failParent(int $parentId, string $message): int
     {
-        $parentKey = $this->jobKey($parentId);
-        $parentHash = $this->redis->hgetall($parentKey);
+        $script = <<<'LUA'
+local parentKey = KEYS[1]
+local message = ARGV[1]
 
-        if ($parentHash === []) {
-            return;
-        }
+local status = redis.call('HGET', parentKey, 'status')
+if status ~= 'waiting_children' then
+    return 0
+end
 
-        if (($parentHash['status'] ?? '') !== 'waiting_children') {
-            return;
-        }
+redis.call('HMSET', parentKey, 'status', 'failed', 'reserved_at', '0', 'exception', message)
+return 1
+LUA;
 
-        $this->redis->hmset($parentKey, ['status' => 'failed']);
-
-        $parentJob = $this->unserializeJob($parentHash);
-
-        if ($parentJob !== null) {
-            $this->emit('failed', ['job' => $parentJob, 'queue' => $parentHash['queue'] ?? $this->defaultQueue, 'id' => $parentId]);
-        }
+        return (int) $this->redis->executeRaw(array_merge(
+            ['EVAL', $script, '1'],
+            [$this->jobKey($parentId)],
+            [$message]
+        ));
     }
 
     private function unserializeJob(array $hash): ?Job

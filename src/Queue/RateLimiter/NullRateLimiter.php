@@ -19,4 +19,9 @@ class NullRateLimiter implements RateLimiterInterface
     public function hit(string $key, int $window): void
     {
     }
+
+    public function attempt(string $key, int $max, int $window): bool
+    {
+        return true;
+    }
 }
