@@ -93,5 +93,24 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - With `APP_DEBUG=false`, an exception route returns `500 Internal Server Error`; with `APP_DEBUG=true` it appends the exception message.
 - gRPC boot: the process should listen on the configured port and log `OpenSwoole GRPC Server is started grpc://0.0.0.0:<port>`.
 
+# Full end-to-end / PR #41 verification
+- `php bin/tondbad`, `--version`, `route:list`, `migrate`, `migrate:rollback`, `queue:work`, `schedule:work --run-once`, `make:model`, `serve`, and `serve:grpc` should all exit `0`.
+- HTTP server on `127.0.0.1:9501` should serve `GET` and `POST` routes; `GET /db` and `GET /pool` (or equivalent) confirm the database wrapper returns the PDO to the pool after each request (`borrowed:0`, `available:>=1`).
+- `cache()->set('key', 'value', $ttl)` with a positive TTL and `cache()->get('key')` returns the value; waiting for the TTL to elapse then calling `get()` returns `null`. Negative or zero TTL is treated as "no expiry", not immediate expiry.
+- ORM CRUD, relations (`with('posts.comments')`), and identity map (`User::find(1) === User::find(1)`) work through `EntityManager`/`Model`.
+- `queue:work --connection=database --max-jobs=1 --stop-when-empty` processes a pushed `Job` and creates the marker file.
+- `schedule:work --run-once` with a `routes/console.php` closure schedules a `call()` event every minute; the event writes the marker file.
+
+## Known gaps / workarounds for root-package testing
+- `composer.json` does **not** autoload `App\` by default. For tests that need `app/Models`, `app/Jobs`, or `app/Http/Controllers`, temporarily add `"App\\": "app/"` to `autoload.psr-4`, run `composer dump-autoload`, and restore/dump after testing.
+- `config/auth.php` only defines `token` and `session` guards. To test `api_key` and `basic` guards, add runtime config entries or temporarily add them to `config/auth.php`:
+  ```php
+  'api_key' => ['driver' => 'api_key', 'provider' => 'users', 'storage_key' => 'api_key'],
+  'basic' => ['driver' => 'basic', 'provider' => 'users', 'username_key' => 'email'],
+  ```
+- `src/Database/Migrations/Queue/2025_01_01_000003_create_rate_limits_table.php` defines `class CreateTondbadRateLimitsTable`, but `Migrator::getClassName()` expects `CreateRateLimitsTable` from the filename. `php bin/tondbad migrate` fails until the class name matches the filename.
+- Redis `queue:work --concurrency=N` with `N>1` fails because `Predis\Client` is shared across coroutines and `StreamConnection` cannot be read from multiple coroutines concurrently. Sequential Redis processing (`--concurrency=1`) works; concurrency requires a fresh `Predis\Client` per coroutine/worker.
+- `hash:make`/`hash:check` CLI commands use `HashManager` resolved from the container; PHP's built-in `hash()` function prevents a global `hash()` helper.
+
 # Devin Secrets Needed
 - None for local testing.
