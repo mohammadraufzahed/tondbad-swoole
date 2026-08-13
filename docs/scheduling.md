@@ -53,7 +53,13 @@ $schedule->command('report:daily')
 php bin/tondbad schedule:work
 ```
 
-The scheduler process keeps running, checking due events every minute. Use a single process to avoid duplicate runs; `withoutOverlapping()` can be backed by Redis locks if configured.
+The scheduler process keeps running, checking due events every minute. When OpenSwoole is available the worker enables `Runtime::HOOK_ALL`, wraps the loop in a coroutine, and uses `OpenSwoole\Coroutine\System::sleep()` instead of blocking `sleep()`, so scheduled callbacks that hit Redis, the database, or `curl_*` calls yield instead of blocking the event loop.
+
+Use a single process to avoid duplicate runs; `withoutOverlapping()` can be backed by Redis locks if configured. To run due events once and exit:
+
+```bash
+php bin/tondbad schedule:work --run-once
+```
 
 ## Listing scheduled tasks
 
