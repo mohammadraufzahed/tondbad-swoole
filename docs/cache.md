@@ -90,9 +90,9 @@ function remember(string $key, int $ttl, callable $callback): mixed
 
 ## Drivers
 
-- **in-memory** — in-process PSR-16 compatible store with TTL support. Best for single-worker or testing.
+- **in-memory** — `OpenSwoole\Table` backed PSR-16 compatible store with TTL support and an `OpenSwoole\Timer` based expiry cleaner. The table is shared across worker processes and is safe for concurrent reads/writes.
 - **phpredis** — uses the `ext-redis` `Redis` class.
-- **predis** — uses `predis/predis` for environments without `ext-redis`.
+- **predis** — uses `predis/predis` for environments without `ext-redis`; when OpenSwoole `HOOK_TCP` is enabled Predis I/O becomes non-blocking inside coroutines.
 
 ## Serialization
 

@@ -6,6 +6,9 @@ namespace TondbadSwoole\Console\Commands;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use OpenSwoole\Coroutine;
+use OpenSwoole\Coroutine\System;
+use OpenSwoole\Runtime;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Scheduling\Schedule;
 
@@ -36,28 +39,40 @@ class ScheduleWorkCommand extends Command
             return 1;
         }
 
+        $this->enableSwooleHooks();
+
         $config = $app->container->make(Config::class);
         $schedule = $app->container->make(Schedule::class);
         $timezone = new DateTimeZone((string) $config->get('schedule.timezone', date_default_timezone_get()));
 
-        $totalRuns = 0;
+        $exitCode = 0;
 
-        do {
-            $now = new DateTimeImmutable('now', $timezone);
-            $totalRuns += $schedule->runDueEvents($now);
+        $runner = function () use ($schedule, $timezone, $runOnce, $sleep, $maxRuns, &$exitCode): void {
+            $totalRuns = 0;
 
-            if ($runOnce) {
-                break;
-            }
+            do {
+                $now = new DateTimeImmutable('now', $timezone);
+                $totalRuns += $schedule->runDueEvents($now);
 
-            if ($maxRuns > 0 && $totalRuns >= $maxRuns) {
-                break;
-            }
+                if ($runOnce) {
+                    break;
+                }
 
-            sleep($sleep);
-        } while (true);
+                if ($maxRuns > 0 && $totalRuns >= $maxRuns) {
+                    break;
+                }
 
-        return 0;
+                $this->sleep($sleep);
+            } while (true);
+        };
+
+        if (class_exists(Coroutine::class) && Coroutine::getCid() === -1) {
+            Coroutine::run($runner);
+        } else {
+            $runner();
+        }
+
+        return $exitCode;
     }
 
     private function parseOptions(array $args): array
@@ -73,5 +88,29 @@ class ScheduleWorkCommand extends Command
         }
 
         return $options;
+    }
+
+    private function sleep(int $seconds): void
+    {
+        if (class_exists(System::class) && Coroutine::getCid() >= 0) {
+            System::sleep($seconds);
+
+            return;
+        }
+
+        sleep($seconds);
+    }
+
+    private function enableSwooleHooks(): void
+    {
+        if (!class_exists(Runtime::class)) {
+            return;
+        }
+
+        $flags = (int) Runtime::getHookFlags();
+
+        if (($flags & Runtime::HOOK_ALL) === 0) {
+            Runtime::enableCoroutine(Runtime::HOOK_ALL);
+        }
     }
 }
