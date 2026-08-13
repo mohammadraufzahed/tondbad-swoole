@@ -55,6 +55,10 @@ class PredisCache implements CacheInterface
         if ($ttl !== null) {
             $seconds = $this->ttlToSeconds($ttl);
 
+            if ($seconds <= 0) {
+                return $this->delete($key);
+            }
+
             return (string) $this->client->setex($prefixedKey, $seconds, $serializedValue) === 'OK';
         }
 

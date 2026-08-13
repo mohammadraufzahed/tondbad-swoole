@@ -57,11 +57,21 @@ class InMemoryCache implements CacheInterface
             return false;
         }
 
-        $expiresAt = $this->ttlToSeconds($ttl);
+        if ($ttl instanceof DateInterval) {
+            $expiresAt = time() + $this->ttlToSeconds($ttl);
+        } elseif (is_int($ttl)) {
+            if ($ttl <= 0) {
+                return $this->delete($key);
+            }
+
+            $expiresAt = time() + $ttl;
+        } else {
+            $expiresAt = 0;
+        }
 
         return $this->table->set($key, [
             'value' => $serializedValue,
-            'expires_at' => $expiresAt > 0 ? time() + $expiresAt : 0,
+            'expires_at' => $expiresAt,
         ]);
     }
 

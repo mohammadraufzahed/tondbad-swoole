@@ -63,8 +63,8 @@ class QueueWorkCommand extends Command
         if ($canRunConcurrent) {
             $this->enableSwooleHooks();
 
-            \OpenSwoole\Coroutine::run(function () use ($connection, $queue, $worker, $workerOptions): void {
-                $this->runConcurrent($connection, $queue, $worker, $workerOptions);
+            \OpenSwoole\Coroutine::run(function () use ($queueManager, $connectionName, $queue, $worker, $workerOptions): void {
+                $this->runConcurrent($queueManager, $connectionName, $queue, $worker, $workerOptions);
             });
 
             return 0;
@@ -96,13 +96,14 @@ class QueueWorkCommand extends Command
         }
     }
 
-    private function runConcurrent(\TondbadSwoole\Queue\QueueInterface $connection, string $queue, Worker $worker, WorkerOptions $options): void
+    private function runConcurrent(QueueManager $queueManager, ?string $connectionName, string $queue, Worker $worker, WorkerOptions $options): void
     {
         $jobsProcessed = new \OpenSwoole\Atomic(0);
         $done = new \OpenSwoole\Coroutine\Channel($options->concurrency);
 
         for ($i = 0; $i < $options->concurrency; $i++) {
-            \OpenSwoole\Coroutine::create(function () use ($connection, $queue, $worker, $options, $jobsProcessed, $done): void {
+            \OpenSwoole\Coroutine::create(function () use ($queueManager, $connectionName, $queue, $worker, $options, $jobsProcessed, $done): void {
+                $connection = $queueManager->connection($connectionName, true);
                 while (true) {
                     if ($options->maxJobs !== null && $jobsProcessed->get() >= $options->maxJobs) {
                         break;

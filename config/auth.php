@@ -21,6 +21,18 @@ return [
             'session_key' => 'session_id',
             'lifetime' => 7200,
         ],
+
+        'api_key' => [
+            'driver' => 'api_key',
+            'provider' => 'users',
+            'storage_key' => 'api_key',
+        ],
+
+        'basic' => [
+            'driver' => 'basic',
+            'provider' => 'users',
+            'username_key' => 'email',
+        ],
     ],
 
     'providers' => [
