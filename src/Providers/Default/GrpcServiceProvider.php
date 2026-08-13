@@ -27,11 +27,12 @@ class GrpcServiceProvider extends ServiceProvider
                 (int) $config->get('app.grpc.sock_type', defined('SWOOLE_SOCK_TCP') ? SWOOLE_SOCK_TCP : 0),
             );
 
-            $settings = $config->get('app.grpc.settings', []);
+            $settings = array_merge(
+                ['enable_coroutine' => true],
+                $config->get('app.grpc.settings', [])
+            );
 
-            if ($settings !== []) {
-                $server->set($settings);
-            }
+            $server->set($settings);
 
             foreach ($config->get('grpc.middlewares', []) as $middleware) {
                 $server->addMiddleware($container->make($middleware));

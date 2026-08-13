@@ -60,7 +60,7 @@ class QueueWorkCommand extends Command
             && method_exists(\OpenSwoole\Coroutine::class, 'create');
 
         if ($canRunConcurrent) {
-            $this->enableSwooleTcpHooks();
+            $this->enableSwooleHooks();
 
             \OpenSwoole\Coroutine::run(function () use ($connection, $queue, $worker, $workerOptions): void {
                 $this->runConcurrent($connection, $queue, $worker, $workerOptions);
@@ -180,7 +180,7 @@ class QueueWorkCommand extends Command
         return null;
     }
 
-    private function enableSwooleTcpHooks(): void
+    private function enableSwooleHooks(): void
     {
         if (!class_exists(\OpenSwoole\Runtime::class)) {
             return;
@@ -188,8 +188,8 @@ class QueueWorkCommand extends Command
 
         $flags = (int) \OpenSwoole\Runtime::getHookFlags();
 
-        if (($flags & \OpenSwoole\Runtime::HOOK_TCP) === 0) {
-            \OpenSwoole\Runtime::enableCoroutine(\OpenSwoole\Runtime::HOOK_TCP);
+        if (($flags & \OpenSwoole\Runtime::HOOK_ALL) === 0) {
+            \OpenSwoole\Runtime::enableCoroutine(\OpenSwoole\Runtime::HOOK_ALL);
         }
     }
 }

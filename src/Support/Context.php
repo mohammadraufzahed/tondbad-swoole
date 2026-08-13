@@ -9,56 +9,106 @@ use TondbadSwoole\Contracts\ContextInterface;
 class Context implements ContextInterface
 {
     /**
-     * @var array<int, array<string, mixed>>
+     * @var array<string, mixed>
      */
-    private array $storage = [];
+    private array $fallback = [];
 
     public function get(string $key, mixed $default = null): mixed
     {
-        $cid = $this->cid();
+        $context = $this->context();
 
-        return $this->storage[$cid][$key] ?? $default;
+        return $context[$key] ?? $default;
     }
 
     public function set(string $key, mixed $value): void
     {
-        $cid = $this->cid();
+        if ($this->inCoroutine()) {
+            $context = \OpenSwoole\Coroutine::getContext();
+            $context[$key] = $value;
 
-        $this->storage[$cid][$key] = $value;
+            return;
+        }
+
+        $this->fallback[$key] = $value;
     }
 
     public function delete(string $key): void
     {
-        $cid = $this->cid();
+        if ($this->inCoroutine()) {
+            $context = \OpenSwoole\Coroutine::getContext();
+            unset($context[$key]);
 
-        unset($this->storage[$cid][$key]);
+            return;
+        }
+
+        unset($this->fallback[$key]);
     }
 
     public function has(string $key): bool
     {
-        $cid = $this->cid();
+        $context = $this->context();
 
-        return isset($this->storage[$cid][$key]);
+        return isset($context[$key]);
     }
 
     public function clear(): void
     {
-        $cid = $this->cid();
+        if ($this->inCoroutine()) {
+            $context = \OpenSwoole\Coroutine::getContext();
 
-        unset($this->storage[$cid]);
+            foreach ($this->keys($context) as $key) {
+                unset($context[$key]);
+            }
+
+            return;
+        }
+
+        $this->fallback = [];
     }
 
     public function clearAll(): void
     {
-        $this->storage = [];
+        $this->fallback = [];
+
+        if ($this->inCoroutine()) {
+            $context = \OpenSwoole\Coroutine::getContext();
+
+            foreach ($this->keys($context) as $key) {
+                unset($context[$key]);
+            }
+        }
     }
 
-    private function cid(): int
+    /**
+     * @return \OpenSwoole\Coroutine\Context|array<string, mixed>
+     */
+    private function context(): \OpenSwoole\Coroutine\Context|array
     {
-        if (class_exists(\OpenSwoole\Coroutine::class)) {
-            return \OpenSwoole\Coroutine::getCid();
+        if ($this->inCoroutine()) {
+            return \OpenSwoole\Coroutine::getContext();
         }
 
-        return 0;
+        return $this->fallback;
+    }
+
+    private function inCoroutine(): bool
+    {
+        return class_exists(\OpenSwoole\Coroutine::class)
+            && \OpenSwoole\Coroutine::getCid() >= 0;
+    }
+
+    /**
+     * @param \OpenSwoole\Coroutine\Context|array<string, mixed> $context
+     * @return array<int, string>
+     */
+    private function keys(\OpenSwoole\Coroutine\Context|array $context): array
+    {
+        $keys = [];
+
+        foreach ($context as $key => $value) {
+            $keys[] = (string) $key;
+        }
+
+        return $keys;
     }
 }

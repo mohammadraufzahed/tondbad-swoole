@@ -66,6 +66,9 @@ class Worker
             $this->handleException($job, $connection, $e, $maxTries);
         } finally {
             $job->setConnection(null);
+
+            db()?->closeOldConnections();
+            em()?->clear();
         }
     }
 
