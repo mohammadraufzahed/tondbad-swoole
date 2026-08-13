@@ -111,7 +111,9 @@ $em->remove($user);
 $em->flush();
 ```
 
-`flush()` computes the changeset and issues `INSERT`, `UPDATE`, or `DELETE` statements. Within a request, the same entity loaded twice resolves to the same object thanks to the identity map.
+`flush()` computes the changeset and issues `INSERT`, `UPDATE`, or `DELETE` statements. `UPDATE` statements only include fields that have actually changed, and unchanged managed entities are skipped entirely. Within a request, the same entity loaded twice resolves to the same object thanks to the identity map.
+
+`em()->clear()` detaches every managed entity, which prevents objects from leaking across OpenSwoole requests or queue jobs. The request dispatcher and queue worker call this automatically at the end of each request/job.
 
 ## Lazy references
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace TondbadSwoole\Queue;
 
 use Throwable;
+use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Queue\Failed\FailedJobProviderInterface;
 use TondbadSwoole\Queue\Jobs\Job;
@@ -69,6 +70,10 @@ class Worker
 
             db()?->closeOldConnections();
             em()?->clear();
+
+            if ($this->container->has(ContextInterface::class)) {
+                $this->container->make(ContextInterface::class)->clear();
+            }
         }
     }
 

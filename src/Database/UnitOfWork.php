@@ -94,9 +94,7 @@ class UnitOfWork implements UnitOfWorkInterface
                     break;
 
                 case self::STATE_MANAGED:
-                    $this->eventManager?->dispatchEvent('preUpdate', $entity);
                     $this->executeUpdate($entity);
-                    $this->eventManager?->dispatchEvent('postUpdate', $entity);
                     break;
 
                 case self::STATE_REMOVED:
@@ -172,8 +170,21 @@ class UnitOfWork implements UnitOfWorkInterface
     private function executeUpdate(object $entity): void
     {
         /** @var Model $entity */
+        if (!$entity->isDirty()) {
+            return;
+        }
+
+        $this->eventManager?->dispatchEvent('preUpdate', $entity);
+
+        if (!$entity->isDirty()) {
+            // preUpdate listener cancelled the changes
+            return;
+        }
+
         $entity->performUpdate();
         $this->states[$entity] = self::STATE_MANAGED;
+
+        $this->eventManager?->dispatchEvent('postUpdate', $entity);
     }
 
     private function executeDelete(object $entity): void
