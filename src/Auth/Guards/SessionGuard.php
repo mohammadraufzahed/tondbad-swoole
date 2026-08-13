@@ -45,7 +45,7 @@ class SessionGuard implements Guard
             return null;
         }
 
-        $cacheKey = $this->cacheKey($request);
+        $cacheKey = $this->cacheKey();
 
         if ($this->context->has($cacheKey)) {
             return $this->context->get($cacheKey);
@@ -85,7 +85,7 @@ class SessionGuard implements Guard
         $request = $this->request();
 
         if ($request !== null) {
-            $this->context->set($this->cacheKey($request), $user);
+            $this->context->set($this->cacheKey(), $user);
         }
 
         return $this;
@@ -102,7 +102,7 @@ class SessionGuard implements Guard
         $request = $this->request();
 
         if ($request !== null) {
-            $this->context->set($this->cacheKey($request), $user);
+            $this->context->set($this->cacheKey(), $user);
         }
 
         $this->context->set('session.id', $sessionId);
@@ -121,7 +121,7 @@ class SessionGuard implements Guard
         $request = $this->request();
 
         if ($request !== null) {
-            $this->context->delete($this->cacheKey($request));
+            $this->context->delete($this->cacheKey());
         }
 
         $this->context->delete('session.id');
@@ -139,8 +139,8 @@ class SessionGuard implements Guard
         return $this->context->get('request');
     }
 
-    private function cacheKey(Request $request): string
+    private function cacheKey(): string
     {
-        return 'auth.guard.' . $this->name . '.user.' . spl_object_id($request);
+        return 'auth.guard.' . $this->name . '.user';
     }
 }
