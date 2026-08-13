@@ -132,6 +132,8 @@ php bin/tondbad queue:work --connection=database --queue=default --tries=3 --sle
 
 The `jobs` table is created by running `php bin/tondbad migrate`.
 
+When the database backend supports it (PostgreSQL, MySQL 8+), `pop()` reserves the next job atomically with `SELECT ... FOR UPDATE SKIP LOCKED` / `UPDATE ... RETURNING`, so multiple concurrent workers never receive the same job.
+
 ## Queue API
 
 You can also interact with a queue instance directly:

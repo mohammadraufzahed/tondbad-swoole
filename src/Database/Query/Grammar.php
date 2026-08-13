@@ -56,6 +56,7 @@ class Grammar
             $this->compileOrders($query),
             $this->compileLimit($query),
             $this->compileOffset($query),
+            $this->compileLock($query),
         ];
 
         return implode(' ', array_filter($components, fn ($part) => $part !== ''));
@@ -424,5 +425,20 @@ class Grammar
         }
 
         return 'offset ' . $query->offset;
+    }
+
+    protected function compileLock(Builder $query): string
+    {
+        if (!$query->lockForUpdate) {
+            return '';
+        }
+
+        $lock = 'for update';
+
+        if ($query->skipLocked && $this->features->supportsForUpdateSkipLocked()) {
+            $lock .= ' skip locked';
+        }
+
+        return $lock;
     }
 }

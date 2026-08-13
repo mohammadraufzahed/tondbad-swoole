@@ -74,6 +74,22 @@ class DatabaseWrapper implements ConnectionInterface
         }
     }
 
+    public function insertGetId(string $sql, array $bindings, ?string $sequence = null): int|string
+    {
+        $pdo = $this->getPdo();
+
+        try {
+            $statement = $pdo->prepare($sql);
+            $statement->execute($bindings);
+
+            return $pdo->lastInsertId($sequence);
+        } catch (Throwable $e) {
+            throw $e;
+        } finally {
+            $this->putPdo($pdo);
+        }
+    }
+
     public function transaction(callable $callback, int $attempts = 1): mixed
     {
         $attempt = 0;

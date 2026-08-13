@@ -82,6 +82,10 @@ class DatabaseQueue extends Queue
             return null;
         }
 
+        if ($this->supportsAtomicPop()) {
+            return $this->popAtomically($queueName);
+        }
+
         $expiration = time() - $this->retryAfter;
         $table = $this->connection->getGrammar()->wrapTable($this->table);
 
@@ -433,9 +437,66 @@ class DatabaseQueue extends Queue
         $this->emit('failed', ['job' => $instance, 'exception' => $exception]);
     }
 
+    private function supportsAtomicPop(): bool
+    {
+        $features = $this->connection->getGrammar()->getFeatures();
+
+        return $features->supportsReturning() && $features->supportsForUpdateSkipLocked();
+    }
+
+    private function popAtomically(string $queue): ?Job
+    {
+        $expiration = time() - $this->retryAfter;
+        $table = $this->connection->getGrammar()->wrapTable($this->table);
+        $now = time();
+
+        $rows = $this->connection->select(
+            "WITH next_job AS (
+                SELECT id FROM {$table}
+                WHERE queue = ? AND available_at <= ? AND status IN (?, ?, ?)
+                  AND (reserved_at IS NULL OR reserved_at <= ?)
+                ORDER BY priority ASC, available_at ASC, id ASC
+                FOR UPDATE SKIP LOCKED
+                LIMIT 1
+            )
+            UPDATE {$table}
+            SET reserved_at = ?, status = ?, attempts = attempts + 1
+            FROM next_job
+            WHERE {$table}.id = next_job.id
+            RETURNING {$table}.*",
+            [
+                $queue,
+                $now,
+                JobStatus::Waiting->value,
+                JobStatus::Delayed->value,
+                JobStatus::Active->value,
+                $expiration,
+                $now,
+                JobStatus::Active->value,
+            ]
+        );
+
+        $job = $rows[0] ?? null;
+
+        if ($job === null) {
+            return null;
+        }
+
+        $instance = $this->createJob($job);
+        $instance->setAttempts((int) $job['attempts'] + 1);
+
+        if ($job['status'] === JobStatus::Active->value) {
+            $this->emit('stalled', ['job' => $instance, 'queue' => $queue]);
+        }
+
+        $this->emit('active', ['job' => $instance, 'queue' => $queue]);
+
+        return $instance;
+    }
+
     protected function getNextAvailableJob(string $queue, int $expiration): ?array
     {
-        $rows = $this->connection->table($this->table)
+        $query = $this->connection->table($this->table)
             ->where('queue', $queue)
             ->where('available_at', '<=', time())
             ->whereIn('status', [JobStatus::Waiting->value, JobStatus::Delayed->value, JobStatus::Active->value])
@@ -445,8 +506,15 @@ class DatabaseQueue extends Queue
             ->orderBy('priority', 'asc')
             ->orderBy('available_at', 'asc')
             ->orderBy('id', 'asc')
-            ->limit(1)
-            ->get();
+            ->limit(1);
+
+        $features = $this->connection->getGrammar()->getFeatures();
+
+        if ($features->supportsForUpdateSkipLocked()) {
+            $query->lockForUpdate()->skipLocked();
+        }
+
+        $rows = $query->get();
 
         return $rows[0] ?? null;
     }

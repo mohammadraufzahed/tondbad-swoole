@@ -35,4 +35,9 @@ class MySqlFeatures extends AbstractFeatures
     {
         return true;
     }
+
+    public function supportsForUpdateSkipLocked(): bool
+    {
+        return true;
+    }
 }

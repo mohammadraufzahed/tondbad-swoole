@@ -18,6 +18,8 @@ interface ConnectionInterface
 
     public function insert(string $sql, array $bindings = []): bool;
 
+    public function insertGetId(string $sql, array $bindings, ?string $sequence = null): int|string;
+
     public function update(string $sql, array $bindings = []): int;
 
     public function delete(string $sql, array $bindings = []): int;

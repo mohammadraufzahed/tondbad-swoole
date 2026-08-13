@@ -49,6 +49,14 @@ class FakeConnection implements ConnectionInterface
         return true;
     }
 
+    public function insertGetId(string $sql, array $bindings, ?string $sequence = null): int|string
+    {
+        $this->lastSql = $sql;
+        $this->lastBindings = $bindings;
+
+        return 1;
+    }
+
     public function update(string $sql, array $bindings = []): int
     {
         $this->lastSql = $sql;

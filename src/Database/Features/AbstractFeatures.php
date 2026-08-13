@@ -23,6 +23,11 @@ abstract class AbstractFeatures implements DatabaseFeatures
         return false;
     }
 
+    public function supportsForUpdateSkipLocked(): bool
+    {
+        return false;
+    }
+
     public function supportsDeferrableConstraints(): bool
     {
         return false;

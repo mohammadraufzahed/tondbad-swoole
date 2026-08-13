@@ -12,6 +12,8 @@ interface DatabaseFeatures
 
     public function supportsReturning(): bool;
 
+    public function supportsForUpdateSkipLocked(): bool;
+
     public function supportsDeferrableConstraints(): bool;
 
     public function hasNativeJsonField(): bool;
