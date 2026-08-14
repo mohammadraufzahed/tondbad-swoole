@@ -59,7 +59,7 @@ class RouteDefinition
 
     public function name(string $name): self
     {
-        $this->route->rename($this->id, $name);
+        $this->route->setName($this->id, $name);
 
         return $this;
     }
@@ -69,5 +69,10 @@ class RouteDefinition
         $this->route->setMiddleware($this->id, $middlewares);
 
         return $this;
+    }
+
+    public function getId(): int
+    {
+        return $this->id;
     }
 }

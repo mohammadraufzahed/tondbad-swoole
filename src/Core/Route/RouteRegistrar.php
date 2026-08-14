@@ -47,11 +47,7 @@ class RouteRegistrar
     private array $constraints = [];
 
     private ?Dispatcher $dispatcher = null;
-
-    /**
-     * @var array{0: string|list<string>, 1: string, 2: array|callable, 3: list<class-string>}|null
-     */
-    private ?array $fallback = null;
+    private ?int $fallbackId = null;
 
     public function __construct(private readonly ?string $cacheFile = null)
     {
@@ -99,12 +95,14 @@ class RouteRegistrar
         $this->dispatcher = null;
     }
 
-    /**
-     * @param list<class-string> $middlewares
-     */
-    public function setFallback(string|array $method, string $path, array|callable $handler, array $middlewares = []): void
+    public function setFallbackId(int $id): void
     {
-        $this->fallback = [$method, $path, $handler, $middlewares];
+        $this->fallbackId = $id;
+    }
+
+    public function getFallbackId(): ?int
+    {
+        return $this->fallbackId;
     }
 
     public function getDispatcher(): Dispatcher
@@ -120,11 +118,6 @@ class RouteRegistrar
                 foreach ($this->routes as [$method, $path, $id]) {
                     $r->addRoute($method, $this->buildPath($path, $this->constraints[$id] ?? []), $id);
                 }
-
-                if ($this->fallback !== null) {
-                    [$method, $path, $handler, $middlewares] = $this->fallback;
-                    $r->addRoute($method, $path, $this->addFallbackHandler($handler, $middlewares));
-                }
             },
             [
                 'cacheFile' => $this->cacheFile,
@@ -135,18 +128,6 @@ class RouteRegistrar
         );
 
         return $this->dispatcher;
-    }
-
-    /**
-     * @param list<class-string> $middlewares
-     */
-    private function addFallbackHandler(array|callable $handler, array $middlewares): int
-    {
-        $id = count($this->handlers);
-        $this->handlers[$id] = $handler;
-        $this->middlewares[$id] = $middlewares;
-
-        return $id;
     }
 
     private function buildPath(string $path, array $constraints): string

@@ -7,6 +7,7 @@ use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Route\HandlerInvoker;
 use TondbadSwoole\Http\Request;
 use TondbadSwoole\Http\Response;
+use TondbadSwoole\Routing\Attributes\Controller;
 use TondbadSwoole\Routing\Attributes\Guard;
 use TondbadSwoole\Routing\Attributes\Interceptor;
 use TondbadSwoole\Routing\Contracts\Guard as GuardContract;
@@ -71,6 +72,20 @@ it('allows a request when guard returns true', function () {
 
 it('denies a request when guard returns false', function () {
     $controller = new #[Guard(DenyGuard::class)] class {
+        public function index(): string
+        {
+            return 'ok';
+        }
+    };
+
+    [$request, $response] = makeRequestResponse();
+
+    expect(fn () => makeInvoker()->invoke([get_class($controller), 'index'], $request, $response, []))
+        ->toThrow(AuthorizationException::class);
+});
+
+it('applies guards declared on #[Controller]', function () {
+    $controller = new #[Controller('/admin', guards: [DenyGuard::class])] class {
         public function index(): string
         {
             return 'ok';

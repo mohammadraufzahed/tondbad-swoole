@@ -114,5 +114,12 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - `make:controller`, `make:middleware`, `make:provider`, `make:guard`, and `make:policy` strip redundant suffixes and `ucfirst` the base name, so `TestController`, `JwtGuard`, or `BillingProvider` produce `TestController.php`, `JwtGuardFactory.php`, and `BillingServiceProvider.php` respectively.
 - For `make:*` commands to resolve at runtime, add `"App\\": "app/"` to `composer.json` `autoload.psr-4` and run `composer dump-autoload`; remove the mapping before committing.
 
+# Routing next-level API quirks
+- `RouteDefinition::name()` now calls `Route::setName()` and can be chained on route definitions (e.g. `$route->get('/path', handler)->name('foo')`).
+- `#[Controller(..., guards: [...])]` guard classes are enforced by `HandlerInvoker::ensureGuards()` in addition to any method-level `#[Guard(...)]` attributes.
+- `$route->fallback(...)` registers the catch-all `/{path:.*}` route as a normal cached route, so `route:cache` preserves the fallback handler across server restarts.
+- `route:cache` works for directly-registered routes and the fallback. To rebuild, run `php bin/tondbad route:cache` and restart the server; remove `storage/cache/routes.cache.php` to go back to uncached routing.
+- The fallback catch-all catches paths whose first segment does not match any defined static route. Parameter-constraint failures on routes whose static prefix still matches (e.g. `/orders/{order}` with `->whereNumber('order')` and `/orders/abc`) currently return the framework's default `404 Not Found` rather than the fallback handler, because FastRoute groups routes by static segment.
+
 # Devin Secrets Needed
 - None for local testing.

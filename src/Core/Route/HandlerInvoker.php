@@ -24,6 +24,7 @@ use TondbadSwoole\Http\FormRequest;
 use TondbadSwoole\Http\Request;
 use TondbadSwoole\Http\Response;
 use TondbadSwoole\Routing\Attributes\Body;
+use TondbadSwoole\Routing\Attributes\Controller as ControllerAttribute;
 use TondbadSwoole\Routing\Attributes\Guard as GuardAttribute;
 use TondbadSwoole\Routing\Attributes\Header;
 use TondbadSwoole\Routing\Attributes\Interceptor as InterceptorAttribute;
@@ -105,23 +106,44 @@ class HandlerInvoker
      */
     private function ensureGuards(string $class, string $method, Request $request): void
     {
+        $classReflection = new \ReflectionClass($class);
+
+        $controllerAttributes = $classReflection->getAttributes(ControllerAttribute::class);
+
+        if ($controllerAttributes !== []) {
+            /** @var ControllerAttribute $controller */
+            $controller = $controllerAttributes[0]->newInstance();
+
+            foreach ($controller->guards() as $guardClass) {
+                $this->assertGuardCan($request, $guardClass);
+            }
+        }
+
         $attributes = array_merge(
-            (new \ReflectionClass($class))->getAttributes(GuardAttribute::class),
+            $classReflection->getAttributes(GuardAttribute::class),
             (new ReflectionMethod($class, $method))->getAttributes(GuardAttribute::class),
         );
 
         foreach ($attributes as $attribute) {
             /** @var GuardAttribute $instance */
             $instance = $attribute->newInstance();
-            $guard = $this->container->make($instance->guard);
+            $this->assertGuardCan($request, $instance->guard);
+        }
+    }
 
-            if (!$guard instanceof Guard) {
-                throw new Exception("Guard class '{$instance->guard}' must implement Guard contract");
-            }
+    /**
+     * @param class-string $guardClass
+     */
+    private function assertGuardCan(Request $request, string $guardClass): void
+    {
+        $guard = $this->container->make($guardClass);
 
-            if (!$guard->can($request)) {
-                throw new AuthorizationException();
-            }
+        if (!$guard instanceof Guard) {
+            throw new Exception("Guard class '{$guardClass}' must implement Guard contract");
+        }
+
+        if (!$guard->can($request)) {
+            throw new AuthorizationException();
         }
     }
 

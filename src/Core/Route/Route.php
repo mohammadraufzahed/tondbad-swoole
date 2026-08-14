@@ -225,9 +225,18 @@ class Route implements RouteInterface
         }, $middlewares);
     }
 
-    public function fallback(array|callable $handler, array $middlewares = []): void
+    public function fallback(array|callable $handler, array $middlewares = []): RouteDefinition
     {
-        $this->registrar->setFallback(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'], '/{path:.*}', $handler, $middlewares);
+        $definition = $this->addRoute(
+            ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
+            '/{path:.*}',
+            $handler,
+            $middlewares
+        );
+
+        $this->registrar->setFallbackId($definition->getId());
+
+        return $definition;
     }
 
     public function setConstraint(int $id, string $parameter, string $pattern): void
