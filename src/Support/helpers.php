@@ -6,7 +6,7 @@ use TondbadSwoole\Auth\Access\Gate;
 use TondbadSwoole\Auth\AuthManager;
 use TondbadSwoole\Auth\Contracts\Guard as GuardContract;
 use TondbadSwoole\Bootstrap\App;
-use TondbadSwoole\Contracts\CacheInterface;
+use TondbadSwoole\Contracts\CacheContract;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Route\Route;
 use TondbadSwoole\Database\ConnectionInterface;
@@ -33,9 +33,9 @@ if (!function_exists('config')) {
 }
 
 if (!function_exists('cache')) {
-    function cache(): ?CacheInterface
+    function cache(): ?CacheContract
     {
-        return app()?->container->make(CacheInterface::class);
+        return app()?->container->make(CacheContract::class);
     }
 }
 

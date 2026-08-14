@@ -1,6 +1,6 @@
 # Cache
 
-Tondbād supports multiple cache drivers through a single `CacheInterface`.
+Tondbād uses a single `Cache` facade backed by one `HybridStore` pipeline. The public API blends Laravel-style `cache()` helpers, Symfony-style `getOrSet` callbacks, and Caffeine/ASP.NET-inspired L1/L2 coordination, tag invalidation, refresh-ahead, and stampede protection.
 
 ## Configuration
 
@@ -23,9 +23,13 @@ return [
         'scheme' => $env->get('redis.scheme', 'tcp'),
         'host' => $env->get('redis.host', '127.0.0.1'),
         'port' => $env->get('redis.port', 6379),
-        'password' => $env->get('redis.password'),
+        'password' => $env->get('redis.password', null),
         'database' => $env->get('redis.database', 0),
         'timeout' => $env->get('redis.timeout', 5.0),
+
+        'pool' => [
+            'size' => (int) $env->get('redis.pool.size', 4),
+        ],
 
         'options' => [
             'prefix' => $env->get('redis.options.prefix', 'tondbad:'),
@@ -34,9 +38,13 @@ return [
 ];
 ```
 
-Set `CACHE_STORE` to `in-memory`, `phpredis`, or `predis`. Environment variables become `CACHE_DEFAULT`, `REDIS_HOST`, etc.
+Set `CACHE_DEFAULT` to `in-memory`, `redis`, `predis`, or `phpredis`.
 
-## Using the cache
+- `in-memory` keeps L1 in an `OpenSwoole\Table` per worker.
+- `redis`/`predis` adds an L2 Redis layer behind the same L1 table.
+- `phpredis` uses the `ext-redis` client.
+
+## Basic PSR-16 usage
 
 ```php
 $cache = cache();
@@ -52,48 +60,87 @@ $cache->delete('user.1');
 $cache->clear();
 ```
 
-## Cache forever
+## Cache-aside with `getOrSet`
+
+`getOrSet` is the primary entry point. The callback receives a `CacheItem` to declare lifetime, tags, weight, and metadata.
 
 ```php
-$cache->set('config', $configValue); // no TTL
+$stats = cache()->getOrSet('dashboard:stats', function (CacheItem $item) {
+    $item->lifetime(60, refreshRatio: 0.5);
+    $item->tag('users', 'orders');
+    $item->weight(10);
+
+    return computeDashboard();
+});
 ```
 
-## Multiple operations
+- `lifetime(int $seconds, ?float $refreshRatio = null)` — sets expiry and optional refresh window.
+- `tag(string ...$tags)` — associates the entry with tags for invalidation.
+- `weight(int $weight)` — hint for future L1 eviction policies.
+
+## Tag invalidation
+
+Invalidate every entry carrying one or more tags:
 
 ```php
-$cache->setMultiple([
-    'user.1' => $user1,
-    'user.2' => $user2,
-], 3600);
-
-$users = $cache->getMultiple(['user.1', 'user.2']);
-$cache->deleteMultiple(['user.1', 'user.2']);
+cache()->invalidateTags(['users']);
 ```
 
-## Remember pattern
+The tag manager bumps a global version for each tag. Stale entries are detected on read and reloaded, so invalidation is safe across L1/L2 and across worker processes when Redis is the L2.
+
+## Refresh-ahead
+
+A `refreshRatio` tells the store to recompute the value after that portion of the lifetime has elapsed. The next `getOrSet` after the refresh point reloads the value before it expires, keeping the cache warm.
 
 ```php
-function remember(string $key, int $ttl, callable $callback): mixed
-{
-    $cache = cache();
+cache()->getOrSet('heavy-report', function (CacheItem $item) {
+    $item->lifetime(120, refreshRatio: 0.75);
 
-    if ($cache->has($key)) {
-        return $cache->get($key);
-    }
-
-    $value = $callback();
-    $cache->set($key, $value, $ttl);
-
-    return $value;
-}
+    return buildReport();
+});
 ```
 
-## Drivers
+## Cache statistics
 
-- **in-memory** — `OpenSwoole\Table` backed PSR-16 compatible store with TTL support and an `OpenSwoole\Timer` based expiry cleaner. The table is shared across worker processes and is safe for concurrent reads/writes.
-- **phpredis** — uses the `ext-redis` `Redis` class.
-- **predis** — uses `predis/predis` for environments without `ext-redis`; when OpenSwoole `HOOK_TCP` is enabled Predis I/O becomes non-blocking inside coroutines.
+```php
+$stats = cache()->stats();
 
-## Serialization
+echo $stats->hitRate();
+echo $stats->l1HitRate();
+echo $stats->l2HitRate();
+```
 
-Values are serialized with Symfony Serializer using JSON encoding. Objects are encoded/decoded automatically.
+The CLI can print them:
+
+```bash
+./tondbad cache:status
+```
+
+## Console commands
+
+- `cache:clear` — clear data cache and compiled framework/route caches.
+- `cache:forget-tags users orders` — invalidate all entries tagged `users` or `orders`.
+- `cache:status` — print current hit/miss/load statistics.
+
+## Architecture
+
+The pipeline is:
+
+```
+PSR-16 / CacheContract API
+        │
+        ▼
+   HybridStore
+        │
+   ┌────┴────┐
+   ▼         ▼
+  L1        L2
+OpenSwoole  Redis/Files
+  Table
+```
+
+- `HybridStore` coordinates L1, L2, serialization, stats, lock/tag/refresh policies.
+- `CacheEntry` is the internal serialized blob stored in L1/L2.
+- `JsonSerializer` is the default value serializer; custom serializers implement `TondbadSwoole\Core\Cache\Serializer`.
+- `ChannelLock` prevents stampede loads inside a single worker under OpenSwoole coroutines.
+- `RedisCache` uses a coroutine-safe `Predis` connection pool; `RedisTagManager` makes tag invalidation work across workers.
