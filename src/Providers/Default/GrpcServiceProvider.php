@@ -7,6 +7,8 @@ namespace TondbadSwoole\Providers\Default;
 use OpenSwoole\GRPC\Server as GrpcServer;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
+use TondbadSwoole\Core\Route\Route;
+use TondbadSwoole\GRPC\RouteGrpcMiddleware;
 use TondbadSwoole\Providers\Contracts\ServiceProvider;
 
 class GrpcServiceProvider extends ServiceProvider
@@ -41,6 +43,9 @@ class GrpcServiceProvider extends ServiceProvider
             foreach ($config->get('grpc.services', []) as $service) {
                 $server->register($service, $container->make($service));
             }
+
+            $route = $container->make(Route::class);
+            $server->addMiddleware(new RouteGrpcMiddleware($route->getRouteDispatcher()));
 
             return $server;
         });

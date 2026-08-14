@@ -83,7 +83,7 @@ class RouteRegistrar
     }
 
     /**
-     * @param list<class-string> $middlewares
+     * @param list<class-string|\TondbadSwoole\Contracts\MiddlewareInterface> $middlewares
      */
     public function addMiddlewares(int $id, array $middlewares): void
     {

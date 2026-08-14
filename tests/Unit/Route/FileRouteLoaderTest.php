@@ -81,6 +81,20 @@ it('applies _middleware.php to sibling routes', function () {
     expect($routes[0][3])->toBe(['AuthMiddleware']);
 });
 
+it('loads optional catch-all segments from [[...slug]].php', function () {
+    file_put_contents("{$this->tmpDir}/routes/http/index.php", "<?php\nreturn fn() => 'root';");
+    mkdir("{$this->tmpDir}/routes/http/docs", 0777, true);
+    file_put_contents("{$this->tmpDir}/routes/http/docs/[[...slug]].php", "<?php\nreturn fn() => 'docs optional';");
+
+    $app = AppFactory::create($this->tmpDir);
+    $route = $app->container->make(Route::class);
+
+    $dispatcher = $route->getDispatcher();
+
+    expect($dispatcher->dispatch('GET', '/docs')[0])->toBe(\FastRoute\Dispatcher::FOUND);
+    expect($dispatcher->dispatch('GET', '/docs/a/b/c')[0])->toBe(\FastRoute\Dispatcher::FOUND);
+});
+
 it('ignores route group directories in the url', function () {
     file_put_contents("{$this->tmpDir}/routes/http/index.php", "<?php\nreturn fn() => 'root';");
     mkdir("{$this->tmpDir}/routes/http/(api)", 0777, true);

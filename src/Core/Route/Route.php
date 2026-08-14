@@ -10,10 +10,12 @@ use Monolog\Logger;
 use OpenSwoole\Http\Request;
 use OpenSwoole\Http\Response;
 use TondbadSwoole\Contracts\ContextInterface;
+use TondbadSwoole\Contracts\MiddlewareInterface;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Route\Contracts\RouteInterface;
 use TondbadSwoole\Database\DatabaseManager;
+use TondbadSwoole\Http\Middleware\ThrottleMiddleware;
 use TondbadSwoole\Http\Request as HttpRequest;
 use TondbadSwoole\Http\Response as HttpResponse;
 use TondbadSwoole\Routing\ResourceRegistrar;
@@ -270,16 +272,25 @@ class Route implements RouteInterface
     }
 
     /**
-     * @param list<class-string|string> $middlewares
-     * @return list<class-string>
+     * @param list<class-string|MiddlewareInterface|string> $middlewares
+     * @return list<class-string|MiddlewareInterface>
      */
     public function expandMiddlewares(array $middlewares): array
     {
         $expanded = [];
+        $queue = array_values($middlewares);
 
-        foreach ($middlewares as $middleware) {
-            if (isset($this->middlewareGroups[$middleware])) {
-                array_push($expanded, ...$this->middlewareGroups[$middleware]);
+        while ($queue !== []) {
+            $middleware = array_shift($queue);
+
+            if (is_string($middleware) && isset($this->middlewareGroups[$middleware])) {
+                array_unshift($queue, ...array_values($this->middlewareGroups[$middleware]));
+
+                continue;
+            }
+
+            if (is_string($middleware) && str_starts_with($middleware, 'throttle')) {
+                $expanded[] = $this->parseThrottleMiddleware($middleware);
 
                 continue;
             }
@@ -288,6 +299,27 @@ class Route implements RouteInterface
         }
 
         return $expanded;
+    }
+
+    private function parseThrottleMiddleware(string $middleware): ThrottleMiddleware
+    {
+        $parts = explode(':', $middleware, 2);
+        $max = 60;
+        $window = 60;
+
+        if (isset($parts[1])) {
+            $values = array_map('intval', explode(',', $parts[1]));
+
+            if (isset($values[0]) && $values[0] > 0) {
+                $max = $values[0];
+            }
+
+            if (isset($values[1]) && $values[1] > 0) {
+                $window = $values[1];
+            }
+        }
+
+        return new ThrottleMiddleware($max, $window);
     }
 
     public function has(string $name): bool
@@ -440,6 +472,11 @@ class Route implements RouteInterface
     public function getDispatcher(): Dispatcher
     {
         return $this->registrar->getDispatcher();
+    }
+
+    public function getRouteDispatcher(): RouteDispatcher
+    {
+        return $this->dispatcher;
     }
 
     public function warmRouteCache(): void
