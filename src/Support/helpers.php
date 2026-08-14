@@ -8,6 +8,7 @@ use TondbadSwoole\Auth\Contracts\Guard as GuardContract;
 use TondbadSwoole\Bootstrap\App;
 use TondbadSwoole\Contracts\CacheInterface;
 use TondbadSwoole\Core\Config;
+use TondbadSwoole\Core\Route\Route;
 use TondbadSwoole\Database\ConnectionInterface;
 use TondbadSwoole\Database\DatabaseManager;
 use TondbadSwoole\Database\EntityManagerInterface;
@@ -111,6 +112,19 @@ if (!function_exists('gate')) {
     function gate(): ?Gate
     {
         return app()?->container->make(Gate::class);
+    }
+}
+
+if (!function_exists('route')) {
+    function route(string $name, array $parameters = [], bool $absolute = false): string
+    {
+        $route = app()?->container->make(Route::class);
+
+        if ($route === null) {
+            throw new RuntimeException('Route registrar not available.');
+        }
+
+        return $route->url($name, $parameters, !$absolute);
     }
 }
 
