@@ -153,11 +153,14 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - Test CLI: `php bin/tondbad auth:clear-sessions` deletes all `sessions` rows and marks every `refresh_tokens` row revoked.
 - Concurrent `GET /me` requests for two different sessions must return the matching user (`alice@example.com` vs `bob@example.com`) — this confirms per-coroutine `Context` isolation.
 
-## Known auth friction points
-- `SessionGuard::setSessionCookie` passes `null` for the cookie domain and `int 0` for the `priority` argument to `Response::cookie()`. `OpenSwoole\Http\Response::setCookie()` requires `string $domain` and `string $priority`, so the session guard crashes unless `Response::cookie()` casts/coerces both values.
-- `HandlerInvoker::ensureMfa()` reads `auth()->session()` without first resolving the guard/user, so `#[RequireMfa]` throws `Multi-factor authentication is required.` even after `mfa()->verify()` succeeds. It should call `auth()->check($guard)` before reading the session from `Context`.
-- `HandlerInvoker` resolves a `#[CurrentUser] ?Authenticatable` parameter using `is_subclass_of($type, Authenticatable::class)`, which returns `false` when the parameter type is exactly `Authenticatable`; use `is_a($type, Authenticatable::class, true)` instead.
-- OIDC `IdentityBroker` stores `state`/`verifier` in per-coroutine `Context`, so the real redirect/callback flow across two HTTP requests cannot validate state. A real deployment needs Redis/session-backed state storage or a single-request test harness.
+## OIDC / social login verification
+- `IdentityBroker` stores `state`/`verifier` in the configured `CacheInterface` (e.g. `HybridStore` with `InMemoryCache` or Redis) instead of per-coroutine `Context`. For in-memory state to survive across the redirect and callback, start the server with `app.http.settings.worker_num => 1` or use Redis as the cache driver.
+- Pass a **full absolute URL** as the `$callbackUrl` to `auth()->via('google')->redirect($callbackUrl)` and `->callback($code, $state, $callbackUrl)`. A relative path (e.g. `/auth/google/callback`) will be interpreted by the provider as its own host and the browser will not return to the auth server.
+- `IdentityBroker::callback($code, $state, $callbackUrl)` expects `(code, state, callbackUrl)` in that order; passing `$callbackUrl` as the second argument causes `Invalid OIDC state.` because the callback URL is compared to the cached `state`.
+- The order of parameters in `IdentityBroker::callback` is also the order `GenericIdentityProvider` uses internally: `$provider->callback($code, $callbackUrl, $state, $verifier)`.
+
+## Route cache caveat
+- `Route` uses FastRoute's `cachedDispatcher` with `config('app.route_cache_file')`. If you edit `routes/http.php` while the server is running or between restarts, delete `storage/cache/routes.cache.php` (or set `app.route_cache_file` to `null` for the test environment) before the next start, otherwise stale route definitions are used.
 
 # Devin Secrets Needed
 - None for local testing.
