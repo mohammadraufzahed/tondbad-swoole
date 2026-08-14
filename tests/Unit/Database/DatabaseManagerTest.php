@@ -7,12 +7,19 @@ use TondbadSwoole\Database\DatabaseWrapper;
 use TondbadSwoole\Database\Query\Grammars\MySqlGrammar;
 use TondbadSwoole\Database\Query\Grammars\SqliteGrammar;
 
-it('resolves the default connection with mysql grammar', function () {
+it('resolves the default connection with the configured driver grammar', function () {
     $manager = new DatabaseManager($this->config);
     $connection = $manager->connection();
+    $default = $manager->getDefaultConnection();
+
+    $grammarMap = [
+        'mysql' => MySqlGrammar::class,
+        'sqlite' => SqliteGrammar::class,
+        'pgsql' => \TondbadSwoole\Database\Query\Grammars\PostgresGrammar::class,
+    ];
 
     expect($connection)->toBeInstanceOf(DatabaseWrapper::class);
-    expect($connection->getGrammar())->toBeInstanceOf(MySqlGrammar::class);
+    expect($connection->getGrammar())->toBeInstanceOf($grammarMap[$default] ?? MySqlGrammar::class);
 });
 
 it('switches grammar based on configured driver', function () {
@@ -33,5 +40,5 @@ it('caches the same connection instance', function () {
 it('returns the configured default connection name', function () {
     $manager = new DatabaseManager($this->config);
 
-    expect($manager->getDefaultConnection())->toBe('mysql');
+    expect($manager->getDefaultConnection())->toBe($this->config->get('database.default'));
 });

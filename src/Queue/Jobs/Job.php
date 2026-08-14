@@ -274,18 +274,26 @@ abstract class Job
 
     public function __serialize(): array
     {
-        $data = get_object_vars($this);
+        $closure = \Closure::bind(function () {
+            $data = get_object_vars($this);
 
-        unset($data['connection']);
+            unset($data['connection']);
 
-        return $data;
+            return $data;
+        }, $this, get_class($this));
+
+        return $closure();
     }
 
     public function __unserialize(array $data): void
     {
-        foreach ($data as $key => $value) {
-            $this->$key = $value;
-        }
+        $closure = \Closure::bind(function () use ($data) {
+            foreach ($data as $key => $value) {
+                $this->$key = $value;
+            }
+        }, $this, get_class($this));
+
+        $closure();
     }
 
     public function progress(int $progress): self

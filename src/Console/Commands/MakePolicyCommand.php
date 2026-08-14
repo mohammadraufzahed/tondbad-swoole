@@ -21,6 +21,11 @@ class MakePolicyCommand extends MakeCommand
         return __DIR__ . '/../../../stubs/policy.stub';
     }
 
+    protected function getNameSuffixes(): array
+    {
+        return ['Policy'];
+    }
+
     protected function getDefaultPath(string $name): string
     {
         return $this->basePath . '/app/Policies/' . $name . 'Policy.php';

@@ -21,6 +21,11 @@ class MakeGuardCommand extends MakeCommand
         return __DIR__ . '/../../../stubs/guard.stub';
     }
 
+    protected function getNameSuffixes(): array
+    {
+        return ['GuardFactory', 'Guard'];
+    }
+
     protected function getDefaultPath(string $name): string
     {
         return $this->basePath . '/app/Auth/Guards/' . $name . 'GuardFactory.php';

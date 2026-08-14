@@ -84,6 +84,7 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - Route model binding works for `TondbadSwoole\Database\Model` subclasses that implement `TondbadSwoole\Routing\Contracts\UrlRoutable` (usually via `TondbadSwoole\Routing\Concerns\HasRouteBinding`): type-hint a route parameter, e.g. `function (User $user, Response $response) { ... }` on a route with `/user/{user}`.
 - For separate `api_keys` table support, use the `api_keys` provider driver (`TondbadSwoole\Auth\UserProviders\ApiKeyUserProvider`) which allows many keys per user and optional expiration.
 - `AuthManager::extend()` accepts a closure or a class implementing `GuardFactory` to register custom guards.
+- Guards cache the resolved user in the current `Context` under a fixed per-guard key, not `spl_object_id($request)`, so `RouteDispatcher` clearing the context at the start/end of every request keeps authentication isolated under OpenSwoole.
 - Missing-token requests throw `AuthorizationException`, which the `ErrorHandler` converts to a `403` response with the message `This action is unauthorized.`.
 
 # Golden-path verification
@@ -92,6 +93,18 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - `curl http://127.0.0.1:<port>/notfound` should return `404 Not Found` with status `404`.
 - With `APP_DEBUG=false`, an exception route returns `500 Internal Server Error`; with `APP_DEBUG=true` it appends the exception message.
 - gRPC boot: the process should listen on the configured port and log `OpenSwoole GRPC Server is started grpc://0.0.0.0:<port>`.
+
+# Stress/throughput verification (PR #42 and later)
+- HTTP stress: use `OpenSwoole\Coroutine::run()` and `OpenSwoole\Coroutine\Http\Client` to fire many concurrent requests; expect ~4k RPS on simple routes and ~45 RPS on routes that hit the DB, cache, and pool stats.
+- Redis queue stress: start `tondbad-redis` on `127.0.0.1:6379`, push `QueueStressJob` to Redis DB 2 (or a fresh DB), then run `queue:work --connection=redis --concurrency=8 --max-jobs=<n> --stop-when-empty`. With the per-coroutine `Predis\Client` fix, 500 jobs processed at ~370 jobs/sec with zero duplicates.
+- Redis cache stress: do **not** share a single `Predis\Client` across coroutines; create a fresh `PredisCache` per coroutine (or a fresh `Predis\Client`) to avoid socket contention/hang. With per-coroutine clients, 20 coroutines × 1000 set/get ops completed in ~55 ms (~36k ops/sec).
+- In-memory cache stress: `InMemoryCache` is backed by `OpenSwoole\Table` with `config('cache.in_memory.size')` default 1024. `set()` proactively cleans expired entries and evicts existing keys when the table reaches `size`, so writes succeed even when the workload briefly exceeds the configured size. The table retains at most `size` live entries; treat `cache.in_memory.size` as the capacity ceiling and scale it (or use `PredisCache`/Redis) if you need more entries resident.
+- ORM/DB stress: use a route that runs `find/flush/clear` or insert cycles in a loop; 200 find/flush/clear cycles against SQLite completed in ~40 ms with zero memory growth.
+- gRPC stress: only possible if gRPC services are registered; the current server boots but has no services, so stress can only confirm the listener stays up under connection attempts.
+
+# Generator notes
+- `make:controller`, `make:middleware`, `make:provider`, `make:guard`, and `make:policy` strip redundant suffixes and `ucfirst` the base name, so `TestController`, `JwtGuard`, or `BillingProvider` produce `TestController.php`, `JwtGuardFactory.php`, and `BillingServiceProvider.php` respectively.
+- For `make:*` commands to resolve at runtime, add `"App\\": "app/"` to `composer.json` `autoload.psr-4` and run `composer dump-autoload`; remove the mapping before committing.
 
 # Devin Secrets Needed
 - None for local testing.
