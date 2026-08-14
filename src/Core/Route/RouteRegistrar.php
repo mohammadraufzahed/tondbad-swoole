@@ -9,7 +9,6 @@ use FastRoute\DataGenerator\GroupCountBased as DataGenerator;
 use FastRoute\Dispatcher\GroupCountBased as Dispatcher;
 use FastRoute\RouteCollector as FastRouteCollector;
 use ReflectionClass;
-use TondbadSwoole\Core\Route\Attributes\Endpoint;
 
 use function FastRoute\cachedDispatcher;
 
@@ -28,7 +27,7 @@ class RouteRegistrar
     ];
 
     /**
-     * @var list<array{0: string, 1: string, 2: int}>
+     * @var list<array{0: string|list<string>, 1: string, 2: int}>
      */
     private array $routes = [];
 
@@ -42,16 +41,34 @@ class RouteRegistrar
      */
     private array $middlewares = [];
 
+    /**
+     * @var array<int, array<string, string>>
+     */
+    private array $constraints = [];
+
     private ?Dispatcher $dispatcher = null;
+
+    /**
+     * @var array{0: string|list<string>, 1: string, 2: array|callable, 3: list<class-string>}|null
+     */
+    private ?array $fallback = null;
 
     public function __construct(private readonly ?string $cacheFile = null)
     {
     }
 
-    public function addRoute(string $method, string $path, array|callable $handler, array $middlewares = []): int
+    /**
+     * @param string|list<string> $method
+     * @param list<class-string> $middlewares
+     */
+    public function addRoute(string|array $method, string $path, array|callable $handler, array $middlewares = []): int
     {
-        if (!in_array($method, self::ALLOWED_METHODS, true)) {
-            throw new Exception("{$method} method is not supported");
+        $methods = is_array($method) ? $method : [$method];
+
+        foreach ($methods as $m) {
+            if (!in_array($m, self::ALLOWED_METHODS, true)) {
+                throw new Exception("{$m} method is not supported");
+            }
         }
 
         $id = count($this->handlers);
@@ -63,21 +80,31 @@ class RouteRegistrar
         return $id;
     }
 
-    /**
-     * @param array<class-string> $classNames
-     */
-    public function registerAnnotatedRoutes(array $classNames): void
+    public function setConstraint(int $id, string $parameter, string $pattern): void
     {
-        foreach ($classNames as $className) {
-            $reflection = new ReflectionClass($className);
+        $this->constraints[$id][$parameter] = $pattern;
+        $this->dispatcher = null;
+    }
 
-            foreach ($reflection->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
-                foreach ($method->getAttributes(Endpoint::class) as $attribute) {
-                    $instance = $attribute->newInstance();
-                    $this->addRoute($instance->method, $instance->path, [$className, $method->getName()]);
-                }
-            }
+    /**
+     * @param list<class-string> $middlewares
+     */
+    public function addMiddlewares(int $id, array $middlewares): void
+    {
+        if (!isset($this->middlewares[$id])) {
+            $this->middlewares[$id] = [];
         }
+
+        $this->middlewares[$id] = array_merge($this->middlewares[$id], $middlewares);
+        $this->dispatcher = null;
+    }
+
+    /**
+     * @param list<class-string> $middlewares
+     */
+    public function setFallback(string|array $method, string $path, array|callable $handler, array $middlewares = []): void
+    {
+        $this->fallback = [$method, $path, $handler, $middlewares];
     }
 
     public function getDispatcher(): Dispatcher
@@ -91,7 +118,12 @@ class RouteRegistrar
         $this->dispatcher = cachedDispatcher(
             function (FastRouteCollector $r): void {
                 foreach ($this->routes as [$method, $path, $id]) {
-                    $r->addRoute($method, $path, $id);
+                    $r->addRoute($method, $this->buildPath($path, $this->constraints[$id] ?? []), $id);
+                }
+
+                if ($this->fallback !== null) {
+                    [$method, $path, $handler, $middlewares] = $this->fallback;
+                    $r->addRoute($method, $path, $this->addFallbackHandler($handler, $middlewares));
                 }
             },
             [
@@ -103,6 +135,39 @@ class RouteRegistrar
         );
 
         return $this->dispatcher;
+    }
+
+    /**
+     * @param list<class-string> $middlewares
+     */
+    private function addFallbackHandler(array|callable $handler, array $middlewares): int
+    {
+        $id = count($this->handlers);
+        $this->handlers[$id] = $handler;
+        $this->middlewares[$id] = $middlewares;
+
+        return $id;
+    }
+
+    private function buildPath(string $path, array $constraints): string
+    {
+        if ($constraints === []) {
+            return $path;
+        }
+
+        return preg_replace_callback(
+            '/\{([^{}:]+)(?::[^{}]*)?\}/',
+            function (array $matches) use ($constraints): string {
+                $parameter = $matches[1];
+
+                if (isset($constraints[$parameter])) {
+                    return '{' . $parameter . ':' . $constraints[$parameter] . '}';
+                }
+
+                return '{' . $parameter . '}';
+            },
+            $path
+        ) ?? $path;
     }
 
     /**
@@ -148,7 +213,12 @@ class RouteRegistrar
     public function getRoutes(): array
     {
         return array_map(
-            fn(array $route) => [$route[0], $route[1], $this->handlers[$route[2]], $this->middlewares[$route[2]] ?? []],
+            fn(array $route) => [
+                is_array($route[0]) ? implode('|', $route[0]) : $route[0],
+                $route[1],
+                $this->handlers[$route[2]],
+                $this->middlewares[$route[2]] ?? [],
+            ],
             $this->routes
         );
     }

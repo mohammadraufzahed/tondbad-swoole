@@ -14,23 +14,59 @@ use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Route\Contracts\RouteInterface;
 use TondbadSwoole\Database\DatabaseManager;
+use TondbadSwoole\Http\Request as HttpRequest;
+use TondbadSwoole\Http\Response as HttpResponse;
+use TondbadSwoole\Routing\ResourceRegistrar;
 
 class Route implements RouteInterface
 {
     private RouteRegistrar $registrar;
     private RouteDispatcher $dispatcher;
 
-    private string $groupPrefix = '';
-
     /**
-     * @var list<class-string>
+     * @var list<string>
      */
-    private array $groupMiddlewares = [];
+    private array $groupPrefixStack = [''];
 
     /**
-     * @var array<string, array{0: string, 1: string}>
+     * @var list<list<class-string>>
+     */
+    private array $groupMiddlewareStack = [[]];
+
+    /**
+     * @var list<string>
+     */
+    private array $groupNamePrefixStack = [''];
+
+    /**
+     * @var list<string>
+     */
+    private array $groupNamespaceStack = [''];
+
+    /**
+     * @var list<array<string, string>>
+     */
+    private array $groupPatternStack = [[]];
+
+    /**
+     * @var array<string, string>
+     */
+    private array $globalPatterns = [];
+
+    /**
+     * @var array<string, list<class-string>>
+     */
+    private array $middlewareGroups = [];
+
+    /**
+     * @var array<string, array{0: string|list<string>, 1: string}>
      */
     private array $namedRoutes = [];
+
+    /**
+     * @var array<int, array{0: string|list<string>, 1: string}>
+     */
+    private array $routeNameIndex = [];
 
     public function __construct(
         private readonly Container $container,
@@ -48,45 +84,59 @@ class Route implements RouteInterface
     }
 
     public function addRoute(
-        string $method,
+        string|array $method,
         string $path,
         array|callable $handler,
         array $middlewares = [],
         ?string $name = null
-    ): void {
-        $fullPath = $this->groupPrefix . $path;
-        $allMiddlewares = array_merge($this->groupMiddlewares, $middlewares);
+    ): RouteDefinition {
+        $fullPath = $this->currentPrefix() . $path;
+        $handler = $this->resolveNamespacedHandler($handler);
+        $allMiddlewares = array_merge($this->currentMiddlewares(), $this->expandMiddlewares($middlewares));
 
-        $this->registrar->addRoute($method, $fullPath, $handler, $allMiddlewares);
+        $id = $this->registrar->addRoute($method, $fullPath, $handler, $allMiddlewares);
+
+        foreach (array_merge($this->currentPatterns(), $this->globalPatterns) as $parameter => $pattern) {
+            $this->registrar->setConstraint($id, $parameter, $pattern);
+        }
+
+        $this->routeNameIndex[$id] = [$method, $fullPath];
 
         if ($name !== null) {
-            $this->namedRoutes[$name] = [$method, $fullPath];
+            $this->setName($id, $name);
         }
+
+        return new RouteDefinition($this, $id);
     }
 
-    public function get(string $path, array|callable $handler, array $middlewares = [], ?string $name = null): void
+    public function get(string $path, array|callable $handler, array $middlewares = [], ?string $name = null): RouteDefinition
     {
-        $this->addRoute('GET', $path, $handler, $middlewares, $name);
+        return $this->addRoute('GET', $path, $handler, $middlewares, $name);
     }
 
-    public function post(string $path, array|callable $handler, array $middlewares = [], ?string $name = null): void
+    public function post(string $path, array|callable $handler, array $middlewares = [], ?string $name = null): RouteDefinition
     {
-        $this->addRoute('POST', $path, $handler, $middlewares, $name);
+        return $this->addRoute('POST', $path, $handler, $middlewares, $name);
     }
 
-    public function put(string $path, array|callable $handler, array $middlewares = [], ?string $name = null): void
+    public function put(string $path, array|callable $handler, array $middlewares = [], ?string $name = null): RouteDefinition
     {
-        $this->addRoute('PUT', $path, $handler, $middlewares, $name);
+        return $this->addRoute('PUT', $path, $handler, $middlewares, $name);
     }
 
-    public function delete(string $path, array|callable $handler, array $middlewares = [], ?string $name = null): void
+    public function delete(string $path, array|callable $handler, array $middlewares = [], ?string $name = null): RouteDefinition
     {
-        $this->addRoute('DELETE', $path, $handler, $middlewares, $name);
+        return $this->addRoute('DELETE', $path, $handler, $middlewares, $name);
     }
 
-    public function patch(string $path, array|callable $handler, array $middlewares = [], ?string $name = null): void
+    public function patch(string $path, array|callable $handler, array $middlewares = [], ?string $name = null): RouteDefinition
     {
-        $this->addRoute('PATCH', $path, $handler, $middlewares, $name);
+        return $this->addRoute('PATCH', $path, $handler, $middlewares, $name);
+    }
+
+    public function options(string $path, array|callable $handler, array $middlewares = [], ?string $name = null): RouteDefinition
+    {
+        return $this->addRoute('OPTIONS', $path, $handler, $middlewares, $name);
     }
 
     /**
@@ -95,16 +145,140 @@ class Route implements RouteInterface
      */
     public function group(string $prefix, callable $callback, array $middlewares = []): void
     {
-        $previousPrefix = $this->groupPrefix;
-        $previousMiddlewares = $this->groupMiddlewares;
-
-        $this->groupPrefix .= $prefix;
-        $this->groupMiddlewares = array_merge($this->groupMiddlewares, $middlewares);
-
+        $this->pushGroup($prefix, $middlewares);
         $callback($this);
+        $this->popGroup();
+    }
 
-        $this->groupPrefix = $previousPrefix;
-        $this->groupMiddlewares = $previousMiddlewares;
+    public function pushGroup(
+        string $prefix = '',
+        array $middlewares = [],
+        string $namePrefix = '',
+        string $namespace = '',
+        array $patterns = []
+    ): void {
+        $this->groupPrefixStack[] = $this->buildPrefix($prefix);
+        $this->groupMiddlewareStack[] = array_merge($this->currentMiddlewares(), $this->expandMiddlewares($middlewares));
+        $this->groupNamePrefixStack[] = $this->currentNamePrefix() . $namePrefix;
+        $this->groupNamespaceStack[] = $this->buildNamespace($namespace);
+        $this->groupPatternStack[] = array_merge($this->currentPatterns(), $patterns);
+    }
+
+    public function popGroup(): void
+    {
+        if (count($this->groupPrefixStack) <= 1) {
+            throw new InvalidArgumentException('Cannot pop the root route group.');
+        }
+
+        array_pop($this->groupPrefixStack);
+        array_pop($this->groupMiddlewareStack);
+        array_pop($this->groupNamePrefixStack);
+        array_pop($this->groupNamespaceStack);
+        array_pop($this->groupPatternStack);
+    }
+
+    public function prefix(string $prefix): GroupBuilder
+    {
+        return (new GroupBuilder($this))->prefix($prefix);
+    }
+
+    /**
+     * @param list<class-string> $middlewares
+     */
+    public function middleware(array $middlewares): GroupBuilder
+    {
+        return (new GroupBuilder($this))->middleware($middlewares);
+    }
+
+    public function name(string $prefix): GroupBuilder
+    {
+        return (new GroupBuilder($this))->name($prefix);
+    }
+
+    public function namespace(string $namespace): GroupBuilder
+    {
+        return (new GroupBuilder($this))->namespace($namespace);
+    }
+
+    public function pattern(string $parameter, string $pattern): self
+    {
+        $this->globalPatterns[$parameter] = $pattern;
+
+        return $this;
+    }
+
+    public function resource(string $name, string $controller, array $options = []): void
+    {
+        (new ResourceRegistrar())->register($this, $name, $controller, $options);
+    }
+
+    public function apiResource(string $name, string $controller, array $options = []): void
+    {
+        $options['api'] = true;
+        $this->resource($name, $controller, $options);
+    }
+
+    public function redirect(string $from, string $to, int $status = 302, array $middlewares = []): RouteDefinition
+    {
+        return $this->addRoute(['GET', 'HEAD'], $from, function (HttpRequest $request, HttpResponse $response) use ($to, $status): void {
+            $response->redirect($to, $status);
+        }, $middlewares);
+    }
+
+    public function fallback(array|callable $handler, array $middlewares = []): void
+    {
+        $this->registrar->setFallback(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'], '/{path:.*}', $handler, $middlewares);
+    }
+
+    public function setConstraint(int $id, string $parameter, string $pattern): void
+    {
+        $this->registrar->setConstraint($id, $parameter, $pattern);
+    }
+
+    public function setName(int $id, string $name): void
+    {
+        if (!isset($this->routeNameIndex[$id])) {
+            throw new InvalidArgumentException("Route id {$id} does not exist.");
+        }
+
+        $fullName = $this->currentNamePrefix() . $name;
+        $this->namedRoutes[$fullName] = $this->routeNameIndex[$id];
+    }
+
+    public function setMiddleware(int $id, array $middlewares): void
+    {
+        $this->registrar->addMiddlewares($id, $this->expandMiddlewares($middlewares));
+    }
+
+    /**
+     * @param list<class-string> $middlewares
+     */
+    public function middlewareGroup(string $name, array $middlewares): self
+    {
+        $this->middlewareGroups[$name] = $middlewares;
+
+        return $this;
+    }
+
+    /**
+     * @param list<class-string|string> $middlewares
+     * @return list<class-string>
+     */
+    public function expandMiddlewares(array $middlewares): array
+    {
+        $expanded = [];
+
+        foreach ($middlewares as $middleware) {
+            if (isset($this->middlewareGroups[$middleware])) {
+                array_push($expanded, ...$this->middlewareGroups[$middleware]);
+
+                continue;
+            }
+
+            $expanded[] = $middleware;
+        }
+
+        return $expanded;
     }
 
     public function has(string $name): bool
@@ -112,33 +286,64 @@ class Route implements RouteInterface
         return isset($this->namedRoutes[$name]);
     }
 
-    public function url(string $name, array $params = []): string
+    public function url(string $name, array $params = [], bool $relative = true): string
     {
         if (!$this->has($name)) {
             throw new InvalidArgumentException("Route named '{$name}' is not defined.");
         }
 
+        $method = $this->namedRoutes[$name][0];
         $path = $this->namedRoutes[$name][1];
+        $usedKeys = [];
 
-        $path = preg_replace_callback('/\[([^\]]*)\]/', function (array $matches) use ($params): string {
+        $path = preg_replace_callback('/\[([^\]]*)\]/', function (array $matches) use ($params, &$usedKeys): string {
             $segment = $matches[1];
 
-            if (preg_match_all('/\{([^}:]+)/', $segment, $keys)) {
+            if (preg_match_all('/\{([^{}:]+)(?::[^\}]*)?\}/', $segment, $keys)) {
                 foreach ($keys[1] as $key) {
                     if (!array_key_exists($key, $params)) {
                         return '';
                     }
+                    $usedKeys[] = $key;
                 }
             }
 
             return $segment;
         }, $path);
 
-        return preg_replace_callback('/\{([^}:]+)(?::[^\}]+)?\}/', function (array $matches) use ($params): string {
+        $path = preg_replace_callback('/\{([^{}:]+)(?::[^\}]*)?\}/', function (array $matches) use ($params, &$usedKeys): string {
             $key = $matches[1];
+            $usedKeys[] = $key;
 
             return (string) ($params[$key] ?? '');
         }, $path);
+
+        $query = [];
+
+        foreach ($params as $key => $value) {
+            if (!is_string($key)) {
+                continue;
+            }
+
+            if (in_array($key, $usedKeys, true)) {
+                continue;
+            }
+
+            $query[$key] = $value;
+        }
+
+        if ($query !== []) {
+            $path .= '?' . http_build_query($query);
+        }
+
+        if ($relative) {
+            return $path;
+        }
+
+        $scheme = $this->config->get('app.url_scheme', 'http');
+        $host = $this->config->get('app.url_host', 'localhost');
+
+        return "{$scheme}://{$host}{$path}";
     }
 
     /**
@@ -146,7 +351,63 @@ class Route implements RouteInterface
      */
     public function registerAnnotatedRoutes(array $classNames): void
     {
-        $this->registrar->registerAnnotatedRoutes($classNames);
+        foreach ($classNames as $className) {
+            $reflection = new \ReflectionClass($className);
+
+            $controllerAttributes = $reflection->getAttributes(\TondbadSwoole\Routing\Attributes\Controller::class);
+            $basePath = '';
+            $controllerMiddlewares = [];
+
+            if ($controllerAttributes !== []) {
+                $controller = $controllerAttributes[0]->newInstance();
+                $basePath = $controller->path();
+                $controllerMiddlewares = $controller->middlewares();
+            }
+
+            foreach ($reflection->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
+                foreach ($method->getAttributes(\TondbadSwoole\Core\Route\Attributes\Endpoint::class) as $attribute) {
+                    $instance = $attribute->newInstance();
+                    $this->addRoute($instance->method, $this->combinePath($basePath, $instance->path), [$className, $method->getName()], $controllerMiddlewares);
+                }
+
+                foreach ($method->getAttributes() as $attribute) {
+                    if (!is_subclass_of($attribute->getName(), \TondbadSwoole\Routing\Attributes\RouteMethod::class) && $attribute->getName() !== \TondbadSwoole\Routing\Attributes\RouteMethod::class) {
+                        continue;
+                    }
+
+                    $instance = $attribute->newInstance();
+
+                    if (!$instance instanceof \TondbadSwoole\Routing\Attributes\RouteMethod) {
+                        continue;
+                    }
+
+                    $this->addRoute(
+                        $instance->httpMethod(),
+                        $this->combinePath($basePath, $instance->path()),
+                        [$className, $method->getName()],
+                        $controllerMiddlewares,
+                        $instance->name()
+                    );
+                }
+            }
+        }
+    }
+
+    private function combinePath(string $base, string $path): string
+    {
+        if ($base === '' && $path === '') {
+            return '/';
+        }
+
+        if ($base === '') {
+            return '/' . ltrim($path, '/');
+        }
+
+        if ($path === '') {
+            return '/' . ltrim($base, '/');
+        }
+
+        return rtrim($base, '/') . '/' . ltrim($path, '/');
     }
 
     public function dispatch(Request $request, Response $response): void
@@ -175,5 +436,87 @@ class Route implements RouteInterface
     public function warmRouteCache(): void
     {
         $this->registrar->getDispatcher();
+    }
+
+    private function currentPrefix(): string
+    {
+        return $this->groupPrefixStack[count($this->groupPrefixStack) - 1] ?? '';
+    }
+
+    private function buildPrefix(string $prefix): string
+    {
+        if ($prefix === '') {
+            return $this->currentPrefix();
+        }
+
+        $current = rtrim($this->currentPrefix(), '/');
+
+        return $current . '/' . ltrim($prefix, '/');
+    }
+
+    /**
+     * @return list<class-string>
+     */
+    private function currentMiddlewares(): array
+    {
+        return $this->groupMiddlewareStack[count($this->groupMiddlewareStack) - 1] ?? [];
+    }
+
+    private function currentNamePrefix(): string
+    {
+        return $this->groupNamePrefixStack[count($this->groupNamePrefixStack) - 1] ?? '';
+    }
+
+    private function currentNamespace(): string
+    {
+        return $this->groupNamespaceStack[count($this->groupNamespaceStack) - 1] ?? '';
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function currentPatterns(): array
+    {
+        return $this->groupPatternStack[count($this->groupPatternStack) - 1] ?? [];
+    }
+
+    private function buildNamespace(string $namespace): string
+    {
+        if ($namespace === '') {
+            return $this->currentNamespace();
+        }
+
+        if (str_starts_with($namespace, '\\')) {
+            return ltrim($namespace, '\\');
+        }
+
+        $current = $this->currentNamespace();
+
+        if ($current === '') {
+            return $namespace;
+        }
+
+        return $current . '\\' . $namespace;
+    }
+
+    private function resolveNamespacedHandler(array|callable $handler): array|callable
+    {
+        if (!is_array($handler) || count($handler) !== 2 || !is_string($handler[0])) {
+            return $handler;
+        }
+
+        $namespace = $this->currentNamespace();
+
+        if ($namespace === '') {
+            return $handler;
+        }
+
+        $class = $handler[0];
+
+        if (str_contains($class, '\\') || str_starts_with($class, '\\')) {
+            return $handler;
+        }
+
+        return [$namespace . '\\' . $class, $handler[1]];
     }
 }
