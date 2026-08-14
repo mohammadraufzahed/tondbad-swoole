@@ -174,7 +174,7 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - `EmailPasswordStrategy` and `ApiKeyStrategy` validate credentials with `Schema` before touching the provider; a fake `UserProvider` that throws on `retrieveByCredentials` can be used to prove invalid input is rejected before the provider is reached.
 - `App::validateConfiguration()` fails fast with `ConfigurationException` when `app.http.port` etc. are invalid.
 - `php benchmarks/validation.php` compares `Schema::safeParse()` against the legacy `Validator` and prints timing/memory stats.
-- `queue:work --rate-limit=max:window` validates the option with `Schema`; however invalid values are currently silently ignored (rate limiter becomes `null`) rather than failing the command.
+- `queue:work --rate-limit=max:window` validates the option with `Schema`; invalid values now throw `InvalidArgumentException`, print a clear error (e.g. `Invalid --rate-limit value: ...`), and exit `1`.
 
 # Devin Secrets Needed
 - None for local testing.
