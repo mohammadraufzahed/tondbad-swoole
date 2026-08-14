@@ -9,6 +9,7 @@ use FastRoute\DataGenerator\GroupCountBased as DataGenerator;
 use FastRoute\Dispatcher\GroupCountBased as Dispatcher;
 use FastRoute\RouteCollector as FastRouteCollector;
 use ReflectionClass;
+use TondbadSwoole\Routing\Contracts\Guard;
 
 use function FastRoute\cachedDispatcher;
 
@@ -40,6 +41,11 @@ class RouteRegistrar
      * @var array<int, list<class-string>>
      */
     private array $middlewares = [];
+
+    /**
+     * @var array<int, list<Guard|string>>
+     */
+    private array $guards = [];
 
     /**
      * @var array<int, array<string, string>>
@@ -93,6 +99,22 @@ class RouteRegistrar
 
         $this->middlewares[$id] = array_merge($this->middlewares[$id], $middlewares);
         $this->dispatcher = null;
+    }
+
+    /**
+     * @param list<Guard|class-string<Guard>> $guards
+     */
+    public function setGuards(int $id, array $guards): void
+    {
+        $this->guards[$id] = $guards;
+    }
+
+    /**
+     * @return list<Guard|class-string<Guard>>
+     */
+    public function getGuards(int $id): array
+    {
+        return $this->guards[$id] ?? [];
     }
 
     public function setFallbackId(int $id): void

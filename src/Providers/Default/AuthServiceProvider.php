@@ -9,6 +9,11 @@ use TondbadSwoole\Auth\AuthManager;
 use TondbadSwoole\Auth\AuthUserManager;
 use TondbadSwoole\Auth\Contracts\Guard;
 use TondbadSwoole\Auth\Contracts\SessionStore;
+use TondbadSwoole\Auth\Identity\HttpClient;
+use TondbadSwoole\Auth\Identity\OpenSwooleHttpClient;
+use TondbadSwoole\Auth\Mfa\EmailOtpFactor;
+use TondbadSwoole\Auth\Mfa\MfaManager;
+use TondbadSwoole\Auth\Mfa\TotpFactor;
 use TondbadSwoole\Auth\RefreshTokenRepository;
 use TondbadSwoole\Auth\SessionManager;
 use TondbadSwoole\Auth\SessionStores\DatabaseSessionStore;
@@ -51,6 +56,8 @@ class AuthServiceProvider extends ServiceProvider
             );
         });
 
+        $container->bind(HttpClient::class, fn (): HttpClient => new OpenSwooleHttpClient());
+
         $container->singleton(AuthUserManager::class, function () use ($container): AuthUserManager {
             return new AuthUserManager(
                 $container->make(DatabaseManager::class),
@@ -70,6 +77,25 @@ class AuthServiceProvider extends ServiceProvider
 
         $container->bind(Guard::class, function () use ($container): Guard {
             return $container->make(AuthManager::class)->guard();
+        });
+
+        $container->singleton(MfaManager::class, function () use ($container): MfaManager {
+            $manager = new MfaManager(
+                $container->make(DatabaseManager::class),
+                $container->make(Config::class),
+                $container->make(AuthManager::class),
+            );
+
+            $manager->registerFactor(new TotpFactor(
+                $container->make(Config::class),
+                $container->make(DatabaseManager::class),
+            ));
+
+            $manager->registerFactor(new EmailOtpFactor(
+                $container->make(DatabaseManager::class),
+            ));
+
+            return $manager;
         });
     }
 }

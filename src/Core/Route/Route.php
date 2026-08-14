@@ -265,6 +265,14 @@ class Route implements RouteInterface
     }
 
     /**
+     * @param list<\TondbadSwoole\Routing\Contracts\Guard|class-string<\TondbadSwoole\Routing\Contracts\Guard>> $guards
+     */
+    public function setGuards(int $id, array $guards): void
+    {
+        $this->registrar->setGuards($id, $guards);
+    }
+
+    /**
      * @param list<class-string> $middlewares
      */
     public function middlewareGroup(string $name, array $middlewares): self

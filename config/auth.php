@@ -65,4 +65,17 @@ return [
             'auth_password' => 'password',
         ],
     ],
+
+    'identities' => [
+        'providers' => [
+            // 'google' => [
+            //     'client_id' => env('GOOGLE_CLIENT_ID'),
+            //     'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+            //     'authorization_endpoint' => 'https://accounts.google.com/o/oauth2/v2/auth',
+            //     'token_endpoint' => 'https://oauth2.googleapis.com/token',
+            //     'userinfo_endpoint' => 'https://openidconnect.googleapis.com/v1/userinfo',
+            //     'scope' => 'openid email profile',
+            // ],
+        ],
+    ],
 ];

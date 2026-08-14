@@ -19,12 +19,15 @@ use ReflectionUnionType;
 use Throwable;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Auth\Access\AuthorizationException;
+use TondbadSwoole\Auth\Contracts\Authenticatable;
 use TondbadSwoole\Http\Attributes\Authenticate as AuthenticateAttribute;
 use TondbadSwoole\Http\FormRequest;
 use TondbadSwoole\Http\Request;
 use TondbadSwoole\Http\Response;
+use TondbadSwoole\Routing\Attributes\Authorize as AuthorizeAttribute;
 use TondbadSwoole\Routing\Attributes\Body;
 use TondbadSwoole\Routing\Attributes\Controller as ControllerAttribute;
+use TondbadSwoole\Routing\Attributes\CurrentUser;
 use TondbadSwoole\Routing\Attributes\Guard as GuardAttribute;
 use TondbadSwoole\Routing\Attributes\Header;
 use TondbadSwoole\Routing\Attributes\Interceptor as InterceptorAttribute;
@@ -32,6 +35,7 @@ use TondbadSwoole\Routing\Attributes\Param;
 use TondbadSwoole\Routing\Attributes\Pipe as PipeAttribute;
 use TondbadSwoole\Routing\Attributes\Query;
 use TondbadSwoole\Routing\Attributes\Req;
+use TondbadSwoole\Routing\Attributes\RequireMfa as RequireMfaAttribute;
 use TondbadSwoole\Routing\Attributes\Res;
 use TondbadSwoole\Routing\Contracts\Guard;
 use TondbadSwoole\Routing\Contracts\Interceptor;
@@ -54,6 +58,8 @@ class HandlerInvoker
             [$class, $method] = $handler;
 
             $this->ensureAuthorized($class, $method);
+            $this->ensureAuthorize($class, $method);
+            $this->ensureMfa($class, $method);
             $this->ensureGuards($class, $method, $request);
 
             $instance = $this->container->make($class);
@@ -97,6 +103,58 @@ class HandlerInvoker
 
         if (!$auth->check()) {
             throw new AuthorizationException();
+        }
+    }
+
+    /**
+     * @param class-string $class
+     * @param non-empty-string $method
+     */
+    private function ensureAuthorize(string $class, string $method): void
+    {
+        $attributes = array_merge(
+            (new \ReflectionClass($class))->getAttributes(AuthorizeAttribute::class),
+            (new ReflectionMethod($class, $method))->getAttributes(AuthorizeAttribute::class),
+        );
+
+        if (count($attributes) === 0) {
+            return;
+        }
+
+        $attribute = $attributes[0]->newInstance();
+        $guard = $attribute->guard ?? null;
+        $auth = $guard === null ? auth() : auth($guard);
+
+        $gate = gate();
+
+        if ($gate === null) {
+            throw new AuthorizationException('Gate service is not available.');
+        }
+
+        $gate->authorize($attribute->ability, $attribute->arguments);
+    }
+
+    /**
+     * @param class-string $class
+     * @param non-empty-string $method
+     */
+    private function ensureMfa(string $class, string $method): void
+    {
+        $attributes = array_merge(
+            (new \ReflectionClass($class))->getAttributes(RequireMfaAttribute::class),
+            (new ReflectionMethod($class, $method))->getAttributes(RequireMfaAttribute::class),
+        );
+
+        if (count($attributes) === 0) {
+            return;
+        }
+
+        $attribute = $attributes[0]->newInstance();
+        $guard = $attribute->guard ?? null;
+        $session = auth($guard)->session();
+
+        if ($session === null || !($session->claims['mfa_verified'] ?? false)) {
+            throw new AuthorizationException('Multi-factor authentication is required.');
         }
     }
 
@@ -247,6 +305,27 @@ class HandlerInvoker
 
             if ($instance instanceof Res) {
                 return $response;
+            }
+
+            if ($instance instanceof CurrentUser) {
+                $guard = $instance->guard ?? null;
+                $user = auth($guard)->user();
+
+                if ($user === null) {
+                    if ($param->allowsNull()) {
+                        return null;
+                    }
+
+                    throw new AuthorizationException();
+                }
+
+                $type = $param->getType();
+
+                if ($type instanceof ReflectionNamedType && is_subclass_of($type->getName(), Authenticatable::class)) {
+                    return $user;
+                }
+
+                return $user->getAuthIdentifier();
             }
         }
 

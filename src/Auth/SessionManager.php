@@ -23,6 +23,11 @@ class SessionManager
     /**
      * @param array<string, mixed> $claims
      */
+    public function find(string $id): ?Session
+    {
+        return $this->sessionStore->get($id);
+    }
+
     public function create(
         string|int $userId,
         array $claims = [],

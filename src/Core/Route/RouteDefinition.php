@@ -71,6 +71,16 @@ class RouteDefinition
         return $this;
     }
 
+    /**
+     * @param list<\TondbadSwoole\Routing\Contracts\Guard|class-string<\TondbadSwoole\Routing\Contracts\Guard>> $guards
+     */
+    public function guard(array $guards): self
+    {
+        $this->route->setGuards($this->id, $guards);
+
+        return $this;
+    }
+
     public function getId(): int
     {
         return $this->id;

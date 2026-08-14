@@ -13,6 +13,11 @@ use TondbadSwoole\Auth\Guards\AccessTokenGuard;
 use TondbadSwoole\Auth\Guards\BasicAuthGuard;
 use TondbadSwoole\Auth\Guards\SessionGuard;
 use TondbadSwoole\Auth\Guards\TokenGuard;
+use TondbadSwoole\Auth\Identity\GenericIdentityProvider;
+use TondbadSwoole\Auth\Identity\HttpClient;
+use TondbadSwoole\Auth\Identity\IdentityBroker;
+use TondbadSwoole\Auth\Identity\IdentityToken;
+use TondbadSwoole\Auth\Identity\OpenSwooleHttpClient;
 use TondbadSwoole\Auth\Session\AccessToken;
 use TondbadSwoole\Auth\Session\AuthSession;
 use TondbadSwoole\Auth\Session\Session;
@@ -122,6 +127,24 @@ class AuthManager
         return $this->context->get('auth.guard.' . $guardName . '.session');
     }
 
+    public function addSessionClaim(string $key, mixed $value, ?string $guard = null): void
+    {
+        $guardName = $guard ?? $this->getDefaultGuard();
+        $session = $this->session($guardName);
+
+        if ($session === null) {
+            return;
+        }
+
+        $this->sessionManager()->addClaim($session->id, $key, $value);
+
+        $updated = $this->sessionManager()->find($session->id);
+
+        if ($updated !== null) {
+            $this->context->set('auth.guard.' . $guardName . '.session', $updated);
+        }
+    }
+
     public function login(Authenticatable $user, ?string $guard = null, array $claims = []): AuthSession
     {
         $guard = $this->guard($guard);
@@ -179,6 +202,30 @@ class AuthManager
         $session = $this->sessionManager()->create($userId, $claims, 'stateless');
 
         return $session->accessToken;
+    }
+
+    public function via(string $provider): IdentityBroker
+    {
+        $config = $this->config->get("auth.identities.providers.{$provider}");
+
+        if (!is_array($config)) {
+            throw new InvalidArgumentException("Identity provider [{$provider}] is not configured.");
+        }
+
+        $httpClient = $this->container->has(HttpClient::class)
+            ? $this->container->make(HttpClient::class)
+            : new OpenSwooleHttpClient();
+
+        $identityProvider = new GenericIdentityProvider($provider, $config, $httpClient);
+
+        return new IdentityBroker($provider, $identityProvider, $this->context);
+    }
+
+    public function handleIdentity(IdentityToken $token, ?string $guard = null): AuthSession
+    {
+        $user = $this->userManager()->findOrCreateFromIdentity($token);
+
+        return $this->login($user, $guard);
     }
 
     public function revokeSession(string $sessionId): void

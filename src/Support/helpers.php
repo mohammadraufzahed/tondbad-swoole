@@ -5,6 +5,7 @@ declare(strict_types=1);
 use TondbadSwoole\Auth\Access\Gate;
 use TondbadSwoole\Auth\AuthManager;
 use TondbadSwoole\Auth\Contracts\Guard as GuardContract;
+use TondbadSwoole\Auth\Mfa\MfaManager;
 use TondbadSwoole\Bootstrap\App;
 use TondbadSwoole\Contracts\CacheContract;
 use TondbadSwoole\Core\Config;
@@ -112,6 +113,13 @@ if (!function_exists('gate')) {
     function gate(): ?Gate
     {
         return app()?->container->make(Gate::class);
+    }
+}
+
+if (!function_exists('mfa')) {
+    function mfa(): ?MfaManager
+    {
+        return app()?->container->make(MfaManager::class);
     }
 }
 
