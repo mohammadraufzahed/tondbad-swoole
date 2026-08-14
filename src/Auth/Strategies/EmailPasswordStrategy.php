@@ -7,6 +7,7 @@ namespace TondbadSwoole\Auth\Strategies;
 use TondbadSwoole\Auth\AuthUserManager;
 use TondbadSwoole\Auth\Contracts\Authenticatable;
 use TondbadSwoole\Auth\Contracts\UserProvider;
+use TondbadSwoole\Validation\Schema;
 
 class EmailPasswordStrategy implements AuthStrategy
 {
@@ -24,9 +25,20 @@ class EmailPasswordStrategy implements AuthStrategy
 
     public function authenticate(array $credentials): ?Authenticatable
     {
-        $user = $this->provider->retrieveByCredentials($credentials);
+        $schema = Schema::object([
+            'email' => Schema::string()->email()->required(),
+            'password' => Schema::string()->required(),
+        ])->lax();
 
-        if ($user === null || !$this->provider->validateCredentials($user, $credentials)) {
+        $result = $schema->safeParse($credentials);
+
+        if (!$result->valid) {
+            return null;
+        }
+
+        $user = $this->provider->retrieveByCredentials($result->data);
+
+        if ($user === null || !$this->provider->validateCredentials($user, $result->data)) {
             return null;
         }
 
@@ -35,10 +47,17 @@ class EmailPasswordStrategy implements AuthStrategy
 
     public function register(array $data): ?Authenticatable
     {
-        if ($data === []) {
+        $schema = Schema::object([
+            'email' => Schema::string()->email()->required(),
+            'password' => Schema::string()->min(8)->required(),
+        ])->lax();
+
+        $result = $schema->safeParse($data);
+
+        if (!$result->valid) {
             return null;
         }
 
-        return $this->userManager->create($data);
+        return $this->userManager->create($result->data);
     }
 }

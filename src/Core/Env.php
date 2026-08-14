@@ -7,6 +7,7 @@ namespace TondbadSwoole\Core;
 use Dotenv\Dotenv;
 use Dotenv\Exception\InvalidPathException;
 use RuntimeException;
+use TondbadSwoole\Validation\Schema;
 
 class Env
 {
@@ -74,6 +75,21 @@ class Env
         $value = getenv($envKey);
 
         return $value !== false ? $this->parseValue($value) : $default;
+    }
+
+    public function getInt(string $key, int $default = 0): int
+    {
+        return (int) Schema::int()->coerce()->default($default)->parse($this->get($key, $default));
+    }
+
+    public function getString(string $key, string $default = ''): string
+    {
+        return (string) Schema::string()->coerce()->default($default)->parse($this->get($key, $default));
+    }
+
+    public function getBool(string $key, bool $default = false): bool
+    {
+        return (bool) Schema::bool()->coerce()->default($default)->parse($this->get($key, $default));
     }
 
     public function has(string $key): bool

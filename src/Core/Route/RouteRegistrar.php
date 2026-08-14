@@ -10,6 +10,7 @@ use FastRoute\Dispatcher\GroupCountBased as Dispatcher;
 use FastRoute\RouteCollector as FastRouteCollector;
 use ReflectionClass;
 use TondbadSwoole\Routing\Contracts\Guard;
+use TondbadSwoole\Validation\Schema;
 
 use function FastRoute\cachedDispatcher;
 
@@ -52,6 +53,11 @@ class RouteRegistrar
      */
     private array $constraints = [];
 
+    /**
+     * @var array<int, array<string, Schema>>
+     */
+    private array $schemas = [];
+
     private ?Dispatcher $dispatcher = null;
     private ?int $fallbackId = null;
 
@@ -86,6 +92,18 @@ class RouteRegistrar
     {
         $this->constraints[$id][$parameter] = $pattern;
         $this->dispatcher = null;
+    }
+
+    public function setSchema(int $id, string $parameter, Schema $schema): void
+    {
+        $this->schemas[$id][$parameter] = $schema->lax();
+        $this->constraints[$id][$parameter] = '[^/]+';
+        $this->dispatcher = null;
+    }
+
+    public function getSchema(int $id, string $parameter): ?Schema
+    {
+        return $this->schemas[$id][$parameter] ?? null;
     }
 
     /**

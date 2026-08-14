@@ -67,7 +67,14 @@ class RouteDispatcher
                 case Dispatcher::FOUND:
                     $handlerId = (int) $routeInfo[1];
                     $vars = $routeInfo[2];
-                    $this->dispatchRoute($request, $response, $handlerId, $vars);
+
+                    $validatedVars = $this->validateRouteParameters($request, $response, $handlerId, $vars);
+
+                    if ($validatedVars === null) {
+                        return;
+                    }
+
+                    $this->dispatchRoute($request, $response, $handlerId, $validatedVars);
                     break;
             }
         } catch (Throwable $e) {
@@ -122,6 +129,33 @@ class RouteDispatcher
     private function invokeHandler(array|callable $handler, HttpContext $context, array $vars): void
     {
         $this->invoker->invoke($handler, $context->request, $context->response, $vars);
+    }
+
+    /**
+     * @param array<string, string> $vars
+     * @return array<string, mixed>|null
+     */
+    private function validateRouteParameters(Request $request, Response $response, int $handlerId, array $vars): ?array
+    {
+        foreach ($vars as $parameter => $value) {
+            $schema = $this->registrar->getSchema($handlerId, $parameter);
+
+            if ($schema === null) {
+                continue;
+            }
+
+            $result = $schema->safeParse($value, $this->databaseManager);
+
+            if (!$result->valid) {
+                $response->status(404)->end('404 Not Found');
+
+                return null;
+            }
+
+            $vars[$parameter] = $result->data;
+        }
+
+        return $vars;
     }
 
     /**

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace TondbadSwoole\Core\Route;
 
 use InvalidArgumentException;
+use TondbadSwoole\Validation\Schema;
 
 class RouteDefinition
 {
@@ -53,6 +54,13 @@ class RouteDefinition
         foreach ($parameters as $parameter) {
             $this->where($parameter, '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}');
         }
+
+        return $this;
+    }
+
+    public function whereSchema(string $parameter, Schema $schema): self
+    {
+        $this->route->setSchema($this->id, $parameter, $schema);
 
         return $this;
     }
