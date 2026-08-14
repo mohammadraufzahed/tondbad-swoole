@@ -21,6 +21,11 @@ class MakeProviderCommand extends MakeCommand
         return __DIR__ . '/../../../stubs/provider.stub';
     }
 
+    protected function getNameSuffixes(): array
+    {
+        return ['ServiceProvider', 'Provider'];
+    }
+
     protected function getDefaultPath(string $name): string
     {
         return $this->basePath . '/app/Providers/' . $name . 'ServiceProvider.php';

@@ -35,11 +35,29 @@ abstract class MakeCommand extends Command
         return 0;
     }
 
+    protected function getNameSuffixes(): array
+    {
+        return [];
+    }
+
     private function normalizeName(string $name): string
     {
         $name = str_replace(['/', '\\'], '/', $name);
         $name = basename($name, '.php');
         $name = preg_replace('/[^A-Za-z0-9]/', '', $name);
+        $name = ucfirst($name);
+
+        if ($name === '') {
+            throw new InvalidArgumentException('Invalid class name provided.');
+        }
+
+        foreach ($this->getNameSuffixes() as $suffix) {
+            if (str_ends_with($name, $suffix)) {
+                $name = substr($name, 0, -strlen($suffix));
+
+                break;
+            }
+        }
 
         if ($name === '') {
             throw new InvalidArgumentException('Invalid class name provided.');

@@ -21,6 +21,11 @@ class MakeControllerCommand extends MakeCommand
         return __DIR__ . '/../../../stubs/controller.stub';
     }
 
+    protected function getNameSuffixes(): array
+    {
+        return ['Controller'];
+    }
+
     protected function getDefaultPath(string $name): string
     {
         return $this->basePath . '/app/Http/Controllers/' . $name . 'Controller.php';

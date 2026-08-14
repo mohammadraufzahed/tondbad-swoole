@@ -38,7 +38,7 @@ class BasicAuthGuard implements Guard
             return null;
         }
 
-        $cacheKey = $this->cacheKey($request);
+        $cacheKey = $this->cacheKey();
 
         if ($this->context->has($cacheKey)) {
             return $this->context->get($cacheKey);
@@ -75,7 +75,7 @@ class BasicAuthGuard implements Guard
         $request = $this->request();
 
         if ($request !== null) {
-            $this->context->set($this->cacheKey($request), $user);
+            $this->context->set($this->cacheKey(), $user);
         }
 
         return $this;
@@ -119,8 +119,8 @@ class BasicAuthGuard implements Guard
         return $this->context->get('request');
     }
 
-    private function cacheKey(Request $request): string
+    private function cacheKey(): string
     {
-        return 'auth.guard.' . $this->name . '.user.' . spl_object_id($request);
+        return 'auth.guard.' . $this->name . '.user';
     }
 }

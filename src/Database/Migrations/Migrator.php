@@ -78,6 +78,13 @@ class Migrator
         $this->repository->deleteRepository();
         $this->repository->createRepository();
 
+        $migrations = array_reverse($this->getMigrationFiles());
+        $this->requireFiles($migrations);
+
+        foreach ($migrations as $migration) {
+            $this->runDown($migration);
+        }
+
         return $this->run();
     }
 

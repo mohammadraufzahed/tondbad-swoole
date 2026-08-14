@@ -16,6 +16,7 @@ use TondbadSwoole\Contracts\CacheInterface;
 class InMemoryCache implements CacheInterface
 {
     private Table $table;
+    private int $size;
     private int $cleanInterval;
     private SerializerInterface $serializer;
 
@@ -25,6 +26,7 @@ class InMemoryCache implements CacheInterface
         ?SerializerInterface $serializer = null
     ) {
         $this->cleanInterval = $cleanInterval;
+        $this->size = $size;
 
         $this->table = new Table($size);
         $this->table->column('value', Table::TYPE_STRING, 65535);
@@ -57,12 +59,81 @@ class InMemoryCache implements CacheInterface
             return false;
         }
 
-        $expiresAt = $this->ttlToSeconds($ttl);
+        if ($ttl instanceof DateInterval) {
+            $expiresAt = time() + $this->ttlToSeconds($ttl);
+        } elseif (is_int($ttl)) {
+            if ($ttl <= 0) {
+                return $this->delete($key);
+            }
 
-        return $this->table->set($key, [
+            $expiresAt = time() + $ttl;
+        } else {
+            $expiresAt = 0;
+        }
+
+        $data = [
             'value' => $serializedValue,
-            'expires_at' => $expiresAt > 0 ? time() + $expiresAt : 0,
-        ]);
+            'expires_at' => $expiresAt,
+        ];
+
+        if ($this->has($key)) {
+            return $this->table->set($key, $data);
+        }
+
+        return $this->trySet($key, $data);
+    }
+
+    private function trySet(string $key, array $data): bool
+    {
+        $this->evictIfNeeded();
+
+        if ($this->table->set($key, $data)) {
+            return true;
+        }
+
+        $this->cleanExpiredItems();
+        $this->evictIfNeeded();
+
+        if ($this->table->set($key, $data)) {
+            return true;
+        }
+
+        $this->evictToSize((int) ceil($this->size / 2));
+
+        return $this->table->set($key, $data);
+    }
+
+    private function evictIfNeeded(): void
+    {
+        if (count($this->table) >= $this->size) {
+            $this->evictToSize($this->size - 1);
+        }
+    }
+
+    private function evictToSize(int $target): void
+    {
+        if ($target < 0) {
+            return;
+        }
+
+        $toRemove = count($this->table) - $target;
+
+        if ($toRemove <= 0) {
+            return;
+        }
+
+        $keys = [];
+        foreach ($this->table as $existingKey => $row) {
+            $keys[] = (string) $existingKey;
+
+            if (count($keys) >= $toRemove) {
+                break;
+            }
+        }
+
+        foreach ($keys as $existingKey) {
+            $this->table->del($existingKey);
+        }
     }
 
     public function delete(string $key): bool

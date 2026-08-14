@@ -23,9 +23,13 @@ class QueueManager
     ) {
     }
 
-    public function connection(?string $name = null): QueueInterface
+    public function connection(?string $name = null, bool $fresh = false): QueueInterface
     {
         $name ??= $this->getDefaultDriver();
+
+        if ($fresh) {
+            return $this->createConnection($name);
+        }
 
         if (!isset($this->queues[$name])) {
             $this->queues[$name] = $this->createConnection($name);
