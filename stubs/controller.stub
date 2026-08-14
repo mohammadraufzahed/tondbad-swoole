@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use TondbadSwoole\Core\Route\Attributes\Endpoint;
+use TondbadSwoole\Routing\Attributes\Controller;
+use TondbadSwoole\Routing\Attributes\Get;
 use TondbadSwoole\Http\Request;
 use TondbadSwoole\Http\Response;
 
+#[Controller('/{slug}')]
 class {Name}Controller
 {
-    #[Endpoint('GET', '/{name}')]
+    #[Get]
     public function index(Request $request, Response $response): void
     {
         $response->html('Hello from {Name}Controller');

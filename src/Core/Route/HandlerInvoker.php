@@ -7,11 +7,14 @@ namespace TondbadSwoole\Core\Route;
 use Exception;
 use OpenSwoole\Http\Request as SwooleRequest;
 use OpenSwoole\Http\Response as SwooleResponse;
+use ReflectionClass;
 use ReflectionFunction;
 use ReflectionFunctionAbstract;
 use ReflectionMethod;
 use ReflectionNamedType;
 use ReflectionParameter;
+use ReflectionProperty;
+use ReflectionType;
 use ReflectionUnionType;
 use Throwable;
 use TondbadSwoole\Core\Container;
@@ -20,6 +23,19 @@ use TondbadSwoole\Http\Attributes\Authenticate as AuthenticateAttribute;
 use TondbadSwoole\Http\FormRequest;
 use TondbadSwoole\Http\Request;
 use TondbadSwoole\Http\Response;
+use TondbadSwoole\Routing\Attributes\Body;
+use TondbadSwoole\Routing\Attributes\Controller as ControllerAttribute;
+use TondbadSwoole\Routing\Attributes\Guard as GuardAttribute;
+use TondbadSwoole\Routing\Attributes\Header;
+use TondbadSwoole\Routing\Attributes\Interceptor as InterceptorAttribute;
+use TondbadSwoole\Routing\Attributes\Param;
+use TondbadSwoole\Routing\Attributes\Pipe as PipeAttribute;
+use TondbadSwoole\Routing\Attributes\Query;
+use TondbadSwoole\Routing\Attributes\Req;
+use TondbadSwoole\Routing\Attributes\Res;
+use TondbadSwoole\Routing\Contracts\Guard;
+use TondbadSwoole\Routing\Contracts\Interceptor;
+use TondbadSwoole\Routing\Contracts\Pipe;
 use TondbadSwoole\Routing\Contracts\UrlRoutable;
 
 class HandlerInvoker
@@ -38,11 +54,17 @@ class HandlerInvoker
             [$class, $method] = $handler;
 
             $this->ensureAuthorized($class, $method);
+            $this->ensureGuards($class, $method, $request);
 
             $instance = $this->container->make($class);
             $reflection = new ReflectionMethod($class, $method);
             $dependencies = $this->resolveDependencies($reflection, $request, $response, $vars);
-            $reflection->invokeArgs($instance, $dependencies);
+
+            $next = function () use ($reflection, $instance, $dependencies): mixed {
+                return $reflection->invokeArgs($instance, $dependencies);
+            };
+
+            $this->applyInterceptors($class, $method, $request, $response, $next);
 
             return;
         }
@@ -79,23 +101,154 @@ class HandlerInvoker
     }
 
     /**
+     * @param class-string $class
+     * @param non-empty-string $method
+     */
+    private function ensureGuards(string $class, string $method, Request $request): void
+    {
+        $classReflection = new \ReflectionClass($class);
+
+        $controllerAttributes = $classReflection->getAttributes(ControllerAttribute::class);
+
+        if ($controllerAttributes !== []) {
+            /** @var ControllerAttribute $controller */
+            $controller = $controllerAttributes[0]->newInstance();
+
+            foreach ($controller->guards() as $guardClass) {
+                $this->assertGuardCan($request, $guardClass);
+            }
+        }
+
+        $attributes = array_merge(
+            $classReflection->getAttributes(GuardAttribute::class),
+            (new ReflectionMethod($class, $method))->getAttributes(GuardAttribute::class),
+        );
+
+        foreach ($attributes as $attribute) {
+            /** @var GuardAttribute $instance */
+            $instance = $attribute->newInstance();
+            $this->assertGuardCan($request, $instance->guard);
+        }
+    }
+
+    /**
+     * @param class-string $guardClass
+     */
+    private function assertGuardCan(Request $request, string $guardClass): void
+    {
+        $guard = $this->container->make($guardClass);
+
+        if (!$guard instanceof Guard) {
+            throw new Exception("Guard class '{$guardClass}' must implement Guard contract");
+        }
+
+        if (!$guard->can($request)) {
+            throw new AuthorizationException();
+        }
+    }
+
+    /**
+     * @param class-string $class
+     * @param non-empty-string $method
+     */
+    private function applyInterceptors(string $class, string $method, Request $request, Response $response, callable $next): void
+    {
+        $attributes = array_merge(
+            (new \ReflectionClass($class))->getAttributes(InterceptorAttribute::class),
+            (new ReflectionMethod($class, $method))->getAttributes(InterceptorAttribute::class),
+        );
+
+        foreach ($attributes as $attribute) {
+            $instance = $attribute->newInstance();
+            $interceptor = $this->container->make($instance->interceptor);
+
+            if (!$interceptor instanceof Interceptor) {
+                throw new Exception("Interceptor class '{$instance->interceptor}' must implement Interceptor contract");
+            }
+
+            $previous = $next;
+            $next = function () use ($interceptor, $request, $response, $previous): mixed {
+                return $interceptor->intercept($request, $response, $previous);
+            };
+        }
+
+        $next();
+    }
+
+    /**
      * @return list<mixed>
      */
     private function resolveDependencies(ReflectionFunctionAbstract $reflection, Request $request, Response $response, array $vars): array
     {
         $dependencies = [];
+        $methodPipes = $reflection->getAttributes(PipeAttribute::class);
 
         foreach ($reflection->getParameters() as $param) {
-            $dependencies[] = $this->resolveParameter($param, $request, $response, $vars);
+            $dependencies[] = $this->resolveParameter($param, $request, $response, $vars, $methodPipes);
         }
 
         return $dependencies;
     }
 
-    private function resolveParameter(ReflectionParameter $param, Request $request, Response $response, array $vars): mixed
+    private function resolveParameter(ReflectionParameter $param, Request $request, Response $response, array $vars, array $methodPipes = []): mixed
+    {
+        $value = $this->resolveRawParameter($param, $request, $response, $vars);
+
+        return $this->applyPipes($param, $value, $methodPipes);
+    }
+
+    private function resolveRawParameter(ReflectionParameter $param, Request $request, Response $response, array $vars): mixed
     {
         $type = $param->getType();
         $name = $param->getName();
+
+        $attributes = $param->getAttributes();
+
+        foreach ($attributes as $attribute) {
+            $instance = $attribute->newInstance();
+
+            if ($instance instanceof Param) {
+                $key = $instance->name() ?? $name;
+
+                if (!array_key_exists($key, $vars)) {
+                    if ($param->isDefaultValueAvailable()) {
+                        return $param->getDefaultValue();
+                    }
+
+                    if ($param->allowsNull()) {
+                        return null;
+                    }
+
+                    throw new Exception("Missing route parameter '{$key}'");
+                }
+
+                return $this->castValue($vars[$key], $type);
+            }
+
+            if ($instance instanceof Query) {
+                $key = $instance->name() ?? $name;
+
+                return $this->castValue($request->query($key), $type);
+            }
+
+            if ($instance instanceof Header) {
+                $key = $instance->name() ?? $name;
+
+                return $request->header($key);
+            }
+
+            if ($instance instanceof Body) {
+                return $this->resolveBodyValue($param, $instance->name(), $request);
+            }
+
+            if ($instance instanceof Req) {
+                return $request;
+            }
+
+            if ($instance instanceof Res) {
+                return $response;
+            }
+        }
 
         if ($type instanceof ReflectionNamedType) {
             $value = $this->tryResolveNamedType($param, $type, $request, $response, $vars);
@@ -124,7 +277,7 @@ class HandlerInvoker
         }
 
         if (array_key_exists($name, $vars)) {
-            return $vars[$name];
+            return $this->castValue($vars[$name], $type);
         }
 
         if ($param->isDefaultValueAvailable()) {
@@ -136,6 +289,81 @@ class HandlerInvoker
         }
 
         throw new Exception("Cannot resolve parameter '{$name}'");
+    }
+
+    /**
+     * @param list<\ReflectionAttribute<PipeAttribute>> $methodPipes
+     */
+    private function applyPipes(ReflectionParameter $param, mixed $value, array $methodPipes = []): mixed
+    {
+        $attributes = array_merge($methodPipes, $param->getAttributes(PipeAttribute::class));
+
+        foreach ($attributes as $attribute) {
+            $instance = $attribute->newInstance();
+            $pipe = $this->container->make($instance->pipe);
+
+            if (!$pipe instanceof Pipe) {
+                throw new Exception("Pipe class '{$instance->pipe}' must implement Pipe contract");
+            }
+
+            $value = $pipe->transform($value, $param->getType());
+        }
+
+        return $value;
+    }
+
+    private function resolveBodyValue(ReflectionParameter $param, ?string $name, Request $request): mixed
+    {
+        $type = $param->getType();
+        $typeName = null;
+
+        if ($type instanceof ReflectionNamedType) {
+            $typeName = $type->getName();
+        }
+
+        $data = $request->all();
+
+        if ($name !== null) {
+            $data = $data[$name] ?? null;
+        }
+
+        if ($typeName === null || $typeName === 'array' || $typeName === 'mixed') {
+            return $data;
+        }
+
+        if ($typeName === Request::class || $typeName === SwooleRequest::class) {
+            return $request;
+        }
+
+        if (!class_exists($typeName)) {
+            return $this->castValue($data, $type);
+        }
+
+        return $this->buildDto($typeName, is_array($data) ? $data : []);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private function buildDto(string $class, array $data): object
+    {
+        $reflection = new ReflectionClass($class);
+
+        if ($reflection->getConstructor() === null) {
+            $instance = $reflection->newInstanceWithoutConstructor();
+
+            foreach ($data as $key => $value) {
+                if ($reflection->hasProperty($key)) {
+                    $property = $reflection->getProperty($key);
+                    $property->setAccessible(true);
+                    $property->setValue($instance, $value);
+                }
+            }
+
+            return $instance;
+        }
+
+        return $reflection->newInstance(...$data);
     }
 
     private function tryResolveNamedType(
@@ -185,17 +413,25 @@ class HandlerInvoker
         return null;
     }
 
-    private function castValue(mixed $value, ReflectionNamedType $type): mixed
+    private function castValue(mixed $value, ?ReflectionType $type): mixed
     {
-        $typeName = $type->getName();
+        if ($value === null) {
+            return null;
+        }
 
-        return match ($typeName) {
-            'int' => (int) $value,
-            'float' => (float) $value,
-            'bool' => is_bool($value) ? $value : (filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? (bool) $value),
-            'string' => (string) $value,
-            'array' => is_array($value) ? $value : [$value],
-            default => $value,
-        };
+        if ($type instanceof ReflectionNamedType) {
+            $typeName = $type->getName();
+
+            return match ($typeName) {
+                'int' => (int) $value,
+                'float' => (float) $value,
+                'bool' => is_bool($value) ? $value : (filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? (bool) $value),
+                'string' => (string) $value,
+                'array' => is_array($value) ? $value : [$value],
+                default => $value,
+            };
+        }
+
+        return $value;
     }
 }

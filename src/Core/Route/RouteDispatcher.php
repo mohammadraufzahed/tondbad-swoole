@@ -49,7 +49,14 @@ class RouteDispatcher
 
             switch ($routeInfo[0]) {
                 case Dispatcher::NOT_FOUND:
-                    $response->status(404)->end('404 Not Found');
+                    $fallbackId = $this->registrar->getFallbackId();
+
+                    if ($fallbackId !== null) {
+                        $this->dispatchRoute($request, $response, $fallbackId, ['path' => ltrim($uri, '/')]);
+                    } else {
+                        $response->status(404)->end('404 Not Found');
+                    }
+
                     break;
                 case Dispatcher::METHOD_NOT_ALLOWED:
                     $response->status(405)->end('405 Method Not Allowed');

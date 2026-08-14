@@ -89,6 +89,25 @@ Register gRPC middleware in `config/grpc.php`:
 ],
 ```
 
+## gRPC route adapter
+
+You can also route gRPC calls through the same `Route` pipeline as HTTP, sharing middleware, guards, pipes, and interceptors. When `app.type` is `grpc`, `routes/grpc.php` is loaded and each gRPC method is dispatched as a `POST` request to `/{service}/{method}`.
+
+```php
+// routes/grpc.php
+<?php
+
+declare(strict_types=1);
+
+return function (TondbadSwoole\Core\Route\Route $route): void {
+    $route->post('/greeter.Greeter/SayHello', function (Request $request, Response $response): void {
+        $response->json(['message' => 'Hello, ' . $request->input('name')]);
+    });
+};
+```
+
+For `application/grpc+json` requests, the JSON payload is parsed and made available through `$request->input()` / `$request->all()`. For `application/grpc+proto`, the raw message body is accessible via `$request->getSwooleRequest()->rawContent()`. The framework middleware pipeline, guards, pipes, and interceptors all work for gRPC routes, and the HTTP response status is mapped to a gRPC status code in the response trailers.
+
 ## Running the server
 
 ```bash

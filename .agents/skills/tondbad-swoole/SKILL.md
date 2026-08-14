@@ -114,8 +114,18 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - `make:controller`, `make:middleware`, `make:provider`, `make:guard`, and `make:policy` strip redundant suffixes and `ucfirst` the base name, so `TestController`, `JwtGuard`, or `BillingProvider` produce `TestController.php`, `JwtGuardFactory.php`, and `BillingServiceProvider.php` respectively.
 - For `make:*` commands to resolve at runtime, add `"App\\": "app/"` to `composer.json` `autoload.psr-4` and run `composer dump-autoload`; remove the mapping before committing.
 
+# Routing next-level API quirks
+- `RouteDefinition::name()` can be chained on route definitions (e.g. `$route->get('/path', handler)->name('foo')`).
+- `#[Controller(..., guards: [...])]` guard classes are enforced by `HandlerInvoker::ensureGuards()` alongside method-level `#[Guard(...)]` attributes.
+- `$route->fallback(...)` registers the catch-all `/{path:.*}` route as a normal cached route, so `route:cache` preserves the fallback handler across server restarts.
+- `route:cache` compiles `storage/cache/routes.cache.php` and deletes the existing file before rebuilding (`RouteRegistrar::warmCache()`), so route changes are reflected after a server restart; remove `storage/cache/routes.cache.php` to return to uncached routing.
+- The fallback catch-all catches unknown paths and parameter-constraint misses (e.g. `/orders/abc` against `/orders/{order}` with `->whereNumber('order')` returns the configured fallback response).
+- `make:controller` emits the new `#[Controller('/{slug}')]` + `#[Get]` style (the command replaces `{Name}`, `{Slug}`, and `{slug}` in `stubs/controller.stub`).
+- `ResourceRegistrar::pluralToSingular` correctly handles `es`-ending resources such as `articles` -> `article`, `boxes` -> `box`, and `categories` -> `category`.
+- Middleware used by the route pipeline (including middleware groups) must implement `TondbadSwoole\Contracts\MiddlewareInterface` and define `process(Request $request, Response $response, callable $next): void`. Route guard classes must implement `TondbadSwoole\Routing\Contracts\Guard` and define `can(Request $request): bool`.
+
 # Unified cache layer (`devin/cache-unified`)
-- `cache()` returns a `CacheContract` backed by `HybridStore`: L1 `InMemoryCache` (OpenSwoole\Table) -> L2 `RedisCache` (Predis pool) -> loader.
+- `cache()` returns a `CacheContract` backed by `HybridStore`: L1 `InMemoryCache` (`OpenSwoole\Table`) -> L2 `RedisCache` (Predis pool) -> loader.
 - `cache()->getOrSet($key, fn(CacheItem $item) => ..., $ttl)` returns the cached value or computes it once; the callback can set `lifetime($seconds, $refreshRatio)`, `tag(...$tags)`, and `weight($w)` through the `CacheItem`.
 - `cache()->invalidateTags(['users'])` increments tag versions and clears L1; subsequent `get`/`getOrSet` for tagged entries recompute.
 - `cache()->refresh($key)` deletes the key and records a refresh in `CacheStats`; the next `getOrSet` reloads it.

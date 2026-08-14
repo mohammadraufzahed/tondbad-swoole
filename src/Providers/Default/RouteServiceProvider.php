@@ -12,6 +12,7 @@ use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Route\Route;
 use TondbadSwoole\Core\Route\RouteLoader;
 use TondbadSwoole\Providers\Contracts\ServiceProvider;
+use TondbadSwoole\Routing\FileRouteLoader;
 
 class RouteServiceProvider extends ServiceProvider
 {
@@ -27,6 +28,18 @@ class RouteServiceProvider extends ServiceProvider
 
             $basePath = $container->make(App::class)->basePath();
             $config = $container->make(Config::class);
+
+            $middlewareGroups = file_exists($basePath . '/config/middleware.php')
+                ? require $basePath . '/config/middleware.php'
+                : [];
+
+            if (is_array($middlewareGroups)) {
+                foreach ($middlewareGroups as $name => $middlewares) {
+                    if (is_string($name) && is_array($middlewares)) {
+                        $route->middlewareGroup($name, $middlewares);
+                    }
+                }
+            }
             $appType = $config->get('app.type', 'http');
             $loader = new RouteLoader();
 
@@ -35,6 +48,14 @@ class RouteServiceProvider extends ServiceProvider
 
             if ($appType === 'http' && file_exists($basePath . '/' . $httpRouteFile)) {
                 $loader->load($basePath . '/' . $httpRouteFile, $route);
+            }
+
+            if ($appType === 'http' && $config->get('routes.file_routes.enabled', false)) {
+                $fileRoutePath = $basePath . '/' . $config->get('routes.file_routes.path', 'routes/http');
+
+                if (is_dir($fileRoutePath)) {
+                    (new FileRouteLoader())->load($fileRoutePath, $route);
+                }
             }
 
             if ($appType === 'grpc' && file_exists($basePath . '/' . $grpcRouteFile)) {

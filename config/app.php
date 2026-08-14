@@ -6,6 +6,7 @@ return [
     'name' => $env->get('app.name', 'Tondbad Framework'),
     'type' => $env->get('app.type', 'http'),
     'debug' => (bool) $env->get('app.debug', false),
+    'key' => $env->get('app.key', 'tondbad-default-key-change-me'),
     'middlewares' => [],
     'commands' => [],
     'route_cache_file' => $env->get('app.route_cache_file', $basePath . '/storage/cache/routes.cache.php'),

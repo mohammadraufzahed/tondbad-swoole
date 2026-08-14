@@ -9,7 +9,7 @@ Controllers are plain PHP classes resolved from the container:
 
 declare(strict_types=1);
 
-namespace App\Controllers;
+namespace App\Http\Controllers;
 
 use TondbadSwoole\Http\Request;
 use TondbadSwoole\Http\Response;

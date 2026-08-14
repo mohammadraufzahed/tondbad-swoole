@@ -6,4 +6,5 @@ return [
     'http' => 'routes/http.php',
     'grpc' => 'routes/grpc.php',
     'controllers' => [],
+    'file_routes' => ['enabled' => false, 'path' => 'routes/http'],
 ];
