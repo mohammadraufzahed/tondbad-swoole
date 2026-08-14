@@ -12,6 +12,7 @@ use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Route\Route;
 use TondbadSwoole\Core\Route\RouteLoader;
 use TondbadSwoole\Providers\Contracts\ServiceProvider;
+use TondbadSwoole\Routing\FileRouteLoader;
 
 class RouteServiceProvider extends ServiceProvider
 {
@@ -35,6 +36,14 @@ class RouteServiceProvider extends ServiceProvider
 
             if ($appType === 'http' && file_exists($basePath . '/' . $httpRouteFile)) {
                 $loader->load($basePath . '/' . $httpRouteFile, $route);
+            }
+
+            if ($appType === 'http' && $config->get('routes.file_routes.enabled', false)) {
+                $fileRoutePath = $basePath . '/' . $config->get('routes.file_routes.path', 'routes/http');
+
+                if (is_dir($fileRoutePath)) {
+                    (new FileRouteLoader())->load($fileRoutePath, $route);
+                }
             }
 
             if ($appType === 'grpc' && file_exists($basePath . '/' . $grpcRouteFile)) {

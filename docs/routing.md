@@ -351,6 +351,56 @@ class UserController
 }
 ```
 
+## URL helper
+
+The `route()` helper is a shortcut for `Route::url()`:
+
+```php
+$url = route('users.show', ['user' => 5]);              // /users/5
+$url = route('users.show', ['user' => 5], true);        // https://tondbad.dev/users/5
+```
+
+## File-based route discovery
+
+Optionally register routes by dropping PHP files in `routes/http/` (or the path configured in `config/routes.php` under `routes.file_routes.path`). Enable it with:
+
+```php
+// config/routes.php
+return [
+    'http' => 'routes/http.php',
+    'file_routes' => ['enabled' => true, 'path' => 'routes/http'],
+];
+```
+
+```
+routes/http/
+├── index.php          -> GET /
+├── users.php          -> GET /users
+├── users/[id].php     -> GET /users/{id}
+├── docs/[...slug].php -> GET /docs/{slug*}
+└── (api)/
+    ├── _middleware.php -> middleware for all sibling routes
+    └── users.php       -> GET /users
+```
+
+Each file returns a callable or an array of HTTP method strings mapped to callables:
+
+```php
+<?php
+
+// routes/http/users/[id].php
+return [
+    'GET'    => function (Request $request, Response $response, int $id): void {
+        $response->json(['id' => $id]);
+    },
+    'DELETE' => function (Request $request, Response $response, int $id): void {
+        $response->status(204)->end();
+    },
+];
+```
+
+`_middleware.php` files in any directory return an array of middleware class names that apply to all sibling routes.
+
 ## Route caching
 
 Compile routes for production:
