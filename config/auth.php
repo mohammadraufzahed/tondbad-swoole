@@ -8,6 +8,13 @@ return [
         'provider' => $env->get('AUTH_PROVIDER', 'users'),
     ],
 
+    'session' => [
+        'store' => $env->get('AUTH_SESSION_STORE', 'database'),
+    ],
+
+    'access_token_ttl' => (int) $env->get('AUTH_ACCESS_TOKEN_TTL', 900),
+    'refresh_token_ttl' => (int) $env->get('AUTH_REFRESH_TOKEN_TTL', 604800),
+
     'guards' => [
         'token' => [
             'driver' => 'token',
@@ -15,11 +22,26 @@ return [
             'storage_key' => 'api_token',
         ],
 
+        'access_token' => [
+            'driver' => 'access_token',
+            'provider' => 'users',
+            'mode' => 'stateful',
+            'access_ttl' => (int) $env->get('AUTH_ACCESS_TOKEN_TTL', 900),
+        ],
+
         'session' => [
             'driver' => 'session',
             'provider' => 'users',
             'session_key' => 'session_id',
-            'lifetime' => 7200,
+            'mode' => 'stateful',
+            'access_ttl' => (int) $env->get('AUTH_ACCESS_TOKEN_TTL', 900),
+            'refresh_ttl' => (int) $env->get('AUTH_REFRESH_TOKEN_TTL', 604800),
+            'cookie' => [
+                'http_only' => true,
+                'same_site' => 'lax',
+                'secure' => (bool) $env->get('AUTH_COOKIE_SECURE', true),
+                'path' => '/',
+            ],
         ],
 
         'api_key' => [

@@ -77,6 +77,22 @@ class Response
             ->end(json_encode(['error' => $message], JSON_THROW_ON_ERROR));
     }
 
+    public function cookie(
+        string $name,
+        string $value,
+        int $expires = 0,
+        string $path = '/',
+        ?string $domain = null,
+        bool $secure = true,
+        bool $httpOnly = true,
+        string $sameSite = 'lax',
+        int $priority = 0,
+    ): self {
+        $this->response->setCookie($name, $value, $expires, $path, $domain, $secure, $httpOnly, $sameSite, $priority);
+
+        return $this;
+    }
+
     public function __call(string $method, array $arguments): mixed
     {
         return $this->response->$method(...$arguments);

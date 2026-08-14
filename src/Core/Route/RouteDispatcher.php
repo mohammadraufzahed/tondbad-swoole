@@ -41,6 +41,7 @@ class RouteDispatcher
             $response = new Response($swooleResponse);
 
             $this->context->set('request', $request);
+            $this->context->set('response', $response);
 
             $httpMethod = $request->method();
             $uri = $request->path();
