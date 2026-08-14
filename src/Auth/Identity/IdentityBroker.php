@@ -4,17 +4,16 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Auth\Identity;
 
-use TondbadSwoole\Contracts\ContextInterface;
+use TondbadSwoole\Contracts\CacheInterface;
 
 class IdentityBroker
 {
-    private const STATE_KEY = 'auth.oidc.state.';
-    private const PKCE_KEY = 'auth.oidc.pkce.';
+    private const STATE_TTL = 600;
 
     public function __construct(
         private readonly string $name,
         private readonly IdentityProvider $provider,
-        private readonly ContextInterface $context,
+        private readonly CacheInterface $cache,
     ) {
     }
 
@@ -29,30 +28,36 @@ class IdentityBroker
         $verifier = rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
         $challenge = $this->pkceChallenge($verifier);
 
-        $this->context->set(self::STATE_KEY . $this->name, $state);
-        $this->context->set(self::PKCE_KEY . $this->name, $verifier);
+        $this->cache->set($this->stateKey($state), [
+            'state' => $state,
+            'verifier' => $verifier,
+        ], self::STATE_TTL);
 
         return $this->provider->redirect($callbackUrl, $state, $challenge);
     }
 
     public function callback(string $code, string $state, string $callbackUrl): IdentityToken
     {
-        $expectedState = $this->context->get(self::STATE_KEY . $this->name);
+        $stored = $this->cache->get($this->stateKey($state));
 
-        if (!is_string($expectedState) || !hash_equals($expectedState, $state)) {
+        if (!is_array($stored) || !is_string($stored['state'] ?? null) || !hash_equals($stored['state'], $state)) {
             throw new \RuntimeException('Invalid OIDC state.');
         }
 
-        $verifier = $this->context->get(self::PKCE_KEY . $this->name);
+        $verifier = (string) ($stored['verifier'] ?? '');
 
-        if (!is_string($verifier) || $verifier === '') {
+        if ($verifier === '') {
             throw new \RuntimeException('Missing PKCE verifier.');
         }
 
-        $this->context->delete(self::STATE_KEY . $this->name);
-        $this->context->delete(self::PKCE_KEY . $this->name);
+        $this->cache->delete($this->stateKey($state));
 
         return $this->provider->callback($code, $callbackUrl, $state, $verifier);
+    }
+
+    private function stateKey(string $state): string
+    {
+        return 'auth.oidc.state.' . $this->name . '.' . $state;
     }
 
     private function pkceChallenge(string $verifier): string

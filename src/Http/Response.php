@@ -88,7 +88,7 @@ class Response
         string $sameSite = 'lax',
         int $priority = 0,
     ): self {
-        $this->response->setCookie($name, $value, $expires, $path, $domain, $secure, $httpOnly, $sameSite, $priority);
+        $this->response->setCookie($name, $value, $expires, $path, $domain ?? '', $secure, $httpOnly, $sameSite, (string) $priority);
 
         return $this;
     }

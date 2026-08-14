@@ -151,7 +151,13 @@ class HandlerInvoker
 
         $attribute = $attributes[0]->newInstance();
         $guard = $attribute->guard ?? null;
-        $session = auth($guard)->session();
+        $auth = auth($guard);
+
+        if (!$auth->check()) {
+            throw new AuthorizationException('Multi-factor authentication is required.');
+        }
+
+        $session = $auth->session();
 
         if ($session === null || !($session->claims['mfa_verified'] ?? false)) {
             throw new AuthorizationException('Multi-factor authentication is required.');
@@ -321,7 +327,7 @@ class HandlerInvoker
 
                 $type = $param->getType();
 
-                if ($type instanceof ReflectionNamedType && is_subclass_of($type->getName(), Authenticatable::class)) {
+                if ($type instanceof ReflectionNamedType && is_a($type->getName(), Authenticatable::class, true)) {
                     return $user;
                 }
 

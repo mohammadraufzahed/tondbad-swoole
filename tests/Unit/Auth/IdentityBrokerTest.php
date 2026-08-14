@@ -6,6 +6,8 @@ use TondbadSwoole\Auth\AuthManager;
 use TondbadSwoole\Auth\Identity\HttpClient;
 use TondbadSwoole\Auth\Identity\HttpResponse;
 use TondbadSwoole\Auth\Identity\IdentityToken;
+use TondbadSwoole\Contracts\CacheInterface;
+use TondbadSwoole\Core\Cache\InMemoryCache;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Database\DatabaseManager;
 use TondbadSwoole\Support\Context;
@@ -112,6 +114,7 @@ beforeEach(function () {
     $container->bind(DatabaseManager::class, $this->manager);
     $container->bind(\TondbadSwoole\Support\Hash\Contracts\Hasher::class, (new \TondbadSwoole\Support\Hash\HashManager($this->config))->driver());
     $container->bind(HttpClient::class, $this->httpClient);
+    $container->bind(CacheInterface::class, new InMemoryCache());
 
     $this->context = new Context();
     $this->auth = new AuthManager($container, $this->config, $this->context);

@@ -19,6 +19,8 @@ use TondbadSwoole\Auth\Identity\IdentityBroker;
 use TondbadSwoole\Auth\Identity\IdentityToken;
 use TondbadSwoole\Auth\Identity\OpenSwooleHttpClient;
 use TondbadSwoole\Auth\Session\AccessToken;
+use TondbadSwoole\Contracts\CacheInterface;
+use TondbadSwoole\Core\Cache\InMemoryCache;
 use TondbadSwoole\Auth\Session\AuthSession;
 use TondbadSwoole\Auth\Session\Session;
 use TondbadSwoole\Auth\SessionStores\DatabaseSessionStore;
@@ -216,9 +218,13 @@ class AuthManager
             ? $this->container->make(HttpClient::class)
             : new OpenSwooleHttpClient();
 
+        $cache = $this->container->has(CacheInterface::class)
+            ? $this->container->make(CacheInterface::class)
+            : new InMemoryCache();
+
         $identityProvider = new GenericIdentityProvider($provider, $config, $httpClient);
 
-        return new IdentityBroker($provider, $identityProvider, $this->context);
+        return new IdentityBroker($provider, $identityProvider, $cache);
     }
 
     public function handleIdentity(IdentityToken $token, ?string $guard = null): AuthSession

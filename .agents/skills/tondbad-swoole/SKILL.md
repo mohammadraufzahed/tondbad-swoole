@@ -137,5 +137,27 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - Run integration Redis tests with `RUN_INTEGRATION_TESTS=1 php vendor/bin/pest tests/Integration/CacheRedisTest.php`; they rely on `tests/Support/CacheConcurrencyScript.php` and `CacheRedisTagsScript.php`.
 - `cache:forget-tags` and `cache:clear` from the CLI update Redis tag versions / flush Redis, but they cannot clear the `InMemoryCache` L1 tables held by already-running HTTP worker processes; restart the server or wait for L1 TTL expiry to guarantee those workers observe the invalidation.
 
+# Auth end-to-end verification (`devin/auth-unified`)
+- Create a fresh consumer project at `/tmp/tondbad_consumer_auth` with a path repository to the framework, `"App\\": "app/"` in `autoload.psr-4`, and `config/auth.php` overriding `defaults.guard` to `session`.
+- Set `AUTH_SESSION_STORE=database`, `DB_CONNECTION=sqlite`, and `DB_SQLITE_DATABASE=/tmp/tondbad_consumer_auth/storage/database.sqlite`; ensure the `storage/` directory is writable.
+- Provide a `users` migration with `id`, `email` (unique), `password`, `name`, `created_at`, `updated_at`; use nullable/default `0` for the timestamp columns or include them in sign-up data.
+- Run `php bin/tondbad migrate` from the consumer directory; tables `users`, `sessions`, `refresh_tokens`, `identities`, and `mfa_factors` are created by the framework's auth migrations.
+- Start the server with `APP_HTTP_PORT=9501 php bin/tondbad serve` from the consumer directory; all auth HTTP tests then hit `http://127.0.0.1:9501`.
+- Test email/password flow: `POST /auth/register` or `/auth/login` returns an `AuthSession` JSON with `session_id`, `access_token`, `refresh_token`, and `anti_csrf`; subsequent `GET /me` with the `session_id` cookie should return the user.
+- Test route guards with `AuthRouteGuard`, `RoleGuard::for('admin')`, `ScopeGuard::for('users:read')`, `#[Authenticate]`, `#[Authorize('view-dashboard')]`, `#[RequireMfa]`, `#[CurrentUser]`, and `VerifyCsrfToken` middleware.
+- Test refresh-token rotation: `POST /auth/refresh` with a valid `refresh_token` returns a new `access_token`/`refresh_token`; reusing the old `refresh_token` returns `401` and revokes the family.
+- Test revocation: `POST /auth/revoke` with a `session_id` deletes the session and revokes its refresh tokens, so `GET /me` with the old cookie returns `403`.
+- Test stateless API access: `POST /api/token` while authenticated returns a bearer `access_token`; `GET /api/me` with `Authorization: Bearer <token>` and an `AuthRouteGuard('access_token')` resolves the user.
+- Test MFA email factor: `POST /mfa/challenge {type: "email"}` returns a code; `POST /mfa/verify {type, code}` sets `mfa_verified` on the session; a `#[RequireMfa]` route then returns `200`.
+- Test CSRF: `POST /csrf-protected` without `X-CSRF-Token` (or `_token` / `csrf_token` query) returns `403`; a request with the `anti_csrf` value from the session returns `200`.
+- Test CLI: `php bin/tondbad auth:clear-sessions` deletes all `sessions` rows and marks every `refresh_tokens` row revoked.
+- Concurrent `GET /me` requests for two different sessions must return the matching user (`alice@example.com` vs `bob@example.com`) — this confirms per-coroutine `Context` isolation.
+
+## Known auth friction points
+- `SessionGuard::setSessionCookie` passes `null` for the cookie domain and `int 0` for the `priority` argument to `Response::cookie()`. `OpenSwoole\Http\Response::setCookie()` requires `string $domain` and `string $priority`, so the session guard crashes unless `Response::cookie()` casts/coerces both values.
+- `HandlerInvoker::ensureMfa()` reads `auth()->session()` without first resolving the guard/user, so `#[RequireMfa]` throws `Multi-factor authentication is required.` even after `mfa()->verify()` succeeds. It should call `auth()->check($guard)` before reading the session from `Context`.
+- `HandlerInvoker` resolves a `#[CurrentUser] ?Authenticatable` parameter using `is_subclass_of($type, Authenticatable::class)`, which returns `false` when the parameter type is exactly `Authenticatable`; use `is_a($type, Authenticatable::class, true)` instead.
+- OIDC `IdentityBroker` stores `state`/`verifier` in per-coroutine `Context`, so the real redirect/callback flow across two HTTP requests cannot validate state. A real deployment needs Redis/session-backed state storage or a single-request test harness.
+
 # Devin Secrets Needed
 - None for local testing.
