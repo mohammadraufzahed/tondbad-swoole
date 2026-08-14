@@ -125,6 +125,7 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - `cache:status` prints the current in-process `CacheStats`; values are zero from a fresh CLI process unless `cache()` has been used in that process.
 - `InMemoryCache` only starts its background expiry `Timer` when constructed inside an active coroutine, so it is safe to use from CLI commands.
 - Run integration Redis tests with `RUN_INTEGRATION_TESTS=1 php vendor/bin/pest tests/Integration/CacheRedisTest.php`; they rely on `tests/Support/CacheConcurrencyScript.php` and `CacheRedisTagsScript.php`.
+- `cache:forget-tags` and `cache:clear` from the CLI update Redis tag versions / flush Redis, but they cannot clear the `InMemoryCache` L1 tables held by already-running HTTP worker processes; restart the server or wait for L1 TTL expiry to guarantee those workers observe the invalidation.
 
 # Devin Secrets Needed
 - None for local testing.
