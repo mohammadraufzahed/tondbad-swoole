@@ -75,7 +75,13 @@ abstract class MakeCommand extends Command
             throw new RuntimeException("Stub file not found: {$stubPath}");
         }
 
-        return str_replace('{Name}', $name, $content);
+        $replacements = [
+            '{Name}' => $name,
+            '{Slug}' => lcfirst($name),
+            '{slug}' => strtolower($name),
+        ];
+
+        return str_replace(array_keys($replacements), array_values($replacements), $content);
     }
 
     abstract protected function getStubPath(): string;

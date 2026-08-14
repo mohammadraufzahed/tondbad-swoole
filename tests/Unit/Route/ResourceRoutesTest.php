@@ -82,3 +82,23 @@ it('respects resource only and except options', function () {
     expect($paths)->not->toContain('/comments/{comment}/edit');
     expect($paths)->toContain('/comments/{comment}');
 });
+
+it('singularizes words ending in les and ies', function () {
+    $this->route->resource('articles', 'ArticleController');
+    $this->route->resource('categories', 'CategoryController');
+
+    $routes = $this->route->getRoutes();
+    $paths = array_column($routes, 1);
+
+    expect($paths)->toContain('/articles/{article}');
+    expect($paths)->toContain('/categories/{category}');
+});
+
+it('allows overriding the resource parameter name', function () {
+    $this->route->resource('articles', 'ArticleController', ['parameters' => ['articles' => 'slug']]);
+
+    $routes = $this->route->getRoutes();
+    $paths = array_column($routes, 1);
+
+    expect($paths)->toContain('/articles/{slug}');
+});

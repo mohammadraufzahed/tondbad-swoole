@@ -444,7 +444,7 @@ class Route implements RouteInterface
 
     public function warmRouteCache(): void
     {
-        $this->registrar->getDispatcher();
+        $this->registrar->warmCache();
     }
 
     private function currentPrefix(): string

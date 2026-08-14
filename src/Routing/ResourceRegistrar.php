@@ -29,10 +29,12 @@ class ResourceRegistrar
         $api = (bool) ($options['api'] ?? false);
         $only = isset($options['only']) ? (array) $options['only'] : null;
         $except = isset($options['except']) ? (array) $options['except'] : [];
+        $parameters = isset($options['parameters']) && is_array($options['parameters']) ? $options['parameters'] : [];
 
         $segments = explode('.', $name);
-        $basePath = $this->buildBasePath($segments);
+        $basePath = $this->buildBasePath($segments, $parameters);
         $resourceName = $segments[count($segments) - 1];
+        $parameter = $parameters[$resourceName] ?? $this->pluralToSingular($resourceName);
 
         foreach ($this->resourceActions as $action => $config) {
             if ($api && in_array($action, ['create', 'edit'], true)) {
@@ -47,7 +49,7 @@ class ResourceRegistrar
                 continue;
             }
 
-            $uri = $basePath . str_replace('__param__', $this->pluralToSingular($resourceName), $config['uri']);
+            $uri = $basePath . str_replace('__param__', $parameter, $config['uri']);
 
             $route->addRoute(
                 $config['method'],
@@ -61,8 +63,9 @@ class ResourceRegistrar
 
     /**
      * @param list<string> $segments
+     * @param array<string, string> $parameters
      */
-    private function buildBasePath(array $segments): string
+    private function buildBasePath(array $segments, array $parameters = []): string
     {
         $parts = [];
 
@@ -70,7 +73,7 @@ class ResourceRegistrar
             $parts[] = $segment;
 
             if ($index < count($segments) - 1) {
-                $parts[] = '{' . $this->pluralToSingular($segment) . '}';
+                $parts[] = '{' . ($parameters[$segment] ?? $this->pluralToSingular($segment)) . '}';
             }
         }
 
@@ -79,18 +82,65 @@ class ResourceRegistrar
 
     private function pluralToSingular(string $word): string
     {
-        if (str_ends_with($word, 'ies')) {
-            return substr($word, 0, -3) . 'y';
+        $lower = strtolower($word);
+
+        $irregular = [
+            'children' => 'child',
+            'people' => 'person',
+            'men' => 'man',
+            'women' => 'woman',
+            'teeth' => 'tooth',
+            'feet' => 'foot',
+            'mice' => 'mouse',
+            'geese' => 'goose',
+            'oxen' => 'ox',
+        ];
+
+        if (isset($irregular[$lower])) {
+            return $this->matchCase($word, $irregular[$lower]);
         }
 
-        if (str_ends_with($word, 'es')) {
+        if (str_ends_with($lower, 'ies')) {
+            $before = substr($lower, -4, 1);
+
+            if ($before !== '' && !in_array($before, ['a', 'e', 'i', 'o', 'u'], true)) {
+                return substr($word, 0, -3) . $this->matchCase($word, 'y');
+            }
+        }
+
+        if (str_ends_with($lower, 'les')) {
+            return substr($word, 0, -1);
+        }
+
+        if (str_ends_with($lower, 'sses')) {
             return substr($word, 0, -2);
         }
 
-        if (str_ends_with($word, 's') && !str_ends_with($word, 'ss')) {
+        if (preg_match('/([sxz]|[cs]h|[^aeiou]o)es$/', $lower, $matches)) {
+            return preg_replace('/([sxz]|[cs]h|[^aeiou]o)es$/', $matches[1], $word);
+        }
+
+        if (str_ends_with($lower, 's') && !str_ends_with($lower, 'ss')) {
             return substr($word, 0, -1);
         }
 
         return $word;
+    }
+
+    private function matchCase(string $original, string $replacement): string
+    {
+        if ($original === strtolower($original)) {
+            return strtolower($replacement);
+        }
+
+        if ($original === strtoupper($original)) {
+            return strtoupper($replacement);
+        }
+
+        if ($original[0] === strtoupper($original[0])) {
+            return ucfirst(strtolower($replacement));
+        }
+
+        return $replacement;
     }
 }

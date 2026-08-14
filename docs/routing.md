@@ -112,6 +112,12 @@ Nested resources are supported:
 $route->resource('posts.comments', CommentController::class);
 ```
 
+Override the route parameter name if singularization is ambiguous:
+
+```php
+$route->resource('articles', ArticleController::class, ['parameters' => ['articles' => 'article']]);
+```
+
 ## Middleware groups
 
 ```php
@@ -359,4 +365,6 @@ Clear the framework cache (including the route cache):
 php bin/tondbad cache:clear
 ```
 
-Cached routes are stored in `storage/framework/route-cache.php` and take precedence over runtime definitions. The cache path is configurable via `config/routes.php`.
+Cached routes are stored in `storage/cache/routes.cache.php` and take precedence over runtime definitions. The cache path is configurable via `config/app.php` (`route_cache_file`).
+
+`route:cache` deletes any existing cache file before rebuilding, so route changes are reflected after a server restart. Use `cache:clear` to remove the cache and return to uncached routing.

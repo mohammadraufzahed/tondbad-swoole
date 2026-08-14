@@ -105,6 +105,17 @@ class RouteRegistrar
         return $this->fallbackId;
     }
 
+    public function warmCache(): void
+    {
+        $this->dispatcher = null;
+
+        if ($this->cacheFile !== null && is_file($this->cacheFile)) {
+            @unlink($this->cacheFile);
+        }
+
+        $this->getDispatcher();
+    }
+
     public function getDispatcher(): Dispatcher
     {
         if ($this->dispatcher !== null) {
