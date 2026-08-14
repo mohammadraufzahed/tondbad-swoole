@@ -5,12 +5,9 @@ declare(strict_types=1);
 namespace TondbadSwoole\Core\Cache;
 
 use DateInterval;
+use OpenSwoole\Coroutine;
 use OpenSwoole\Table;
 use OpenSwoole\Timer;
-use Symfony\Component\Serializer\Serializer;
-use Symfony\Component\Serializer\Encoder\JsonEncoder;
-use Symfony\Component\Serializer\Normalizer\ObjectNormalizer;
-use Symfony\Component\Serializer\SerializerInterface;
 use TondbadSwoole\Contracts\CacheInterface;
 
 class InMemoryCache implements CacheInterface
@@ -18,26 +15,26 @@ class InMemoryCache implements CacheInterface
     private Table $table;
     private int $size;
     private int $cleanInterval;
-    private SerializerInterface $serializer;
+    private string $dataColumn = 'data';
+    private string $expiresColumn = 'expires_at';
+    private string $lastAccessColumn = 'last_access';
 
-    public function __construct(
-        int $size = 1024,
-        int $cleanInterval = 1000,
-        ?SerializerInterface $serializer = null
-    ) {
-        $this->cleanInterval = $cleanInterval;
+    public function __construct(int $size = 1024, int $cleanInterval = 1000)
+    {
         $this->size = $size;
+        $this->cleanInterval = $cleanInterval;
 
         $this->table = new Table($size);
-        $this->table->column('value', Table::TYPE_STRING, 65535);
-        $this->table->column('expires_at', Table::TYPE_INT, 10);
+        $this->table->column($this->dataColumn, Table::TYPE_STRING, 65535);
+        $this->table->column($this->expiresColumn, Table::TYPE_INT, 10);
+        $this->table->column($this->lastAccessColumn, Table::TYPE_INT, 10);
         $this->table->create();
 
-        $this->serializer = $serializer ?? new Serializer([new ObjectNormalizer()], [new JsonEncoder()]);
-
-        Timer::tick($this->cleanInterval, function () {
-            $this->cleanExpiredItems();
-        });
+        if ($this->cleanInterval > 0 && Coroutine::getCid() !== -1) {
+            Timer::tick($this->cleanInterval, function () {
+                $this->cleanExpiredItems();
+            });
+        }
     }
 
     public function get(string $key, mixed $default = null): mixed
@@ -46,94 +43,26 @@ class InMemoryCache implements CacheInterface
             return $default;
         }
 
-        $data = $this->table->get($key);
+        $row = $this->table->get($key);
 
-        return $this->serializer->decode($data['value'], 'json');
+        return $this->decode($row[$this->dataColumn]);
     }
 
     public function set(string $key, mixed $value, null|int|DateInterval $ttl = null): bool
     {
-        try {
-            $serializedValue = $this->serializer->encode($value, 'json');
-        } catch (\Exception $e) {
-            return false;
-        }
+        $expiresAt = $this->ttlToTimestamp($ttl);
 
-        if ($ttl instanceof DateInterval) {
-            $expiresAt = time() + $this->ttlToSeconds($ttl);
-        } elseif (is_int($ttl)) {
-            if ($ttl <= 0) {
-                return $this->delete($key);
-            }
-
-            $expiresAt = time() + $ttl;
-        } else {
-            $expiresAt = 0;
-        }
-
-        $data = [
-            'value' => $serializedValue,
-            'expires_at' => $expiresAt,
+        $row = [
+            $this->dataColumn => $this->encode($value),
+            $this->expiresColumn => $expiresAt,
+            $this->lastAccessColumn => time(),
         ];
 
         if ($this->has($key)) {
-            return $this->table->set($key, $data);
+            return $this->table->set($key, $row);
         }
 
-        return $this->trySet($key, $data);
-    }
-
-    private function trySet(string $key, array $data): bool
-    {
-        $this->evictIfNeeded();
-
-        if ($this->table->set($key, $data)) {
-            return true;
-        }
-
-        $this->cleanExpiredItems();
-        $this->evictIfNeeded();
-
-        if ($this->table->set($key, $data)) {
-            return true;
-        }
-
-        $this->evictToSize((int) ceil($this->size / 2));
-
-        return $this->table->set($key, $data);
-    }
-
-    private function evictIfNeeded(): void
-    {
-        if (count($this->table) >= $this->size) {
-            $this->evictToSize($this->size - 1);
-        }
-    }
-
-    private function evictToSize(int $target): void
-    {
-        if ($target < 0) {
-            return;
-        }
-
-        $toRemove = count($this->table) - $target;
-
-        if ($toRemove <= 0) {
-            return;
-        }
-
-        $keys = [];
-        foreach ($this->table as $existingKey => $row) {
-            $keys[] = (string) $existingKey;
-
-            if (count($keys) >= $toRemove) {
-                break;
-            }
-        }
-
-        foreach ($keys as $existingKey) {
-            $this->table->del($existingKey);
-        }
+        return $this->trySet($key, $row);
     }
 
     public function delete(string $key): bool
@@ -154,17 +83,19 @@ class InMemoryCache implements CacheInterface
 
     public function has(string $key): bool
     {
-        $data = $this->table->get($key);
+        $row = $this->table->get($key);
 
-        if ($data === false) {
+        if ($row === false) {
             return false;
         }
 
-        if ($data['expires_at'] !== 0 && time() > $data['expires_at']) {
+        if ($row[$this->expiresColumn] !== 0 && time() > $row[$this->expiresColumn]) {
             $this->delete($key);
 
             return false;
         }
+
+        $this->touch($key, $row);
 
         return true;
     }
@@ -200,31 +131,121 @@ class InMemoryCache implements CacheInterface
         return true;
     }
 
-    private function cleanExpiredItems(): void
+    private function trySet(string $key, array $row): bool
     {
-        $currentTime = time();
+        $this->evictIfNeeded();
+
+        if ($this->table->set($key, $row)) {
+            return true;
+        }
+
+        $this->cleanExpiredItems();
+        $this->evictIfNeeded();
+
+        if ($this->table->set($key, $row)) {
+            return true;
+        }
+
+        $this->evictToSize((int) ceil($this->size / 2));
+
+        return $this->table->set($key, $row);
+    }
+
+    private function evictIfNeeded(): void
+    {
+        if (count($this->table) >= $this->size) {
+            $this->evictOne();
+        }
+    }
+
+    private function evictToSize(int $target): void
+    {
+        $toRemove = count($this->table) - $target;
+
+        while ($toRemove-- > 0 && count($this->table) > 0) {
+            $this->evictOne();
+        }
+    }
+
+    private function evictOne(): void
+    {
+        $oldestKey = null;
+        $oldestAccess = PHP_INT_MAX;
 
         foreach ($this->table as $key => $row) {
-            if ($row['expires_at'] !== 0 && $currentTime > $row['expires_at']) {
+            if ($row[$this->expiresColumn] !== 0 && time() > $row[$this->expiresColumn]) {
+                $this->table->del((string) $key);
+
+                return;
+            }
+
+            if ($row[$this->lastAccessColumn] < $oldestAccess) {
+                $oldestAccess = $row[$this->lastAccessColumn];
+                $oldestKey = (string) $key;
+            }
+        }
+
+        if ($oldestKey !== null) {
+            $this->table->del($oldestKey);
+        }
+    }
+
+    private function touch(string $key, array $row): void
+    {
+        $this->table->set($key, [
+            $this->dataColumn => $row[$this->dataColumn],
+            $this->expiresColumn => $row[$this->expiresColumn],
+            $this->lastAccessColumn => time(),
+        ]);
+    }
+
+    private function cleanExpiredItems(): void
+    {
+        $now = time();
+
+        foreach ($this->table as $key => $row) {
+            if ($row[$this->expiresColumn] !== 0 && $now > $row[$this->expiresColumn]) {
                 $this->table->del((string) $key);
             }
         }
     }
 
-    private function ttlToSeconds(null|int|DateInterval $ttl): int
+    private function encode(mixed $value): string
+    {
+        if (is_string($value)) {
+            return 'R:' . $value;
+        }
+
+        return 'S:' . serialize($value);
+    }
+
+    private function decode(string $data): mixed
+    {
+        if (str_starts_with($data, 'R:')) {
+            return substr($data, 2);
+        }
+
+        if (str_starts_with($data, 'S:')) {
+            return unserialize(substr($data, 2));
+        }
+
+        return $data;
+    }
+
+    private function ttlToTimestamp(null|int|DateInterval $ttl): int
     {
         if ($ttl === null) {
             return 0;
         }
 
         if (is_int($ttl)) {
-            return $ttl;
+            return $ttl <= 0 ? 0 : time() + $ttl;
         }
 
         $now = new \DateTime();
         $end = clone $now;
         $end->add($ttl);
 
-        return $end->getTimestamp() - $now->getTimestamp();
+        return $end->getTimestamp();
     }
 }
