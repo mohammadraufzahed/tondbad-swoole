@@ -120,6 +120,8 @@ $route->resource('articles', ArticleController::class, ['parameters' => ['articl
 
 ## Middleware groups
 
+Define reusable groups at runtime:
+
 ```php
 $route->middlewareGroup('web', [SessionMiddleware::class, CsrfMiddleware::class]);
 $route->middlewareGroup('api', [JsonMiddleware::class, ThrottleMiddleware::class]);
@@ -129,6 +131,25 @@ $route->get('/profile', [ProfileController::class, 'show'])->middleware(['web', 
 $route->middleware(['api'])->group(function (Route $route) {
     $route->get('/users', [UserController::class, 'index']);
 });
+```
+
+You can also define them in `config/middleware.php`:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+return [
+    'web' => [\TondbadSwoole\Http\Middleware\SessionMiddleware::class],
+    'api' => [\TondbadSwoole\Http\Middleware\ThrottleMiddleware::class],
+];
+```
+
+Route-level rate limiting is available via the `throttle:max,window` shorthand:
+
+```php
+$route->get('/api/expensive', [ApiController::class, 'index'])->middleware(['throttle:60,1']);
 ```
 
 ## Named routes
