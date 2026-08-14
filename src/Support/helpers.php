@@ -128,3 +128,16 @@ if (!function_exists('route')) {
     }
 }
 
+if (!function_exists('signedRoute')) {
+    function signedRoute(string $name, array $parameters = [], ?DateTimeInterface $expires = null, bool $absolute = false): string
+    {
+        $route = app()?->container->make(Route::class);
+
+        if ($route === null) {
+            throw new RuntimeException('Route registrar not available.');
+        }
+
+        return $route->signedUrl($name, $parameters, $expires, !$absolute);
+    }
+}
+

@@ -381,6 +381,20 @@ $url = route('users.show', ['user' => 5]);              // /users/5
 $url = route('users.show', ['user' => 5], true);        // https://tondbad.dev/users/5
 ```
 
+Signed URLs use the `app.key` configuration value and add `signature` (and optionally `expires`) query parameters:
+
+```php
+$signed = app()->container->make(Route::class)->signedUrl('users.show', ['user' => 5]);
+$signed = signedRoute('users.show', ['user' => 5], new DateTimeImmutable('+30 minutes'));
+```
+
+Validate a signed request with the `ValidateSignature` middleware:
+
+```php
+$route->get('/users/{user}/activate', [UserController::class, 'activate'])
+    ->middleware([\TondbadSwoole\Http\Middleware\ValidateSignature::class]);
+```
+
 ## File-based route discovery
 
 Optionally register routes by dropping PHP files in `routes/http/` (or the path configured in `config/routes.php` under `routes.file_routes.path`). Enable it with:

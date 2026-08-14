@@ -19,6 +19,7 @@ use TondbadSwoole\Http\Middleware\ThrottleMiddleware;
 use TondbadSwoole\Http\Request as HttpRequest;
 use TondbadSwoole\Http\Response as HttpResponse;
 use TondbadSwoole\Routing\ResourceRegistrar;
+use TondbadSwoole\Routing\SignedUrl;
 
 class Route implements RouteInterface
 {
@@ -69,6 +70,8 @@ class Route implements RouteInterface
      * @var array<int, array{0: string|list<string>, 1: string}>
      */
     private array $routeNameIndex = [];
+
+    private ?SignedUrl $signedUrlGenerator = null;
 
     public function __construct(
         private readonly Container $container,
@@ -385,6 +388,26 @@ class Route implements RouteInterface
         $host = $this->config->get('app.url_host', 'localhost');
 
         return "{$scheme}://{$host}{$path}";
+    }
+
+    public function signedUrl(string $name, array $params = [], ?DateTimeInterface $expires = null, bool $relative = true): string
+    {
+        return $this->signedUrlGenerator()->make($this->url($name, $params, $relative), $expires);
+    }
+
+    public function temporarySignedUrl(string $name, DateTimeInterface $expires, array $params = [], bool $relative = true): string
+    {
+        return $this->signedUrl($name, $params, $expires, $relative);
+    }
+
+    public function signatureValid(HttpRequest $request): bool
+    {
+        return $this->signedUrlGenerator()->validate($request->path(), $request->queries());
+    }
+
+    private function signedUrlGenerator(): SignedUrl
+    {
+        return $this->signedUrlGenerator ??= new SignedUrl((string) $this->config->get('app.key', ''));
     }
 
     /**
