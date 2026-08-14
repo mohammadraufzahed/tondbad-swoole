@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace TondbadSwoole\Core\Cache;
 
 use DateInterval;
+use OpenSwoole\Coroutine;
 use OpenSwoole\Table;
 use OpenSwoole\Timer;
 use TondbadSwoole\Contracts\CacheInterface;
@@ -29,7 +30,7 @@ class InMemoryCache implements CacheInterface
         $this->table->column($this->lastAccessColumn, Table::TYPE_INT, 10);
         $this->table->create();
 
-        if ($this->cleanInterval > 0) {
+        if ($this->cleanInterval > 0 && Coroutine::getCid() !== -1) {
             Timer::tick($this->cleanInterval, function () {
                 $this->cleanExpiredItems();
             });

@@ -114,5 +114,17 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - `make:controller`, `make:middleware`, `make:provider`, `make:guard`, and `make:policy` strip redundant suffixes and `ucfirst` the base name, so `TestController`, `JwtGuard`, or `BillingProvider` produce `TestController.php`, `JwtGuardFactory.php`, and `BillingServiceProvider.php` respectively.
 - For `make:*` commands to resolve at runtime, add `"App\\": "app/"` to `composer.json` `autoload.psr-4` and run `composer dump-autoload`; remove the mapping before committing.
 
+# Unified cache layer (`devin/cache-unified`)
+- `cache()` returns a `CacheContract` backed by `HybridStore`: L1 `InMemoryCache` (OpenSwoole\Table) -> L2 `RedisCache` (Predis pool) -> loader.
+- `cache()->getOrSet($key, fn(CacheItem $item) => ..., $ttl)` returns the cached value or computes it once; the callback can set `lifetime($seconds, $refreshRatio)`, `tag(...$tags)`, and `weight($w)` through the `CacheItem`.
+- `cache()->invalidateTags(['users'])` increments tag versions and clears L1; subsequent `get`/`getOrSet` for tagged entries recompute.
+- `cache()->refresh($key)` deletes the key and records a refresh in `CacheStats`; the next `getOrSet` reloads it.
+- `cache()->stats()` returns `CacheStats` with `hitCount`, `l1HitCount`, `l2HitCount`, `missCount`, `loadCount`, `hitRate()`, etc.
+- `CACHE_DEFAULT=redis` enables Redis as L2; ensure `REDIS_HOST`/`REDIS_PORT` point to a running Redis and `redis.pool.size` is set.
+- The cache CLI commands `cache:status`, `cache:forget-tags`, and `cache:clear` are registered automatically. `cache:forget-tags` and `cache:clear` automatically wrap Redis operations in `Coroutine::run()` with `Runtime::enableCoroutine(SWOOLE_HOOK_TCP)` so they work from the CLI.
+- `cache:status` prints the current in-process `CacheStats`; values are zero from a fresh CLI process unless `cache()` has been used in that process.
+- `InMemoryCache` only starts its background expiry `Timer` when constructed inside an active coroutine, so it is safe to use from CLI commands.
+- Run integration Redis tests with `RUN_INTEGRATION_TESTS=1 php vendor/bin/pest tests/Integration/CacheRedisTest.php`; they rely on `tests/Support/CacheConcurrencyScript.php` and `CacheRedisTagsScript.php`.
+
 # Devin Secrets Needed
 - None for local testing.

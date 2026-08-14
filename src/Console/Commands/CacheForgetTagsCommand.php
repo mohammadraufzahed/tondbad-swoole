@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use OpenSwoole\Coroutine;
+use OpenSwoole\Runtime;
+
 class CacheForgetTagsCommand extends Command
 {
     public function getName(): string
@@ -18,9 +21,7 @@ class CacheForgetTagsCommand extends Command
 
     public function run(array $args): int
     {
-        $tags = array_slice($args, 1);
-
-        if ($tags === []) {
+        if ($args === []) {
             fwrite(STDERR, "Usage: cache:forget-tags {tag1} [{tag2} ...]\n");
 
             return 1;
@@ -34,10 +35,32 @@ class CacheForgetTagsCommand extends Command
             return 1;
         }
 
-        $cache->invalidateTags($tags);
+        $success = $this->runInCoroutine(fn () => $cache->invalidateTags($args));
 
-        fwrite(STDOUT, "Forgot tags: " . implode(', ', $tags) . "\n");
+        if (!$success) {
+            fwrite(STDERR, "Failed to invalidate tags.\n");
+
+            return 1;
+        }
+
+        fwrite(STDOUT, "Forgot tags: " . implode(', ', $args) . "\n");
 
         return 0;
+    }
+
+    private function runInCoroutine(callable $callback): mixed
+    {
+        if (Coroutine::getCid() !== -1) {
+            return $callback();
+        }
+
+        Runtime::enableCoroutine(SWOOLE_HOOK_TCP);
+
+        $result = null;
+        Coroutine::run(function () use ($callback, &$result): void {
+            $result = $callback();
+        });
+
+        return $result;
     }
 }

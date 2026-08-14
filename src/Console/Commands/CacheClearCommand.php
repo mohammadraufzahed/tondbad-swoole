@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use OpenSwoole\Coroutine;
+use OpenSwoole\Runtime;
 use TondbadSwoole\Bootstrap\App;
 
 class CacheClearCommand extends Command
@@ -20,11 +22,7 @@ class CacheClearCommand extends Command
 
     public function run(array $args): int
     {
-        $cache = cache();
-
-        if ($cache !== null) {
-            $cache->clear();
-        }
+        $this->clearDataCache();
 
         [$routeCacheFile, $frameworkDir] = $this->cachePaths();
 
@@ -39,6 +37,33 @@ class CacheClearCommand extends Command
         fwrite(STDOUT, "Caches cleared.\n");
 
         return 0;
+    }
+
+    private function clearDataCache(): void
+    {
+        $cache = cache();
+
+        if ($cache === null) {
+            return;
+        }
+
+        $this->runInCoroutine(fn () => $cache->clear());
+    }
+
+    private function runInCoroutine(callable $callback): mixed
+    {
+        if (Coroutine::getCid() !== -1) {
+            return $callback();
+        }
+
+        Runtime::enableCoroutine(SWOOLE_HOOK_TCP);
+
+        $result = null;
+        Coroutine::run(function () use ($callback, &$result): void {
+            $result = $callback();
+        });
+
+        return $result;
     }
 
     /**

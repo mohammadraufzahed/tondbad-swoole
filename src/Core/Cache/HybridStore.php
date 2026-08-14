@@ -144,9 +144,9 @@ class HybridStore implements CacheContract
 
     public function refresh(string $key): bool
     {
-        $this->delete($key);
+        $this->stats->recordRefresh();
 
-        return true;
+        return $this->delete($key);
     }
 
     public function stats(): CacheStats
