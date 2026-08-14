@@ -162,5 +162,19 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 ## Route cache caveat
 - `Route` uses FastRoute's `cachedDispatcher` with `config('app.route_cache_file')`. If you edit `routes/http.php` while the server is running or between restarts, delete `storage/cache/routes.cache.php` (or set `app.route_cache_file` to `null` for the test environment) before the next start, otherwise stale route definitions are used.
 
+# Unified validation layer (`devin/validation-unified`)
+- Create a fresh consumer project with a path repository to the framework, `composer install`, and `config/app.php` that includes `name`, `type`, `debug`, `key`, `middlewares`, `commands`, `route_cache_file`, `framework_cache_dir`, `logging.path`, `http.host/port`, and `grpc.host/port` so `App::validateConfiguration()` passes. Set `app.http.settings.worker_num` to `1` for in-memory state tests.
+- `routes/http.php` must **return a callable** that receives `TondbadSwoole\Core\Route\Route $route` and defines routes.
+- `Route::whereSchema('param', Schema::int()->gte(1))` validates route parameters before the handler and returns `404` for invalid values.
+- `Request::validateSchema(Schema::object([...])->lax())` returns validated/typed data and throws `ValidationException` with structured errors (`{field, rule, message, params}`).
+- `#[Field(alias: ..., transform: 'trim|strtolower', rules: 'email', default: 18)]` on `FormRequest` properties enables Pydantic-style hydration; `DtoFactory::make()` builds typed DTOs from the same attributes.
+- Legacy `$request->validate(['email' => 'required|email'])` continues to work and also throws `ValidationException`.
+- `Config::validate('app.http.port', Schema::int()->gte(1)->lte(65535))` and `Env::getInt()`/`getBool()`/`getString()` exercise the config/env schema integration.
+- `DatabaseManager` validates every connection config with `Schema` when `connection()` is first used.
+- `EmailPasswordStrategy` and `ApiKeyStrategy` validate credentials with `Schema` before touching the provider; a fake `UserProvider` that throws on `retrieveByCredentials` can be used to prove invalid input is rejected before the provider is reached.
+- `App::validateConfiguration()` fails fast with `ConfigurationException` when `app.http.port` etc. are invalid.
+- `php benchmarks/validation.php` compares `Schema::safeParse()` against the legacy `Validator` and prints timing/memory stats.
+- `queue:work --rate-limit=max:window` validates the option with `Schema`; however invalid values are currently silently ignored (rate limiter becomes `null`) rather than failing the command.
+
 # Devin Secrets Needed
 - None for local testing.

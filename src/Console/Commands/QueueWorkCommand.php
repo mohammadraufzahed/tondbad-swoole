@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace TondbadSwoole\Console\Commands;
 
 use TondbadSwoole\Queue\Drivers\RedisQueue;
+use InvalidArgumentException;
 use TondbadSwoole\Queue\QueueManager;
 use TondbadSwoole\Queue\Worker;
 use TondbadSwoole\Queue\WorkerOptions;
@@ -32,7 +33,14 @@ class QueueWorkCommand extends Command
         $maxJobs = isset($options['max-jobs']) ? (int) $options['max-jobs'] : 0;
         $stopWhenEmpty = isset($options['stop-when-empty']);
         $concurrency = isset($options['concurrency']) ? (int) $options['concurrency'] : 1;
-        $rateLimiter = $this->parseRateLimiter($options['rate-limit'] ?? null);
+
+        try {
+            $rateLimiter = $this->parseRateLimiter($options['rate-limit'] ?? null);
+        } catch (InvalidArgumentException $e) {
+            fwrite(STDERR, $e->getMessage() . "\n");
+
+            return 1;
+        }
 
         $app = app();
 
@@ -169,12 +177,20 @@ class QueueWorkCommand extends Command
 
             $result = $schema->safeParse(['max' => $max, 'window' => $window]);
 
-            return $result->valid ? $result->data : null;
+            if (!$result->valid) {
+                throw new InvalidArgumentException('Invalid --rate-limit value: ' . implode('; ', array_column($result->errors, 'message')));
+            }
+
+            return $result->data;
         }
 
         $result = $schema->safeParse(['max' => $value]);
 
-        return $result->valid ? $result->data : null;
+        if (!$result->valid) {
+            throw new InvalidArgumentException('Invalid --rate-limit value: ' . implode('; ', array_column($result->errors, 'message')));
+        }
+
+        return $result->data;
     }
 
     private function enableSwooleHooks(): void
