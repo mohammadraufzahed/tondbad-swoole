@@ -15,11 +15,17 @@ class CacheClearCommand extends Command
 
     public function getDescription(): string
     {
-        return 'Clear compiled route and framework caches.';
+        return 'Clear the framework and data caches.';
     }
 
     public function run(array $args): int
     {
+        $cache = cache();
+
+        if ($cache !== null) {
+            $cache->clear();
+        }
+
         [$routeCacheFile, $frameworkDir] = $this->cachePaths();
 
         $this->deleteFiles($routeCacheFile);

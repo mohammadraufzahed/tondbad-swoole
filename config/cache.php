@@ -20,6 +20,10 @@ return [
         'persistent' => $env->get('redis.persistent', false),
         'retry_interval' => $env->get('redis.retry_interval', 0),
 
+        'pool' => [
+            'size' => (int) $env->get('redis.pool.size', 4),
+        ],
+
         'ssl' => [
             'enabled' => $env->get('redis.ssl.enabled', false),
             'cafile' => $env->get('redis.ssl.cafile', null),
