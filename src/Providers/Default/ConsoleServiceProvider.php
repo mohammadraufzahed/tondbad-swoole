@@ -10,6 +10,7 @@ use TondbadSwoole\Bootstrap\App;
 use TondbadSwoole\Console\Application;
 use TondbadSwoole\Console\CommandInterface;
 use TondbadSwoole\Console\Commands\Command;
+use TondbadSwoole\Console\Commands\Auth\ClearSessionsCommand;
 use TondbadSwoole\Console\Commands\CacheClearCommand;
 use TondbadSwoole\Console\Commands\CacheForgetTagsCommand;
 use TondbadSwoole\Console\Commands\CacheStatusCommand;
@@ -96,6 +97,7 @@ class ConsoleServiceProvider extends ServiceProvider
             MigrateStatusCommand::class,
             ScheduleWorkCommand::class,
             ScheduleListCommand::class,
+            ClearSessionsCommand::class,
         ];
 
         foreach ($commands as $class) {

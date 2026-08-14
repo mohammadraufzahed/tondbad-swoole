@@ -8,6 +8,7 @@ use FastRoute\Dispatcher\GroupCountBased as Dispatcher;
 use OpenSwoole\Http\Request as SwooleRequest;
 use OpenSwoole\Http\Response as SwooleResponse;
 use Throwable;
+use TondbadSwoole\Auth\Access\AuthorizationException;
 use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Contracts\MiddlewareInterface;
 use TondbadSwoole\Core\Container;
@@ -15,6 +16,7 @@ use TondbadSwoole\Core\Pipeline\Pipeline;
 use TondbadSwoole\Database\DatabaseManager;
 use TondbadSwoole\Http\Request;
 use TondbadSwoole\Http\Response;
+use TondbadSwoole\Routing\Contracts\Guard as RouteGuard;
 
 class RouteDispatcher
 {
@@ -41,6 +43,7 @@ class RouteDispatcher
             $response = new Response($swooleResponse);
 
             $this->context->set('request', $request);
+            $this->context->set('response', $response);
 
             $httpMethod = $request->method();
             $uri = $request->path();
@@ -88,9 +91,29 @@ class RouteDispatcher
 
         Pipeline::send($context, $this->container)
             ->through($this->preparePipes(array_merge($this->middlewares, $routeMiddlewares)))
-            ->then(function (HttpContext $context) use ($handler, $vars): void {
+            ->then(function (HttpContext $context) use ($handler, $handlerId, $vars): void {
+                $this->ensureGuards($context->request, $handlerId);
                 $this->invokeHandler($handler, $context, $vars);
             });
+    }
+
+    private function ensureGuards(Request $request, int $handlerId): void
+    {
+        $guards = $this->registrar->getGuards($handlerId);
+
+        foreach ($guards as $guard) {
+            if (is_string($guard)) {
+                $guard = $this->container->make($guard);
+            }
+
+            if (!$guard instanceof RouteGuard) {
+                throw new \Exception('Route guard must implement Guard contract.');
+            }
+
+            if (!$guard->can($request)) {
+                throw new AuthorizationException();
+            }
+        }
     }
 
     /**

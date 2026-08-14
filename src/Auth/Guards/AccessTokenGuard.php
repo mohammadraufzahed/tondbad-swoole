@@ -12,14 +12,10 @@ use TondbadSwoole\Auth\SessionManager;
 use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Http\Request;
-use TondbadSwoole\Http\Response;
 
-class SessionGuard implements StatefulGuard
+class AccessTokenGuard implements StatefulGuard
 {
     private string $mode;
-    private int $accessTtl;
-    private string $sessionKey;
-    private array $cookieConfig;
 
     public function __construct(
         private readonly string $name,
@@ -30,14 +26,6 @@ class SessionGuard implements StatefulGuard
     ) {
         $guardConfig = $config->get("auth.guards.{$name}", []);
         $this->mode = (string) ($guardConfig['mode'] ?? 'stateful');
-        $this->accessTtl = (int) ($guardConfig['access_ttl'] ?? $config->get('auth.access_token_ttl', 900));
-        $this->sessionKey = (string) ($guardConfig['session_key'] ?? 'session_id');
-        $this->cookieConfig = array_merge([
-            'http_only' => true,
-            'same_site' => 'lax',
-            'secure' => true,
-            'path' => '/',
-        ], $guardConfig['cookie'] ?? []);
     }
 
     public function check(): bool
@@ -58,16 +46,16 @@ class SessionGuard implements StatefulGuard
             return null;
         }
 
-        $userCacheKey = $this->userCacheKey();
+        $cacheKey = $this->userCacheKey();
 
-        if ($this->context->has($userCacheKey)) {
-            return $this->context->get($userCacheKey);
+        if ($this->context->has($cacheKey)) {
+            return $this->context->get($cacheKey);
         }
 
-        $token = $request->cookie($this->sessionKey);
+        $token = $this->getTokenForRequest($request);
 
-        if (!is_string($token) || $token === '') {
-            $this->context->set($userCacheKey, null);
+        if ($token === null || $token === '') {
+            $this->context->set($cacheKey, null);
 
             return null;
         }
@@ -75,7 +63,7 @@ class SessionGuard implements StatefulGuard
         $session = $this->sessionManager->verifyAccessToken($token);
 
         if ($session === null) {
-            $this->context->set($userCacheKey, null);
+            $this->context->set($cacheKey, null);
 
             return null;
         }
@@ -86,7 +74,7 @@ class SessionGuard implements StatefulGuard
             $this->context->set($this->sessionCacheKey(), $session);
         }
 
-        $this->context->set($userCacheKey, $user);
+        $this->context->set($cacheKey, $user);
 
         return $user;
     }
@@ -110,21 +98,21 @@ class SessionGuard implements StatefulGuard
         return $user !== null && $this->provider->validateCredentials($user, $credentials);
     }
 
+    /**
+     * @param array<string, mixed> $claims
+     */
     public function login(Authenticatable $user, array $claims = []): AuthSession
     {
-        $session = $this->sessionManager->create(
+        $authSession = $this->sessionManager->create(
             $user->getAuthIdentifier(),
             $claims,
             $this->mode,
-            $this->deviceFingerprint(),
-            $this->name,
         );
 
-        $this->setSessionCookie($session);
-        $this->context->set($this->sessionCacheKey(), $session->session);
+        $this->context->set($this->sessionCacheKey(), $authSession->session);
         $this->context->set($this->userCacheKey(), $user);
 
-        return $session;
+        return $authSession;
     }
 
     public function logout(): void
@@ -137,55 +125,22 @@ class SessionGuard implements StatefulGuard
 
         $this->context->delete($this->sessionCacheKey());
         $this->context->delete($this->userCacheKey());
-
-        $response = $this->response();
-
-        if ($response !== null) {
-            $response->cookie($this->sessionKey, '', 1);
-        }
     }
 
-    private function setSessionCookie(AuthSession $session): void
+    private function getTokenForRequest(Request $request): ?string
     {
-        $response = $this->response();
+        $header = $request->header('Authorization');
 
-        if ($response === null) {
-            return;
+        if (is_string($header) && str_starts_with($header, 'Bearer ')) {
+            return substr($header, 7);
         }
 
-        $expires = $session->accessToken->expiresAt;
-
-        $response->cookie(
-            $this->sessionKey,
-            $session->accessToken->value,
-            $expires,
-            $this->cookieConfig['path'],
-            null,
-            $this->cookieConfig['secure'],
-            $this->cookieConfig['http_only'],
-            $this->cookieConfig['same_site'],
-        );
+        return null;
     }
 
     private function request(): ?Request
     {
         return $this->context->get('request');
-    }
-
-    private function response(): ?Response
-    {
-        return $this->context->get('response');
-    }
-
-    private function deviceFingerprint(): ?string
-    {
-        $request = $this->request();
-
-        if ($request === null) {
-            return null;
-        }
-
-        return hash('sha256', $request->header('User-Agent', '') . ':' . ($request->server('remote_addr') ?? ''));
     }
 
     private function userCacheKey(): string

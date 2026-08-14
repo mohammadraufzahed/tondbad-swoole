@@ -9,13 +9,27 @@ use TondbadSwoole\Auth\Contracts\Guard;
 use TondbadSwoole\Auth\Contracts\GuardFactory;
 use TondbadSwoole\Auth\Contracts\UserProvider;
 use TondbadSwoole\Auth\Guards\ApiKeyGuard;
+use TondbadSwoole\Auth\Guards\AccessTokenGuard;
 use TondbadSwoole\Auth\Guards\BasicAuthGuard;
 use TondbadSwoole\Auth\Guards\SessionGuard;
 use TondbadSwoole\Auth\Guards\TokenGuard;
+use TondbadSwoole\Auth\Identity\GenericIdentityProvider;
+use TondbadSwoole\Auth\Identity\HttpClient;
+use TondbadSwoole\Auth\Identity\IdentityBroker;
+use TondbadSwoole\Auth\Identity\IdentityToken;
+use TondbadSwoole\Auth\Identity\OpenSwooleHttpClient;
+use TondbadSwoole\Auth\Session\AccessToken;
+use TondbadSwoole\Contracts\CacheInterface;
+use TondbadSwoole\Core\Cache\InMemoryCache;
+use TondbadSwoole\Auth\Session\AuthSession;
+use TondbadSwoole\Auth\Session\Session;
+use TondbadSwoole\Auth\SessionStores\DatabaseSessionStore;
+use TondbadSwoole\Auth\Strategies\ApiKeyStrategy;
+use TondbadSwoole\Auth\Strategies\AuthStrategy;
+use TondbadSwoole\Auth\Strategies\EmailPasswordStrategy;
 use TondbadSwoole\Auth\UserProviders\ApiKeyUserProvider;
 use TondbadSwoole\Auth\UserProviders\DatabaseUserProvider;
 use TondbadSwoole\Auth\UserProviders\EloquentUserProvider;
-use TondbadSwoole\Contracts\CacheInterface;
 use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
@@ -36,10 +50,23 @@ class AuthManager
      */
     private array $customGuardFactories = [];
 
+    private ?AuthUserManager $userManager = null;
+
+    /**
+     * @var array<string, AuthStrategy>
+     */
+    private array $strategies = [];
+
+    /**
+     * @var array<string, Closure(UserProvider, AuthUserManager): AuthStrategy>
+     */
+    private array $strategyFactories = [];
+
     public function __construct(
         private readonly Container $container,
         private readonly Config $config,
         private readonly ContextInterface $context,
+        private ?SessionManager $sessionManager = null,
     ) {
     }
 
@@ -93,6 +120,202 @@ class AuthManager
     public function user(?string $guard = null): ?Authenticatable
     {
         return $this->guard($guard)->user();
+    }
+
+    public function session(?string $guard = null): ?Session
+    {
+        $guardName = $guard ?? $this->getDefaultGuard();
+
+        return $this->context->get('auth.guard.' . $guardName . '.session');
+    }
+
+    public function addSessionClaim(string $key, mixed $value, ?string $guard = null): void
+    {
+        $guardName = $guard ?? $this->getDefaultGuard();
+        $session = $this->session($guardName);
+
+        if ($session === null) {
+            return;
+        }
+
+        $this->sessionManager()->addClaim($session->id, $key, $value);
+
+        $updated = $this->sessionManager()->find($session->id);
+
+        if ($updated !== null) {
+            $this->context->set('auth.guard.' . $guardName . '.session', $updated);
+        }
+    }
+
+    public function login(Authenticatable $user, ?string $guard = null, array $claims = []): AuthSession
+    {
+        $guard = $this->guard($guard);
+
+        if (!$guard instanceof \TondbadSwoole\Auth\Contracts\StatefulGuard) {
+            throw new InvalidArgumentException('Guard does not support login.');
+        }
+
+        return $guard->login($user, $claims);
+    }
+
+    /**
+     * @param array<string, mixed> $credentials
+     */
+    public function signIn(string $strategy, array $credentials = [], ?string $guard = null): ?AuthSession
+    {
+        $user = $this->strategy($strategy, $guard)->authenticate($credentials);
+
+        if ($user === null) {
+            return null;
+        }
+
+        return $this->login($user, $guard);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    public function signUp(string $strategy, array $data = [], ?string $guard = null): ?AuthSession
+    {
+        $user = $this->strategy($strategy, $guard)->register($data);
+
+        if ($user === null) {
+            return null;
+        }
+
+        return $this->login($user, $guard);
+    }
+
+    public function signOut(?string $guard = null): void
+    {
+        $this->logout($guard);
+    }
+
+    public function refreshSession(string $refreshToken, ?string $guard = null): ?AuthSession
+    {
+        return $this->sessionManager()->refreshSession($refreshToken);
+    }
+
+    /**
+     * @param array<string, mixed> $claims
+     */
+    public function issueApiToken(string|int $userId, array $claims = [], ?int $ttl = null): AccessToken
+    {
+        $session = $this->sessionManager()->create($userId, $claims, 'stateless');
+
+        return $session->accessToken;
+    }
+
+    public function via(string $provider): IdentityBroker
+    {
+        $config = $this->config->get("auth.identities.providers.{$provider}");
+
+        if (!is_array($config)) {
+            throw new InvalidArgumentException("Identity provider [{$provider}] is not configured.");
+        }
+
+        $httpClient = $this->container->has(HttpClient::class)
+            ? $this->container->make(HttpClient::class)
+            : new OpenSwooleHttpClient();
+
+        $cache = $this->container->has(CacheInterface::class)
+            ? $this->container->make(CacheInterface::class)
+            : new InMemoryCache();
+
+        $identityProvider = new GenericIdentityProvider($provider, $config, $httpClient);
+
+        return new IdentityBroker($provider, $identityProvider, $cache);
+    }
+
+    public function handleIdentity(IdentityToken $token, ?string $guard = null): AuthSession
+    {
+        $user = $this->userManager()->findOrCreateFromIdentity($token);
+
+        return $this->login($user, $guard);
+    }
+
+    public function revokeSession(string $sessionId): void
+    {
+        $this->sessionManager()->revokeSession($sessionId);
+    }
+
+    /**
+     * @param string|int $userId
+     */
+    public function revokeAllSessions(string|int $userId): void
+    {
+        $this->sessionManager()->revokeAllForUser($userId);
+    }
+
+    /**
+     * @param Closure(UserProvider, AuthUserManager): AuthStrategy $factory
+     */
+    public function addStrategy(string $name, Closure $factory): self
+    {
+        $this->strategyFactories[$name] = $factory;
+
+        return $this;
+    }
+
+    public function strategy(string $name, ?string $guard = null): AuthStrategy
+    {
+        if (isset($this->strategies[$name])) {
+            return $this->strategies[$name];
+        }
+
+        $factory = $this->strategyFactories[$name] ?? $this->defaultStrategyFactory($name);
+        $provider = $this->resolveProviderForGuard($guard);
+
+        return $this->strategies[$name] = $factory($provider, $this->userManager());
+    }
+
+    private function userManager(): AuthUserManager
+    {
+        if ($this->userManager !== null) {
+            return $this->userManager;
+        }
+
+        return $this->userManager = $this->container->make(AuthUserManager::class);
+    }
+
+    /**
+     * @return Closure(UserProvider, AuthUserManager): AuthStrategy
+     */
+    private function defaultStrategyFactory(string $name): Closure
+    {
+        return match ($name) {
+            'email' => fn (UserProvider $provider, AuthUserManager $manager): AuthStrategy => new EmailPasswordStrategy('email', $provider, $manager),
+            'api_key' => fn (UserProvider $provider, AuthUserManager $manager): AuthStrategy => new ApiKeyStrategy('api_key', $provider),
+            default => throw new InvalidArgumentException("Auth strategy [{$name}] is not registered."),
+        };
+    }
+
+    private function resolveProviderForGuard(?string $guard): UserProvider
+    {
+        $guardName = $guard ?? $this->getDefaultGuard();
+        $guardConfig = $this->config->get("auth.guards.{$guardName}");
+
+        if (!is_array($guardConfig)) {
+            throw new InvalidArgumentException("Auth guard [{$guardName}] is not defined.");
+        }
+
+        return $this->resolveProvider($guardConfig['provider'] ?? null);
+    }
+
+    public function logout(?string $guard = null): void
+    {
+        $guard = $this->guard($guard);
+
+        if ($guard instanceof \TondbadSwoole\Auth\Contracts\StatefulGuard) {
+            $guard->logout();
+        }
+    }
+
+    public function setSessionManager(SessionManager $sessionManager): self
+    {
+        $this->sessionManager = $sessionManager;
+
+        return $this;
     }
 
     public function id(?string $guard = null): string|int|null
@@ -153,10 +376,16 @@ class AuthManager
             'session' => new SessionGuard(
                 $name,
                 $provider,
-                $this->container->make(CacheInterface::class),
+                $this->sessionManager(),
                 $this->context,
-                $config['session_key'] ?? 'session_id',
-                $config['lifetime'] ?? 7200,
+                $this->config,
+            ),
+            'access_token' => new AccessTokenGuard(
+                $name,
+                $provider,
+                $this->sessionManager(),
+                $this->context,
+                $this->config,
             ),
             'token' => new TokenGuard(
                 $name,
@@ -178,6 +407,27 @@ class AuthManager
             ),
             default => throw new InvalidArgumentException("Auth driver [{$driver}] is not supported."),
         };
+    }
+
+    public function sessionManager(): SessionManager
+    {
+        if ($this->sessionManager !== null) {
+            return $this->sessionManager;
+        }
+
+        $store = new DatabaseSessionStore($this->container->make(DatabaseManager::class));
+        $accessTokenManager = new AccessTokenManager($this->config);
+        $refreshTokenRepository = new RefreshTokenRepository(
+            $this->container->make(DatabaseManager::class),
+            $this->config,
+        );
+
+        return $this->sessionManager = new SessionManager(
+            $this->config,
+            $accessTokenManager,
+            $refreshTokenRepository,
+            $store,
+        );
     }
 
     private function resolveProvider(?string $name): UserProvider
