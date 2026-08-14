@@ -12,6 +12,7 @@ use TondbadSwoole\Database\Engines\PostgresEngine;
 use TondbadSwoole\Database\Postgres\PostgresContextPool;
 use TondbadSwoole\Database\Query\Builder;
 use TondbadSwoole\Support\Context;
+use TondbadSwoole\Validation\Schema;
 
 class DatabaseManager
 {
@@ -83,7 +84,17 @@ class DatabaseManager
 
     private function makeConnection(string $name): ConnectionInterface
     {
-        $config = $this->config->get('database.connections.' . $name, []);
+        $schema = Schema::object([
+            'driver' => Schema::string()->required(),
+            'host' => Schema::string()->nullable()->default(''),
+            'port' => Schema::int()->coerce()->nullable(),
+            'database' => Schema::string()->nullable(),
+            'username' => Schema::string()->nullable(),
+            'password' => Schema::string()->nullable(),
+            'charset' => Schema::string()->nullable()->default('utf8mb4'),
+        ])->lax();
+
+        $config = $this->config->validate('database.connections.' . $name, $schema, false);
 
         if (!is_array($config)) {
             throw new \RuntimeException("Database connection [{$name}] is not configured.");

@@ -8,6 +8,7 @@ use TondbadSwoole\Queue\Drivers\RedisQueue;
 use TondbadSwoole\Queue\QueueManager;
 use TondbadSwoole\Queue\Worker;
 use TondbadSwoole\Queue\WorkerOptions;
+use TondbadSwoole\Validation\Schema;
 
 class QueueWorkCommand extends Command
 {
@@ -157,25 +158,23 @@ class QueueWorkCommand extends Command
             return null;
         }
 
+        $schema = Schema::object([
+            'max' => Schema::int()->coerce()->required(),
+            'window' => Schema::int()->coerce()->default(60),
+            'key' => Schema::string()->default('queue'),
+        ])->lax();
+
         if (is_string($value) && str_contains($value, ':')) {
             [$max, $window] = explode(':', $value, 2);
 
-            return [
-                'max' => (int) $max,
-                'window' => (int) $window,
-                'key' => 'queue',
-            ];
+            $result = $schema->safeParse(['max' => $max, 'window' => $window]);
+
+            return $result->valid ? $result->data : null;
         }
 
-        if (is_string($value) || is_int($value)) {
-            return [
-                'max' => (int) $value,
-                'window' => 60,
-                'key' => 'queue',
-            ];
-        }
+        $result = $schema->safeParse(['max' => $value]);
 
-        return null;
+        return $result->valid ? $result->data : null;
     }
 
     private function enableSwooleHooks(): void
