@@ -94,6 +94,14 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - With `APP_DEBUG=false`, an exception route returns `500 Internal Server Error`; with `APP_DEBUG=true` it appends the exception message.
 - gRPC boot: the process should listen on the configured port and log `OpenSwoole GRPC Server is started grpc://0.0.0.0:<port>`.
 
+# Full end-to-end verification
+- `php bin/tondbad`, `--version`, `route:list`, `migrate`, `migrate:rollback`, `migrate:fresh`, `queue:work`, `schedule:work --run-once`, `make:model`, `make:controller`, `serve`, and `serve:grpc` should all exit `0`.
+- HTTP server on `127.0.0.1:9501` should serve `GET` and `POST` routes; `/db` and `/pool` confirm the database wrapper returns the PDO to the pool after each request.
+- `cache()->set('key', 'value', $ttl)` with a positive TTL stores the value; `cache()->set('key', 'value', 0)` or a negative TTL deletes the key (PSR-16 semantics).
+- ORM CRUD, relations (`with('posts.comments')`), and identity map (`User::find(1) === User::find(1)`) work through `EntityManager`/`Model`.
+- `queue:work --connection=redis --concurrency=8 --max-jobs=<n> --stop-when-empty` processes pushed `Job` instances with zero duplicates; `queue:status --connection=redis` shows `failed: 0`.
+- `schedule:work --run-once` with a `routes/console.php` closure schedules a `call()` event every minute.
+
 # Stress/throughput verification (PR #42 and later)
 - HTTP stress: use `OpenSwoole\Coroutine::run()` and `OpenSwoole\Coroutine\Http\Client` to fire many concurrent requests; expect ~4k RPS on simple routes and ~45 RPS on routes that hit the DB, cache, and pool stats.
 - Redis queue stress: start `tondbad-redis` on `127.0.0.1:6379`, push `QueueStressJob` to Redis DB 2 (or a fresh DB), then run `queue:work --connection=redis --concurrency=8 --max-jobs=<n> --stop-when-empty`. With the per-coroutine `Predis\Client` fix, 500 jobs processed at ~370 jobs/sec with zero duplicates.
