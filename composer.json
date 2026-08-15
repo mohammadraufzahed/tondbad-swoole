@@ -26,7 +26,10 @@
   },
   "autoload-dev": {
     "psr-4": {
-      "TondbadSwoole\\Tests\\": "tests/"
+      "TondbadSwoole\\Tests\\": "tests/",
+      "TondbadSwoole\\Tests\\Fixtures\\Grpc\\Helloworld\\": "tests/Fixtures/Grpc/TondbadSwoole/Tests/Fixtures/Grpc/Helloworld",
+      "TondbadSwoole\\Tests\\Fixtures\\Grpc\\Generated\\": "tests/Fixtures/Grpc/Generated/TondbadSwoole/Tests/Fixtures/Grpc/Generated",
+      "GPBMetadata\\": "tests/Fixtures/Grpc/GPBMetadata"
     }
   },
   "authors": [

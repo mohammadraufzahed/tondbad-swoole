@@ -15,6 +15,7 @@ use TondbadSwoole\Console\Commands\BenchmarkCommand;
 use TondbadSwoole\Console\Commands\CacheClearCommand;
 use TondbadSwoole\Console\Commands\CacheForgetTagsCommand;
 use TondbadSwoole\Console\Commands\CacheStatusCommand;
+use TondbadSwoole\Console\Commands\GrpcCompileCommand;
 use TondbadSwoole\Console\Commands\GrpcServeCommand;
 use TondbadSwoole\Console\Commands\HashCheckCommand;
 use TondbadSwoole\Console\Commands\HashMakeCommand;
@@ -76,6 +77,7 @@ class ConsoleServiceProvider extends ServiceProvider
         $commands = [
             ServeCommand::class,
             GrpcServeCommand::class,
+            GrpcCompileCommand::class,
             RouteCacheCommand::class,
             RouteListCommand::class,
             BenchmarkCommand::class,

@@ -4,12 +4,10 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Providers\Default;
 
-use OpenSwoole\GRPC\Server as GrpcServer;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
-use TondbadSwoole\Core\Route\Route;
-use TondbadSwoole\Events\Contracts\EventDispatcher;
-use TondbadSwoole\GRPC\RouteGrpcMiddleware;
+use TondbadSwoole\Grpc\ServerBuilder;
+use TondbadSwoole\Grpc\GrpcServer;
 use TondbadSwoole\Providers\Contracts\ServiceProvider;
 
 class GrpcServiceProvider extends ServiceProvider
@@ -23,33 +21,32 @@ class GrpcServiceProvider extends ServiceProvider
         }
 
         $container->singleton(GrpcServer::class, function () use ($container, $config) {
-            $server = new GrpcServer(
-                (string) $config->get('app.grpc.host', '0.0.0.0'),
-                (int) $config->get('app.grpc.port', 9502),
-                (int) $config->get('app.grpc.mode', defined('SWOOLE_PROCESS') ? SWOOLE_PROCESS : 0),
-                (int) $config->get('app.grpc.sock_type', defined('SWOOLE_SOCK_TCP') ? SWOOLE_SOCK_TCP : 0),
-            );
+            $builder = (new ServerBuilder($container))
+                ->forPort(
+                    (string) $config->get('app.grpc.host', '0.0.0.0'),
+                    (int) $config->get('app.grpc.port', 9502),
+                )
+                ->mode((int) $config->get('app.grpc.mode', defined('SWOOLE_PROCESS') ? SWOOLE_PROCESS : 0))
+                ->sockType((int) $config->get('app.grpc.sock_type', defined('SWOOLE_SOCK_TCP') ? SWOOLE_SOCK_TCP : 0))
+                ->set((array) $config->get('app.grpc.settings', []));
 
-            $settings = array_merge(
-                ['enable_coroutine' => true],
-                $config->get('app.grpc.settings', [])
-            );
-
-            $server->set($settings);
-
-            foreach ($config->get('grpc.middlewares', []) as $middleware) {
-                $server->addMiddleware($container->make($middleware));
+            foreach ($config->get('grpc.interceptors', []) as $interceptor) {
+                $builder->addInterceptor($interceptor);
             }
 
             foreach ($config->get('grpc.services', []) as $service) {
-                $server->register($service, $container->make($service));
+                $builder->addService($service);
             }
 
-            $route = $container->make(Route::class);
-            $dispatcher = $container->has(EventDispatcher::class) ? $container->make(EventDispatcher::class) : null;
-            $server->addMiddleware(new RouteGrpcMiddleware($route->getRouteDispatcher(), $dispatcher));
+            if ($config->get('grpc.reflection', false)) {
+                $builder->enableReflection();
+            }
 
-            return $server;
+            if ($config->get('grpc.health', false)) {
+                $builder->enableHealth();
+            }
+
+            return $builder->build();
         });
     }
 }

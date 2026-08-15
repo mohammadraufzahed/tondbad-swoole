@@ -2,15 +2,11 @@
 
 declare(strict_types=1);
 
-use OpenSwoole\GRPC\Middleware\{LoggingMiddleware, TraceMiddleware};
-use TondbadSwoole\Core\GRPC\Middlewares\GrpcCorsMiddleware;
+use TondbadSwoole\Tests\Fixtures\Grpc\Generated\Tondbad\Test\Helloworld\GreeterGrpcAdapter;
 
 return [
-    'services' => [
-    ],
-    'middlewares' => [
-        LoggingMiddleware::class,
-        TraceMiddleware::class,
-        GrpcCorsMiddleware::class,
-    ],
+    'services' => getenv('APP_ENV') === 'testing'
+        ? [GreeterGrpcAdapter::class]
+        : [],
+    'interceptors' => [],
 ];

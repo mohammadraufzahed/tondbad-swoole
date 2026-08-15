@@ -6,8 +6,8 @@ namespace TondbadSwoole\Bootstrap;
 
 use Exception;
 use Monolog\Logger;
-use OpenSwoole\GRPC\Server as GrpcServer;
 use OpenSwoole\Http\Server as HttpServer;
+use TondbadSwoole\Grpc\GrpcServer;
 use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
