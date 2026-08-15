@@ -32,6 +32,10 @@ class ModelBuilder extends Builder
 
     protected bool $scopesApplied = false;
 
+    protected ?int $cacheSeconds = null;
+
+    protected ?string $cacheKey = null;
+
     public function setModel(string $model): self
     {
         $this->model = $model;
@@ -106,8 +110,63 @@ class ModelBuilder extends Builder
     public function get(): array
     {
         $this->applyScopes();
+
+        $key = $this->getCacheKey();
+        $cache = $this->cacheSeconds !== null ? cache() : null;
+
+        if ($cache !== null && $key !== null) {
+            $rows = $cache->get($key);
+
+            if ($rows !== null) {
+                return $this->hydrateFromRows($rows);
+            }
+        }
+
         $rows = $this->toBase()->get();
 
+        if ($cache !== null && $key !== null) {
+            $cache->set($key, $rows, $this->cacheSeconds);
+        }
+
+        return $this->hydrateFromRows($rows);
+    }
+
+    public function remember(int $seconds, ?string $key = null): self
+    {
+        $this->cacheSeconds = $seconds;
+        $this->cacheKey = $key;
+
+        return $this;
+    }
+
+    public function flushCache(?string $key = null): self
+    {
+        $key ??= $this->getCacheKey();
+
+        if ($key !== null) {
+            cache()?->delete($key);
+        }
+
+        return $this;
+    }
+
+    protected function getCacheKey(): ?string
+    {
+        if ($this->cacheKey !== null) {
+            return $this->cacheKey;
+        }
+
+        if ($this->cacheSeconds === null) {
+            return null;
+        }
+
+        $base = $this->toBase();
+
+        return 'orm.query.' . md5($base->toSql() . serialize($base->getBindings()));
+    }
+
+    protected function hydrateFromRows(array $rows): array
+    {
         if ($this->model === null) {
             return $rows;
         }
@@ -122,16 +181,9 @@ class ModelBuilder extends Builder
 
     public function first(): mixed
     {
-        $this->applyScopes();
-        $rows = $this->toBase()->limit(1)->get();
+        $results = $this->limit(1)->get();
 
-        if ($rows === [] || $this->model === null) {
-            return $rows[0] ?? null;
-        }
-
-        $models = $this->eagerLoadRelations([$this->hydrateModelFromRow($rows[0])]);
-
-        return $models[0] ?? null;
+        return $results[0] ?? null;
     }
 
     public function find(mixed $id, array|string $columns = ['*']): mixed
@@ -257,7 +309,12 @@ class ModelBuilder extends Builder
     {
         $relationObj = $this->getRelationObject($relation);
 
-        $sub = $this->getRelationHasQuery($relationObj);
+        if ($operator !== '>=' || $count !== 1) {
+            $sub = $relationObj->getRelationExistenceQueryForParent($this, $this->from)
+                ?? $this->getRelationHasQuery($relationObj);
+        } else {
+            $sub = $this->getRelationHasQuery($relationObj);
+        }
 
         if ($callback !== null) {
             $callback($sub);

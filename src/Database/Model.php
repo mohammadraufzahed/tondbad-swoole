@@ -17,8 +17,12 @@ use TondbadSwoole\Database\Attributes\Embedded;
 use TondbadSwoole\Database\Attributes\Version;
 use TondbadSwoole\Database\Casts\CastsAttributes;
 use TondbadSwoole\Database\Relations\BelongsTo;
+use TondbadSwoole\Database\Relations\BelongsToMany;
 use TondbadSwoole\Database\Relations\HasMany;
 use TondbadSwoole\Database\Relations\HasOne;
+use TondbadSwoole\Database\Relations\MorphMany;
+use TondbadSwoole\Database\Relations\MorphOne;
+use TondbadSwoole\Database\Relations\MorphTo;
 use TondbadSwoole\Database\Relations\Relation;
 use TondbadSwoole\Database\Scopes\Scope;
 use UnitEnum;
@@ -1232,6 +1236,11 @@ abstract class Model
         return (new \ReflectionClass($this))->getShortName();
     }
 
+    public function getMorphClass(): string
+    {
+        return static::class;
+    }
+
     protected function pluralize(string $word): string
     {
         if (str_ends_with($word, 'ss') || str_ends_with($word, 'x') || str_ends_with($word, 'ch') || str_ends_with($word, 'sh') || str_ends_with($word, 'z')) {
@@ -1273,6 +1282,32 @@ abstract class Model
         $ownerKey ??= $instance->getKeyName();
 
         return new BelongsTo($this, $related, $foreignKey, $ownerKey, $this->getRelationCaller());
+    }
+
+    public function belongsToMany(
+        string $related,
+        ?string $table = null,
+        ?string $foreignPivotKey = null,
+        ?string $relatedPivotKey = null,
+        ?string $parentKey = null,
+        ?string $relatedKey = null,
+    ): BelongsToMany {
+        return new BelongsToMany($this, $related, $table, $foreignPivotKey, $relatedPivotKey, $parentKey, $relatedKey, $this->getRelationCaller());
+    }
+
+    public function morphOne(string $related, string $name, ?string $type = null, ?string $id = null, ?string $localKey = null): MorphOne
+    {
+        return new MorphOne($this, $related, $name, $type, $id, $localKey);
+    }
+
+    public function morphMany(string $related, string $name, ?string $type = null, ?string $id = null, ?string $localKey = null): MorphMany
+    {
+        return new MorphMany($this, $related, $name, $type, $id, $localKey);
+    }
+
+    public function morphTo(string $name, ?string $type = null, ?string $id = null, ?string $ownerKey = null): MorphTo
+    {
+        return new MorphTo($this, $name, $type, $id, $ownerKey);
     }
 
     protected function getRelationCaller(): string

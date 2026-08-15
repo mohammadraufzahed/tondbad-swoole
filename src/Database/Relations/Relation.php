@@ -6,6 +6,7 @@ namespace TondbadSwoole\Database\Relations;
 
 use TondbadSwoole\Database\Model;
 use TondbadSwoole\Database\ModelBuilder;
+use TondbadSwoole\Database\Query\Builder;
 
 abstract class Relation
 {
@@ -80,6 +81,15 @@ abstract class Relation
     public function getWhereHasGroupByColumn(): string
     {
         return $this->newRelatedInstance()->getTable() . '.' . $this->foreignKey;
+    }
+
+    /**
+     * Optional override for relations that need a different existence query
+     * (e.g. many-to-many counts pivot rows instead of related rows).
+     */
+    public function getRelationExistenceQueryForParent(ModelBuilder $parent, string $parentTable): ?Builder
+    {
+        return null;
     }
 
     protected function getWhereHasColumns(string $parentTable): array
