@@ -13,7 +13,7 @@ final class ScheduleEvent extends Event
      */
     public function __construct(
         public readonly string $type,
-        public readonly string $task,
+        public readonly ?string $task = null,
         public readonly array $metadata = [],
     ) {
     }

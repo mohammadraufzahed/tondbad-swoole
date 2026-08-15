@@ -7,89 +7,101 @@ namespace TondbadSwoole\Scheduling;
 use Closure;
 use DateTimeImmutable;
 use DateTimeInterface;
-use TondbadSwoole\Console\Application;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Queue\Jobs\Job;
-use TondbadSwoole\Queue\QueueInterface;
+use TondbadSwoole\Scheduling\Tasks\ClosureTask;
+use TondbadSwoole\Scheduling\Tasks\CommandTask;
+use TondbadSwoole\Scheduling\Tasks\CallableTask;
+use TondbadSwoole\Scheduling\Tasks\ExecTask;
+use TondbadSwoole\Scheduling\Tasks\QueueTask;
 
 class Schedule
 {
-    /**
-     * @var list<Event>
-     */
-    private array $events = [];
+    private int $closureCounter = 0;
 
     public function __construct(
+        private readonly Scheduler $scheduler,
         private readonly Container $container,
         private readonly string $basePath,
+        private readonly ScheduleRegistry $registry,
     ) {
     }
 
     public function command(string $command, array $parameters = []): Event
     {
-        $callback = function () use ($command, $parameters): void {
-            $this->container->make(Application::class)->run(array_merge(['tondbad', $command], $parameters));
-        };
+        $definition = ScheduleDefinition::create($command)
+            ->withTask(new CommandTask($command, $parameters));
 
-        return $this->addEvent(new Event($command, $callback));
+        return $this->addEvent($this->makeEvent($definition));
     }
 
     public function call(callable $callback): Event
     {
-        $callable = $callback;
-
         if (is_array($callback) && is_string($callback[0])) {
-            $callable = [$this->container->make($callback[0]), $callback[1]];
+            $task = new CallableTask($callback);
+            $name = is_string($callback[0]) ? $callback[0] . '::' . $callback[1] : 'callable';
+        } elseif (is_array($callback) && is_object($callback[0])) {
+            $task = new CallableTask([get_class($callback[0]), $callback[1]]);
+            $name = get_class($callback[0]) . '@' . $callback[1];
+        } elseif (is_string($callback) && str_contains($callback, '::')) {
+            $task = new CallableTask($callback);
+            $name = $callback;
+        } elseif (is_string($callback) && str_contains($callback, '@')) {
+            $task = new CallableTask($callback);
+            $name = $callback;
+        } else {
+            if (!$callback instanceof Closure) {
+                $callback = Closure::fromCallable($callback);
+            }
+
+            $closureId = 'closure-' . ++$this->closureCounter;
+            $task = ClosureTask::fromClosure($callback, $this->registry, $closureId);
+            $name = $closureId;
         }
 
-        $description = match (true) {
-            is_string($callback) && str_contains($callback, '::') => $callback,
-            is_array($callback) && is_object($callback[0]) => get_class($callback[0]) . '@' . $callback[1],
-            is_array($callback) && is_string($callback[0]) => $callback[0] . '::' . $callback[1],
-            is_string($callback) => $callback,
-            default => 'Closure',
-        };
+        $definition = ScheduleDefinition::create($name)->withTask($task);
 
-        $closure = function () use ($callable): void {
-            $this->container->call($callable);
-        };
-
-        return $this->addEvent(new Event($description, $closure));
+        return $this->addEvent($this->makeEvent($definition));
     }
 
     public function job(Job $job, ?string $queue = null): Event
     {
-        $description = $job::class;
+        $definition = ScheduleDefinition::create($job::class)
+            ->withTask(QueueTask::fromJob($job, $queue));
 
-        $callback = function () use ($job, $queue): void {
-            $this->container->make(QueueInterface::class)->push($job, $queue);
-        };
+        if ($queue !== null) {
+            $definition->queue = $queue;
+        }
 
-        return $this->addEvent(new Event($description, $callback));
+        return $this->addEvent($this->makeEvent($definition));
     }
 
     public function exec(string $command, array $parameters = []): Event
     {
-        $callback = function () use ($command, $parameters): void {
-            $line = $command;
+        $definition = ScheduleDefinition::create($command)
+            ->withTask(new ExecTask($command, $parameters));
 
-            foreach ($parameters as $parameter) {
-                $line .= ' ' . escapeshellarg((string) $parameter);
-            }
-
-            passthru($line, $code);
-
-            if ($code !== 0) {
-                throw new \RuntimeException("Scheduled exec returned exit code {$code}: {$line}");
-            }
-        };
-
-        return $this->addEvent(new Event($command, $callback));
+        return $this->addEvent($this->makeEvent($definition));
     }
 
     public function addEvent(Event $event): Event
     {
-        $this->events[] = $event;
+        $definition = $event->getDefinition();
+        $existing = $this->scheduler->store()->find($definition->id);
+
+        if ($existing !== null) {
+            $definition->status = $existing->status;
+            $definition->nextRunAt = $existing->nextRunAt;
+            $definition->lastRunAt = $existing->lastRunAt;
+            $definition->lastRunResult = $existing->lastRunResult;
+            $definition->runCount = $existing->runCount;
+            $definition->failCount = $existing->failCount;
+            $definition->nodeId = $existing->nodeId;
+            $definition->lockedUntil = $existing->lockedUntil;
+            $definition->lockedRunKey = $existing->lockedRunKey;
+        }
+
+        $this->scheduler->upsert($definition);
 
         return $event;
     }
@@ -99,7 +111,10 @@ class Schedule
      */
     public function events(): array
     {
-        return $this->events;
+        return array_map(
+            fn (ScheduleDefinition $definition) => $this->makeEvent($definition),
+            $this->scheduler->definitions(),
+        );
     }
 
     /**
@@ -107,42 +122,24 @@ class Schedule
      */
     public function dueEvents(DateTimeInterface $time): array
     {
-        $due = [];
-
-        foreach ($this->events as $event) {
-            if ($event->isDue($time)) {
-                $due[] = $event;
-            }
-        }
-
-        return $due;
+        return array_values(array_filter(
+            $this->events(),
+            fn (Event $event) => $event->isDue($time),
+        ));
     }
 
     public function runDueEvents(DateTimeInterface $time): int
     {
-        $ran = 0;
-
-        foreach ($this->dueEvents($time) as $event) {
-            if ($event->run($this->container, $this->basePath)) {
-                $ran++;
-            }
-        }
-
-        return $ran;
+        return $this->scheduler->runDue($time);
     }
 
     public function getNextRunDate(DateTimeInterface $from): ?DateTimeImmutable
     {
-        $next = null;
+        return $this->scheduler->getNextRunDateForAll($from);
+    }
 
-        foreach ($this->events as $event) {
-            $candidate = $event->getNextRunDate($from);
-
-            if ($next === null || $candidate < $next) {
-                $next = $candidate;
-            }
-        }
-
-        return $next;
+    private function makeEvent(ScheduleDefinition $definition): Event
+    {
+        return new Event($definition, $this->scheduler, $this->container, $this->basePath, $this->registry);
     }
 }

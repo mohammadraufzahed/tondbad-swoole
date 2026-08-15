@@ -219,5 +219,26 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - `BenchmarkCommand::classNameFromFile` now resolves namespace-less benchmark files (e.g. `benchmarks/AuthBenchmark.php`) by returning `AuthBenchmark`, so a file path works as the positional target: `php bin/tondbad benchmark benchmarks/AuthBenchmark.php`.
 - When comparing against a saved baseline, the default `--threshold=0.05` can flag natural benchmark variance as a regression. For stable pass/fail comparisons, use `--threshold=0.10` or higher; for a strict regression gate, keep the default or lower.
 
+# Scheduler (`devin/scheduler-rewrite`)
+- `routes/console.php` must return a callable that receives `TondbadSwoole\Scheduling\Schedule` and registers schedules (e.g. `$schedule->call(fn () => ...)->everyMinute()`).
+- `php bin/tondbad schedule:work --run-once` runs one poll tick. It accepts `--sleep=N`, `--max-runs=M`, and `--node-id=<id>`.
+- `schedule:list`, `schedule:run <id>`, `schedule:pause <id>`, `schedule:resume <id>`, and `schedule:delete <id>` are registered CLI commands.
+- `ScheduleWorkCommand` uses `SchedulerWorker` and accepts `--node-id`; it dispatches `ScheduledJob` for closure/callable tasks unless `queue.default` is `sync` (which runs them in-process).
+- `SchedulerWorker` with a non-null `nodeId` performs a `claim()` on the configured `ScheduleStore`, preventing duplicate execution across clustered workers.
+- `ScheduledJob` rehydrates `ClosureTask` from the `ScheduleRegistry`, so `routes/console.php` must also be loaded in queue worker processes for closure schedules to resolve.
+- Closure schedules get a stable `closureId` (`closure-1`, `closure-2`, ...) derived from the registration order in `routes/console.php`, so the same closure is resolved across `schedule:work` and `queue:work` processes as long as the file is loaded in the same order.
+- `Event::__construct()` no longer calls `scheduler->upsert()`, so `Schedule::addEvent()` can merge persisted state (status, last run, locks) before upserting; `schedule:pause`, `schedule:resume`, and `schedule:delete` now persist across separate `bin/tondbad` invocations.
+- `withoutOverlapping()` uses the configured `LockProvider` (`file` by default, `SCHEDULE_LOCKS=redis` for distributed). Two concurrent `schedule:work --run-once` processes against the same schedule should result in only one execution.
+- `SchedulerBenchmark` runs from `php bin/tondbad benchmark benchmarks/SchedulerBenchmark.php`.
+- `ScheduleWorkCommand` no longer enables OpenSwoole runtime hooks or wraps execution in `Coroutine::run`, which prevents `InMemoryCache` timers from keeping one-off `schedule:work --run-once` processes alive when scheduled commands such as `cache:clear` resolve the cache.
+- `ScheduleDefinition::toArray()` serializes run/lock timestamps and `DatabaseScheduleStore` maps them to the `scheduled_jobs` migration columns; `Builder::exists()` is available for the upsert existence check.
+- `ScheduleDefinition::fromArray()` casts `bool`/`int` fields (`unlessBetween`, `runInBackground`, `maxAttempts`, `runCount`, `failCount`, `version`, rate-limit fields, `withoutOverlappingLease`) and treats empty strings as `null` for all nullable string/datetime fields, so `RedisScheduleStore` (and any store using empty-string-nulls) hydrates correctly.
+- `RedisScheduleStore::hydrate()` maps legacy snake_case lock keys (`locked_until`, `node_id`, `locked_run_key`) to camelCase (`lockedUntil`, `nodeId`, `lockedRunKey`) for backward compatibility.
+- `CronTrigger::getNextRunDate` supports `allowCurrentDate` so `warmNextRunDates()` can include the current minute while post-run scheduling advances to the next occurrence.
+- `SCHEDULE_STORE=database` with `DB_CONNECTION=sqlite DB_SQLITE_DATABASE=/tmp/tondbad_scheduler.sqlite` uses a file-backed SQLite database and requires `migrate:fresh` (or `migrate`) to create `scheduled_jobs`. `SCHEDULE_STORE=redis` uses `REDIS_HOST`/`REDIS_PORT` (defaults `127.0.0.1:6379`).
+- `schedule:run <id>` after `schedule:pause <id>` exits `1` with `Scheduled task not found or not due: <id>`; resuming before running is required.
+- `DatabaseScheduleStore::upsert()` now catches `UNIQUE constraint` / duplicate-key `PDOException`s on `insert()` and falls back to `update()`, so concurrent `schedule:work` workers can safely boot against an empty `scheduled_jobs` table without a fatal `scheduled_jobs.id` race. Pre-warming the schedule with one `schedule:list` or `schedule:run` is no longer required.
+- `ScheduledJob` queue dispatch writes the job to `jobs`/`failed_jobs`; run `php bin/tondbad queue:work --connection=database --queue=default --max-jobs=1 --stop-when-empty` after `schedule:work` to execute it.
+
 # Devin Secrets Needed
 - None for local testing.

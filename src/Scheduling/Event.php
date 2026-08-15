@@ -7,44 +7,39 @@ namespace TondbadSwoole\Scheduling;
 use Closure;
 use DateTimeImmutable;
 use DateTimeInterface;
-use DateTimeZone;
-use Exception;
-use Monolog\Logger;
-use Throwable;
-use TondbadSwoole\Core\Config;
+use InvalidArgumentException;
 use TondbadSwoole\Core\Container;
-use TondbadSwoole\Events\Contracts\EventDispatcher;
-use TondbadSwoole\Scheduling\Events\ScheduleEvent;
+use TondbadSwoole\Queue\Jobs\Job;
+use TondbadSwoole\Scheduling\Contracts\Trigger;
+use TondbadSwoole\Scheduling\Triggers\CronTrigger;
+use TondbadSwoole\Scheduling\Tasks\ClosureTask;
+use TondbadSwoole\Scheduling\Tasks\CommandTask;
+use TondbadSwoole\Scheduling\Tasks\CallableTask;
+use TondbadSwoole\Scheduling\Tasks\ExecTask;
+use TondbadSwoole\Scheduling\Tasks\QueueTask;
+use TondbadSwoole\Scheduling\Triggers\DelayTrigger;
+use TondbadSwoole\Scheduling\Triggers\IntervalTrigger;
+use TondbadSwoole\Scheduling\Triggers\OnceTrigger;
 
 class Event
 {
-    private CronExpression $cron;
-    private ?DateTimeZone $timezone = null;
-    private ?string $betweenStart = null;
-    private ?string $betweenEnd = null;
-    private bool $unlessBetween = false;
-    private bool $withoutOverlapping = false;
-    private bool $runInBackground = false;
-    private ?string $outputPath = null;
-    private ?string $description = null;
-
-    /**
-     * @var resource|false
-     */
-    private mixed $lockHandle = false;
-
     public function __construct(
-        private readonly string $name,
-        private readonly Closure $callback,
+        private ScheduleDefinition $definition,
+        private readonly Scheduler $scheduler,
+        private readonly Container $container,
+        private readonly string $basePath,
+        private readonly ScheduleRegistry $registry,
     ) {
-        $this->cron = new CronExpression('* * * * *');
+    }
+
+    public function getDefinition(): ScheduleDefinition
+    {
+        return $this->definition;
     }
 
     public function cron(string $expression): self
     {
-        $this->cron = new CronExpression($expression);
-
-        return $this;
+        return $this->withTrigger(CronTrigger::fromExpression($expression));
     }
 
     public function everyMinute(): self
@@ -183,50 +178,80 @@ class Event
         return $this->cron('0 0 * * 6');
     }
 
+    public function everySecond(): self
+    {
+        return $this->withTrigger(new IntervalTrigger(1));
+    }
+
+    public function everyFiveSeconds(): self
+    {
+        return $this->withTrigger(new IntervalTrigger(5));
+    }
+
+    public function everyTenSeconds(): self
+    {
+        return $this->withTrigger(new IntervalTrigger(10));
+    }
+
+    public function everySeconds(int $seconds): self
+    {
+        return $this->withTrigger(new IntervalTrigger($seconds));
+    }
+
+    public function once(): self
+    {
+        return $this->withTrigger(new OnceTrigger());
+    }
+
+    public function delay(int $seconds): self
+    {
+        return $this->withTrigger(new DelayTrigger($seconds));
+    }
+
     public function timezone(string $timezone): self
     {
-        $this->timezone = new DateTimeZone($timezone);
+        $this->definition = $this->definition->withTimezone($timezone);
+        $this->scheduler->upsert($this->definition);
 
         return $this;
     }
 
     public function between(string $startTime, string $endTime): self
     {
-        $this->parseTime($startTime);
-        $this->parseTime($endTime);
-
-        $this->betweenStart = $startTime;
-        $this->betweenEnd = $endTime;
-        $this->unlessBetween = false;
+        $this->definition = $this->definition->withBetween($startTime, $endTime, false);
+        $this->scheduler->upsert($this->definition);
 
         return $this;
     }
 
     public function unlessBetween(string $startTime, string $endTime): self
     {
-        $this->between($startTime, $endTime);
-        $this->unlessBetween = true;
+        $this->definition = $this->definition->withBetween($startTime, $endTime, true);
+        $this->scheduler->upsert($this->definition);
 
         return $this;
     }
 
-    public function withoutOverlapping(): self
+    public function withoutOverlapping(?int $lease = null): self
     {
-        $this->withoutOverlapping = true;
+        $this->definition->withoutOverlappingLease = $lease ?? 3600;
+        $this->scheduler->upsert($this->definition);
 
         return $this;
     }
 
     public function runInBackground(): self
     {
-        $this->runInBackground = true;
+        $this->definition->runInBackground = true;
+        $this->scheduler->upsert($this->definition);
 
         return $this;
     }
 
     public function appendOutputTo(string $path): self
     {
-        $this->outputPath = $path;
+        $this->definition->outputPath = $path;
+        $this->scheduler->upsert($this->definition);
 
         return $this;
     }
@@ -238,102 +263,136 @@ class Event
 
     public function description(string $description): self
     {
-        $this->description = $description;
+        $this->definition = $this->definition->withDescription($description);
+        $this->scheduler->upsert($this->definition);
+
+        return $this;
+    }
+
+    public function name(string $description): self
+    {
+        return $this->description($description);
+    }
+
+    public function onQueue(string $queue): self
+    {
+        $this->definition->queue = $queue;
+        $this->scheduler->upsert($this->definition);
+
+        return $this;
+    }
+
+    public function onConnection(string $connection): self
+    {
+        $this->definition->connection = $connection;
+        $this->scheduler->upsert($this->definition);
+
+        return $this;
+    }
+
+    public function retry(int $times, array $backoff = []): self
+    {
+        $this->definition->maxAttempts = $times;
+        $this->definition->backoff = $backoff;
+        $this->scheduler->upsert($this->definition);
+
+        return $this;
+    }
+
+    public function throttle(int $maxAttempts, int $window = 60): self
+    {
+        $this->definition->rateLimitMax = $maxAttempts;
+        $this->definition->rateLimitWindow = $window;
+        $this->scheduler->upsert($this->definition);
+
+        return $this;
+    }
+
+    public function misfire(string $policy): self
+    {
+        $this->definition->misfire = $policy;
+        $this->scheduler->upsert($this->definition);
+
+        return $this;
+    }
+
+    public function rateLimit(int $max, int $window): self
+    {
+        $this->definition->rateLimitMax = $max;
+        $this->definition->rateLimitWindow = $window;
+        $this->scheduler->upsert($this->definition);
+
+        return $this;
+    }
+
+    public function from(DateTimeImmutable $date): self
+    {
+        $this->definition->startDate = $date;
+        $this->scheduler->upsert($this->definition);
+
+        return $this;
+    }
+
+    public function to(DateTimeImmutable $date): self
+    {
+        $this->definition->endDate = $date;
+        $this->scheduler->upsert($this->definition);
+
+        return $this;
+    }
+
+    public function tag(string ...$tags): self
+    {
+        $this->definition->tags = array_values(array_unique(array_merge($this->definition->tags, $tags)));
+        $this->scheduler->upsert($this->definition);
+
+        return $this;
+    }
+
+    public function withData(array $data): self
+    {
+        $this->definition->data = $data;
+        $this->scheduler->upsert($this->definition);
 
         return $this;
     }
 
     public function isDue(DateTimeInterface $time): bool
     {
-        $date = DateTimeImmutable::createFromInterface($time);
-
-        if ($this->timezone !== null) {
-            $date = $date->setTimezone($this->timezone);
-        }
-
-        $timeString = $date->format('H:i');
-
-        if ($this->betweenStart !== null && $this->betweenEnd !== null) {
-            $inBetween = $this->inBetweenWindow($timeString, $this->betweenStart, $this->betweenEnd);
-
-            if ($this->unlessBetween && $inBetween) {
-                return false;
-            }
-
-            if (!$this->unlessBetween && !$inBetween) {
-                return false;
-            }
-        }
-
-        return $this->cron->isDue($date);
+        return $this->scheduler->isDue($this->definition, $time);
     }
 
     public function getNextRunDate(DateTimeInterface $from): DateTimeImmutable
     {
-        return $this->cron->getNextRunDate($from, $this->timezone);
+        return $this->scheduler->getNextRunDate($this->definition, $from);
     }
 
     public function getExpression(): string
     {
-        return $this->cron->getExpression();
+        return $this->definition->getExpression();
     }
 
     public function getDescription(): string
     {
-        return $this->description ?? $this->name;
+        return $this->definition->description ?? $this->definition->name;
     }
 
     public function run(Container $container, string $basePath): bool
     {
-        if ($this->withoutOverlapping && !$this->acquireLock($this->lockFile($container, $basePath))) {
-            return false;
-        }
-
-        if ($this->outputPath !== null) {
-            ob_start();
-        }
-
-        $dispatcher = $this->resolveDispatcher($container);
-        $this->emit($dispatcher, new ScheduleEvent('starting', $this->getDescription()));
-
-        try {
-            ($this->callback)();
-        } catch (Throwable $e) {
-            $this->emit($dispatcher, new ScheduleEvent('failed', $this->getDescription(), ['error' => $e->getMessage()]));
-
-            try {
-                $logger = $container->make(Logger::class);
-                $logger->error('Scheduled task failed: ' . $e->getMessage(), ['exception' => $e]);
-            } catch (Exception) {
-                fwrite(STDERR, 'Scheduled task failed: ' . $e->getMessage() . "\n");
-            }
-        } finally {
-            if (!isset($e)) {
-                $this->emit($dispatcher, new ScheduleEvent('ran', $this->getDescription()));
-            }
-
-            if ($this->outputPath !== null) {
-                $output = ob_get_clean();
-
-                if ($output !== false && $output !== '') {
-                    $this->ensureDirectory(dirname($this->outputPath));
-                    file_put_contents($this->outputPath, $output, FILE_APPEND | LOCK_EX);
-                }
-            }
-
-            if ($this->withoutOverlapping) {
-                $this->releaseLock();
-            }
-        }
-
-        return true;
+        return $this->scheduler->runDefinition($this->definition, new DateTimeImmutable(), skipDue: true);
     }
 
-    public function runsInBackground(): bool
+    private function withTrigger(Trigger $trigger): self
     {
-        return $this->runInBackground;
+        $this->definition = $this->definition->withTrigger($trigger);
+        $this->scheduler->upsert($this->definition);
+
+        return $this;
     }
 
+    /**
+     * @return array{0: int, 1: int}
+     */
     private function parseTime(string $time): array
     {
         if (!preg_match('/^(\d{1,2}):(\d{2})$/', $time, $matches)) {
@@ -348,84 +407,5 @@ class Event
         }
 
         return [$hour, $minute];
-    }
-
-    private function inBetweenWindow(string $time, string $start, string $end): bool
-    {
-        [$startHour, $startMinute] = $this->parseTime($start);
-        [$endHour, $endMinute] = $this->parseTime($end);
-
-        $current = (int) str_replace(':', '', $time);
-        $startValue = $startHour * 100 + $startMinute;
-        $endValue = $endHour * 100 + $endMinute;
-
-        if ($startValue <= $endValue) {
-            return $current >= $startValue && $current <= $endValue;
-        }
-
-        return $current >= $startValue || $current <= $endValue;
-    }
-
-    private function lockFile(Container $container, string $basePath): string
-    {
-        $frameworkDir = $container->make(Config::class)->get('app.framework_cache_dir', $basePath . '/storage/framework');
-
-        return $frameworkDir . '/schedule-' . md5($this->getDescription()) . '.lock';
-    }
-
-    private function acquireLock(string $lockFile): bool
-    {
-        $this->ensureDirectory(dirname($lockFile));
-
-        $this->lockHandle = @fopen($lockFile, 'c');
-
-        if ($this->lockHandle === false) {
-            return false;
-        }
-
-        if (!flock($this->lockHandle, LOCK_EX | LOCK_NB)) {
-            fclose($this->lockHandle);
-            $this->lockHandle = false;
-
-            return false;
-        }
-
-        return true;
-    }
-
-    private function releaseLock(): void
-    {
-        if (is_resource($this->lockHandle)) {
-            flock($this->lockHandle, LOCK_UN);
-            fclose($this->lockHandle);
-            $this->lockHandle = false;
-        }
-    }
-
-    private function ensureDirectory(string $path): void
-    {
-        if (!is_dir($path)) {
-            mkdir($path, 0775, true);
-        }
-    }
-
-    private function resolveDispatcher(Container $container): ?EventDispatcher
-    {
-        try {
-            return $container->make(EventDispatcher::class);
-        } catch (Exception) {
-            return null;
-        }
-    }
-
-    private function emit(?EventDispatcher $dispatcher, ScheduleEvent $event): void
-    {
-        if ($dispatcher === null) {
-            return;
-        }
-
-        if ($dispatcher->hasListeners($event) || $dispatcher->hasListeners($event->name())) {
-            $dispatcher->dispatch($event);
-        }
     }
 }

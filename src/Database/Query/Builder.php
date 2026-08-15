@@ -433,6 +433,11 @@ class Builder
         return $results[0] ?? null;
     }
 
+    public function exists(): bool
+    {
+        return $this->count() > 0;
+    }
+
     public function find(mixed $id, array|string $columns = ['*']): mixed
     {
         return $this->where('id', '=', $id)->select($columns)->first();
