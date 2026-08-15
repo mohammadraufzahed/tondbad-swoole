@@ -11,6 +11,7 @@ use TondbadSwoole\Console\Application;
 use TondbadSwoole\Console\CommandInterface;
 use TondbadSwoole\Console\Commands\Command;
 use TondbadSwoole\Console\Commands\Auth\ClearSessionsCommand;
+use TondbadSwoole\Console\Commands\BenchmarkCommand;
 use TondbadSwoole\Console\Commands\CacheClearCommand;
 use TondbadSwoole\Console\Commands\CacheForgetTagsCommand;
 use TondbadSwoole\Console\Commands\CacheStatusCommand;
@@ -73,6 +74,7 @@ class ConsoleServiceProvider extends ServiceProvider
             GrpcServeCommand::class,
             RouteCacheCommand::class,
             RouteListCommand::class,
+            BenchmarkCommand::class,
             CacheClearCommand::class,
             CacheForgetTagsCommand::class,
             CacheStatusCommand::class,
