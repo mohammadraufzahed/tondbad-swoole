@@ -7,10 +7,11 @@ namespace TondbadSwoole\Console\Commands;
 use DateTimeImmutable;
 use DateTimeZone;
 use OpenSwoole\Coroutine;
-use OpenSwoole\Coroutine\System;
 use OpenSwoole\Runtime;
 use TondbadSwoole\Core\Config;
-use TondbadSwoole\Scheduling\Schedule;
+use TondbadSwoole\Events\Contracts\EventDispatcher;
+use TondbadSwoole\Scheduling\Scheduler;
+use TondbadSwoole\Scheduling\SchedulerWorker;
 
 class ScheduleWorkCommand extends Command
 {
@@ -42,28 +43,18 @@ class ScheduleWorkCommand extends Command
         $this->enableSwooleHooks();
 
         $config = $app->container->make(Config::class);
-        $schedule = $app->container->make(Schedule::class);
+        $nodeId = $options['node-id'] ?? $config->get('schedule.node_id') ?? null;
         $timezone = new DateTimeZone((string) $config->get('schedule.timezone', date_default_timezone_get()));
 
-        $exitCode = 0;
+        $scheduler = $app->container->make(Scheduler::class);
+        $dispatcher = $app->container->has(EventDispatcher::class)
+            ? $app->container->make(EventDispatcher::class)
+            : null;
 
-        $runner = function () use ($schedule, $timezone, $runOnce, $sleep, $maxRuns, &$exitCode): void {
-            $totalRuns = 0;
+        $worker = new SchedulerWorker($scheduler, $dispatcher, is_string($nodeId) && $nodeId !== '' ? $nodeId : null);
 
-            do {
-                $now = new DateTimeImmutable('now', $timezone);
-                $totalRuns += $schedule->runDueEvents($now);
-
-                if ($runOnce) {
-                    break;
-                }
-
-                if ($maxRuns > 0 && $totalRuns >= $maxRuns) {
-                    break;
-                }
-
-                $this->sleep($sleep);
-            } while (true);
+        $runner = function () use ($worker, $timezone, $runOnce, $sleep, $maxRuns): void {
+            $worker->run(new DateTimeImmutable('now', $timezone), $runOnce, $sleep, $maxRuns > 0 ? $maxRuns : null);
         };
 
         if (class_exists(Coroutine::class) && Coroutine::getCid() === -1) {
@@ -72,7 +63,7 @@ class ScheduleWorkCommand extends Command
             $runner();
         }
 
-        return $exitCode;
+        return 0;
     }
 
     private function parseOptions(array $args): array
@@ -80,25 +71,16 @@ class ScheduleWorkCommand extends Command
         $options = [];
 
         foreach ($args as $arg) {
-            if (str_starts_with($arg, '--')) {
-                $option = substr($arg, 2);
-                [$key, $value] = array_pad(explode('=', $option, 2), 2, true);
-                $options[$key] = $value === true ? true : $value;
+            if (!str_starts_with($arg, '--')) {
+                continue;
             }
+
+            $option = substr($arg, 2);
+            [$key, $value] = array_pad(explode('=', $option, 2), 2, true);
+            $options[$key] = $value === true ? true : $value;
         }
 
         return $options;
-    }
-
-    private function sleep(int $seconds): void
-    {
-        if (class_exists(System::class) && Coroutine::getCid() >= 0) {
-            System::sleep($seconds);
-
-            return;
-        }
-
-        sleep($seconds);
     }
 
     private function enableSwooleHooks(): void

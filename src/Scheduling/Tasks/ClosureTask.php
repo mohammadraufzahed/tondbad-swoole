@@ -21,12 +21,17 @@ class ClosureTask implements Task
         $this->closure = $closure;
     }
 
-    public static function fromClosure(Closure $closure, ScheduleRegistry $registry): self
+    public static function fromClosure(Closure $closure, ScheduleRegistry $registry, ?string $closureId = null): self
     {
-        $id = uniqid('closure_', true);
+        $id = $closureId ?? uniqid('closure_', true);
         $registry->register($id, $closure);
 
         return new self($id, $closure);
+    }
+
+    public function getClosureId(): string
+    {
+        return $this->closureId;
     }
 
     public function execute(Container $container, string $basePath, ?ScheduleRegistry $registry = null): mixed

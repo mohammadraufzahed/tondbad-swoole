@@ -79,7 +79,7 @@ it('recovers stale locks before ticking', function () {
     $schedule = new Schedule($scheduler, $this->container, $this->app->basePath(), $registry);
     $ran = false;
 
-    $schedule
+    $event = $schedule
         ->call(function () use (&$ran) {
             $ran = true;
         })
@@ -88,7 +88,7 @@ it('recovers stale locks before ticking', function () {
     $now = new DateTimeImmutable();
 
     $store->claim(
-        'Closure',
+        $event->getDefinition()->id,
         'node-1',
         $now->format('YmdHi'),
         $now->modify('-1 second'),

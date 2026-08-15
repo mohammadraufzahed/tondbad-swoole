@@ -17,6 +17,8 @@ use TondbadSwoole\Scheduling\Tasks\QueueTask;
 
 class Schedule
 {
+    private int $closureCounter = 0;
+
     public function __construct(
         private readonly Scheduler $scheduler,
         private readonly Container $container,
@@ -52,8 +54,9 @@ class Schedule
                 $callback = Closure::fromCallable($callback);
             }
 
-            $task = ClosureTask::fromClosure($callback, $this->registry);
-            $name = 'Closure';
+            $closureId = 'closure-' . ++$this->closureCounter;
+            $task = ClosureTask::fromClosure($callback, $this->registry, $closureId);
+            $name = $closureId;
         }
 
         $definition = ScheduleDefinition::create($name)->withTask($task);
@@ -83,7 +86,22 @@ class Schedule
 
     public function addEvent(Event $event): Event
     {
-        $this->scheduler->upsert($event->getDefinition());
+        $definition = $event->getDefinition();
+        $existing = $this->scheduler->store()->find($definition->id);
+
+        if ($existing !== null) {
+            $definition->status = $existing->status;
+            $definition->nextRunAt = $existing->nextRunAt;
+            $definition->lastRunAt = $existing->lastRunAt;
+            $definition->lastRunResult = $existing->lastRunResult;
+            $definition->runCount = $existing->runCount;
+            $definition->failCount = $existing->failCount;
+            $definition->nodeId = $existing->nodeId;
+            $definition->lockedUntil = $existing->lockedUntil;
+            $definition->lockedRunKey = $existing->lockedRunKey;
+        }
+
+        $this->scheduler->upsert($definition);
 
         return $event;
     }

@@ -53,7 +53,12 @@ class Scheduler
 
     public function remove(string $id): void
     {
-        $this->store->delete($id);
+        $definition = $this->store->find($id);
+
+        if ($definition !== null) {
+            $definition->status = 'deleted';
+            $this->store->upsert($definition);
+        }
 
         $this->emit(new ScheduleEvent('deleted', $id));
     }
@@ -76,7 +81,7 @@ class Scheduler
     {
         $definition = $this->store->find($id);
 
-        if ($definition === null) {
+        if ($definition === null || $definition->status !== 'active') {
             return false;
         }
 
@@ -108,7 +113,10 @@ class Scheduler
      */
     public function definitions(): array
     {
-        return $this->store->all();
+        return array_values(array_filter(
+            $this->store->all(),
+            static fn (ScheduleDefinition $definition) => $definition->status !== 'deleted',
+        ));
     }
 
     /**
