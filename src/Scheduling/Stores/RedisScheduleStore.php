@@ -88,9 +88,9 @@ class RedisScheduleStore implements ScheduleStore
         }
 
         $this->redis->hmset($this->key($id), [
-            'locked_until' => $expiresAt->format('c'),
-            'node_id' => $nodeId,
-            'locked_run_key' => $runKey,
+            'lockedUntil' => $expiresAt->format('c'),
+            'nodeId' => $nodeId,
+            'lockedRunKey' => $runKey,
         ]);
 
         return true;
@@ -105,9 +105,9 @@ class RedisScheduleStore implements ScheduleStore
         }
 
         $this->redis->hmset($this->key($id), [
-            'locked_until' => '',
-            'node_id' => '',
-            'locked_run_key' => '',
+            'lockedUntil' => '',
+            'nodeId' => '',
+            'lockedRunKey' => '',
         ]);
     }
 
@@ -126,7 +126,7 @@ class RedisScheduleStore implements ScheduleStore
         }
 
         $this->redis->expire($lockKey, $lease);
-        $this->redis->hset($this->key($id), 'locked_until', $expiresAt->format('c'));
+        $this->redis->hset($this->key($id), 'lockedUntil', $expiresAt->format('c'));
 
         return true;
     }
@@ -172,7 +172,15 @@ class RedisScheduleStore implements ScheduleStore
     {
         $normalized = [];
 
+        $keyMap = [
+            'locked_until' => 'lockedUntil',
+            'node_id' => 'nodeId',
+            'locked_run_key' => 'lockedRunKey',
+        ];
+
         foreach ($data as $key => $value) {
+            $key = $keyMap[$key] ?? $key;
+
             if ($key === 'trigger' || $key === 'task' || $key === 'tags' || $key === 'data' || $key === 'backoff') {
                 $normalized[$key] = json_decode($value ?: '{}', true);
             } elseif (in_array($key, ['nextRunAt', 'lastRunAt', 'startDate', 'endDate', 'lockedUntil'], true)) {

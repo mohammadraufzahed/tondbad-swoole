@@ -217,18 +217,20 @@ class ScheduleDefinition
             task: Tasks\TaskFactory::make($data['task'] ?? [], $registry),
         );
 
-        $definition->description = $data['description'] ?? null;
+        $emptyToNull = static fn (mixed $value): ?string => is_string($value) && $value === '' ? null : $value;
+
+        $definition->description = $emptyToNull($data['description'] ?? null);
         $definition->timezone = (isset($data['timezone']) && $data['timezone'] !== '' && $data['timezone'] !== null)
             ? new DateTimeZone($data['timezone'])
             : null;
-        $definition->betweenStart = $data['betweenStart'] ?? null;
-        $definition->betweenEnd = $data['betweenEnd'] ?? null;
+        $definition->betweenStart = $emptyToNull($data['betweenStart'] ?? null);
+        $definition->betweenEnd = $emptyToNull($data['betweenEnd'] ?? null);
         $definition->unlessBetween = (bool) ($data['unlessBetween'] ?? false);
         $definition->withoutOverlappingLease = isset($data['withoutOverlappingLease']) && $data['withoutOverlappingLease'] !== ''
             ? (int) $data['withoutOverlappingLease']
             : null;
         $definition->runInBackground = (bool) ($data['runInBackground'] ?? false);
-        $definition->outputPath = $data['outputPath'] ?? null;
+        $definition->outputPath = $emptyToNull($data['outputPath'] ?? null);
         $definition->maxAttempts = (int) ($data['maxAttempts'] ?? 1);
         $definition->backoff = $data['backoff'] ?? [];
         $definition->misfire = $data['misfire'] ?? 'smart';
@@ -238,8 +240,8 @@ class ScheduleDefinition
         $definition->rateLimitWindow = isset($data['rateLimitWindow']) && $data['rateLimitWindow'] !== ''
             ? (int) $data['rateLimitWindow']
             : null;
-        $definition->queue = $data['queue'] ?? null;
-        $definition->connection = $data['connection'] ?? null;
+        $definition->queue = $emptyToNull($data['queue'] ?? null);
+        $definition->connection = $emptyToNull($data['connection'] ?? null);
         $definition->data = $data['data'] ?? [];
         $definition->startDate = (isset($data['startDate']) && $data['startDate'] !== '' && $data['startDate'] !== null)
             ? new DateTimeImmutable($data['startDate'])
@@ -254,7 +256,7 @@ class ScheduleDefinition
         $definition->lastRunAt = (isset($data['lastRunAt']) && $data['lastRunAt'] !== '' && $data['lastRunAt'] !== null)
             ? new DateTimeImmutable($data['lastRunAt'])
             : null;
-        $definition->lastRunResult = $data['lastRunResult'] ?? null;
+        $definition->lastRunResult = $emptyToNull($data['lastRunResult'] ?? null);
         $definition->runCount = (int) ($data['runCount'] ?? 0);
         $definition->failCount = (int) ($data['failCount'] ?? 0);
         $definition->status = $data['status'] ?? 'active';
@@ -262,8 +264,8 @@ class ScheduleDefinition
         $definition->lockedUntil = (isset($data['lockedUntil']) && $data['lockedUntil'] !== '' && $data['lockedUntil'] !== null)
             ? new DateTimeImmutable($data['lockedUntil'])
             : null;
-        $definition->nodeId = $data['nodeId'] ?? null;
-        $definition->lockedRunKey = $data['lockedRunKey'] ?? null;
+        $definition->nodeId = $emptyToNull($data['nodeId'] ?? null);
+        $definition->lockedRunKey = $emptyToNull($data['lockedRunKey'] ?? null);
 
         return $definition;
     }
