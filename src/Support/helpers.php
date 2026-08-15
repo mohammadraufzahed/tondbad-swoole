@@ -19,6 +19,7 @@ use TondbadSwoole\Events\DispatchResult;
 use TondbadSwoole\Queue\QueueInterface;
 use TondbadSwoole\Queue\QueueManager;
 use TondbadSwoole\Scheduling\Schedule;
+use TondbadSwoole\Scheduling\Scheduler;
 
 if (!function_exists('app')) {
     function app(): ?App
@@ -87,6 +88,13 @@ if (!function_exists('schedule')) {
     function schedule(): ?Schedule
     {
         return app()?->container->make(Schedule::class);
+    }
+}
+
+if (!function_exists('scheduler')) {
+    function scheduler(): ?Scheduler
+    {
+        return app()?->container->make(Scheduler::class);
     }
 }
 

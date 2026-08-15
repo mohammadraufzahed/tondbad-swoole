@@ -39,7 +39,11 @@ use TondbadSwoole\Console\Commands\MigrateRollbackCommand;
 use TondbadSwoole\Console\Commands\MigrateStatusCommand;
 use TondbadSwoole\Console\Commands\RouteCacheCommand;
 use TondbadSwoole\Console\Commands\RouteListCommand;
+use TondbadSwoole\Console\Commands\ScheduleDeleteCommand;
 use TondbadSwoole\Console\Commands\ScheduleListCommand;
+use TondbadSwoole\Console\Commands\SchedulePauseCommand;
+use TondbadSwoole\Console\Commands\ScheduleResumeCommand;
+use TondbadSwoole\Console\Commands\ScheduleRunCommand;
 use TondbadSwoole\Console\Commands\ScheduleWorkCommand;
 use TondbadSwoole\Console\Commands\ServeCommand;
 use TondbadSwoole\Core\Config;
@@ -101,6 +105,10 @@ class ConsoleServiceProvider extends ServiceProvider
             MigrateStatusCommand::class,
             ScheduleWorkCommand::class,
             ScheduleListCommand::class,
+            SchedulePauseCommand::class,
+            ScheduleResumeCommand::class,
+            ScheduleDeleteCommand::class,
+            ScheduleRunCommand::class,
             ClearSessionsCommand::class,
         ];
 

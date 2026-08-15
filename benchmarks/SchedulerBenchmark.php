@@ -8,18 +8,30 @@ use TondbadSwoole\Benchmark\Attributes\Benchmark;
 use TondbadSwoole\Benchmark\Attributes\Setup;
 use TondbadSwoole\Benchmark\Blackhole;
 use TondbadSwoole\Scheduling\Schedule;
+use TondbadSwoole\Scheduling\ScheduleRegistry;
+use TondbadSwoole\Scheduling\Scheduler;
+use TondbadSwoole\Scheduling\Stores\MemoryScheduleStore;
 
 #[Benchmark(warmup: 3, iterations: 100, invocations: 10)]
 class SchedulerBenchmark
 {
     private Schedule $schedule;
+    private Scheduler $scheduler;
 
     #[Setup]
     public function setUp(): void
     {
         $app = BenchmarkApp::boot();
 
-        $this->schedule = new Schedule($app->container, $app->basePath());
+        $registry = new ScheduleRegistry();
+        $this->scheduler = new Scheduler(
+            new MemoryScheduleStore(),
+            $registry,
+            $app->container,
+            $app->basePath(),
+        );
+
+        $this->schedule = new Schedule($this->scheduler, $app->container, $app->basePath(), $registry);
 
         for ($i = 0; $i < 50; $i++) {
             $this->schedule->call(fn () => null)->everyMinute();
@@ -33,6 +45,10 @@ class SchedulerBenchmark
 
     public function benchRunDueEvents(Blackhole $bh): void
     {
+        foreach ($this->scheduler->store()->all() as $definition) {
+            $definition->lastRunAt = null;
+        }
+
         $bh->consume($this->schedule->runDueEvents(new DateTimeImmutable()));
     }
 }
