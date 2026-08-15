@@ -1,0 +1,19 @@
+| Benchmark | Mode | Iterations | Score | Error | Unit | Ops/s | Outliers |
+|---|---|---|---|---|---|---|---|
+| AuthBenchmark::benchIssueApiToken | avg | 5000 | 9.570 | ±0.088 | μs/op | 104,490.35 | 6 |
+| AuthBenchmark::benchCheck | avg | 5000 | 42.785 | ±0.171 | μs/op | 23,372.47 | 11 |
+| CacheBenchmark::benchGet | avg | 10000 | 3.488 | ±0.013 | μs/op | 286,683.66 | 1 |
+| CacheBenchmark::benchSet | avg | 10000 | 4.651 | ±0.027 | μs/op | 214,995.19 | 1 |
+| ConsoleBenchmark::benchRun | avg | 10000 | 1.387 | ±0.026 | μs/op | 720,923.05 | 16 |
+| EventDispatcherBenchmark::benchDispatch | avg | 1000 | 1.917 | ±0.065 | μs/op | 521,592.90 | 9 |
+| GrpcBenchmark::benchGrpcRouteDispatch | avg | 10000 | 11.653 | ±0.277 | μs/op | 85,811.82 | 15 |
+| OrmBenchmark::benchPersist | avg | 1000 | 50.982 | ±0.535 | μs/op | 19,614.63 | 1 |
+| OrmBenchmark::benchFind | avg | 1000 | 39.677 | ±0.306 | μs/op | 25,203.27 | 0 |
+| OrmBenchmark::benchUpdate | avg | 1000 | 90.356 | ±0.332 | μs/op | 11,067.29 | 14 |
+| QueueBenchmark::benchPush | avg | 1000 | 42.998 | ±0.354 | μs/op | 23,257.06 | 0 |
+| QueueBenchmark::benchPop | avg | 1000 | 5,829.926 | ±58.138 | μs/op | 171.53 | 16 |
+| RoutingBenchmark::benchRouteDispatch | avg | 10000 | 12.819 | ±0.321 | μs/op | 78,011.42 | 14 |
+| SchedulerBenchmark::benchDueEvents | avg | 1000 | 83.229 | ±0.220 | μs/op | 12,015.06 | 12 |
+| SchedulerBenchmark::benchRunDueEvents | avg | 1000 | 170.941 | ±0.294 | μs/op | 5,849.96 | 6 |
+| ValidationBenchmark::benchSchema | avg | 10000 | 11.605 | ±0.057 | μs/op | 86,172.92 | 6 |
+| ValidationBenchmark::benchValidator | avg | 10000 | 10.908 | ±0.034 | μs/op | 91,674.01 | 6 |
