@@ -4,27 +4,21 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Output\OutputInterface;
 use TondbadSwoole\Database\Migrations\Migrator;
 
+#[AsCommand('migrate:fresh', 'Drop all tables and re-run all migrations.')]
 class MigrateFreshCommand extends Command
 {
-    public function getName(): string
-    {
-        return 'migrate:fresh';
-    }
-
-    public function getDescription(): string
-    {
-        return 'Drop all tables and re-run all migrations.';
-    }
-
-    public function run(array $args): int
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $migrator = $this->getMigrator();
         $migrations = $migrator->fresh();
 
         foreach ($migrations as $migration) {
-            fwrite(STDOUT, "Migrated: {$migration}\n");
+            $output->success("Migrated: {$migration}");
         }
 
         return 0;

@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace TondbadSwoole\Console\Commands;
 
 use InvalidArgumentException;
-use TondbadSwoole\Benchmark\BenchmarkDiscovery;
 use TondbadSwoole\Benchmark\BaselineStore;
 use TondbadSwoole\Benchmark\BenchmarkComparator;
+use TondbadSwoole\Benchmark\BenchmarkDiscovery;
 use TondbadSwoole\Benchmark\BenchmarkResult;
 use TondbadSwoole\Benchmark\BenchmarkRunner;
 use TondbadSwoole\Benchmark\ForkedBenchmarkRunner;
@@ -18,94 +18,64 @@ use TondbadSwoole\Benchmark\Reporters\MarkdownReporter;
 use TondbadSwoole\Benchmark\Reporters\Reporter;
 use TondbadSwoole\Benchmark\Scenario;
 use TondbadSwoole\Benchmark\TimeUnit;
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Input\InputArgument;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Input\InputOption;
+use TondbadSwoole\Console\Output\OutputInterface;
 
+#[AsCommand('benchmark', 'Run performance benchmarks.')]
 class BenchmarkCommand extends Command
 {
-    public function getName(): string
+    protected function configure(): void
     {
-        return 'benchmark';
+        $this
+            ->addArgument('target', InputArgument::OPTIONAL, 'Benchmark file, class, or filter')
+            ->addOption('warmup', null, InputOption::VALUE_OPTIONAL, 'Override warmup iterations', null, 'int')
+            ->addOption('iterations', null, InputOption::VALUE_OPTIONAL, 'Override iterations', null, 'int')
+            ->addOption('invocations', null, InputOption::VALUE_OPTIONAL, 'Override invocations per iteration', null, 'int')
+            ->addOption('forks', null, InputOption::VALUE_OPTIONAL, 'Number of forks', null, 'int')
+            ->addOption('mode', null, InputOption::VALUE_OPTIONAL, 'Benchmark mode', null, 'string')
+            ->addOption('timeUnit', null, InputOption::VALUE_OPTIONAL, 'Time unit', null, 'string')
+            ->addOption('format', null, InputOption::VALUE_OPTIONAL, 'Output format (console, json, md)', null, 'string')
+            ->addOption('output', null, InputOption::VALUE_OPTIONAL, 'Output file', null, 'string')
+            ->addOption('save-baseline', null, InputOption::VALUE_OPTIONAL, 'Save baseline name', null, 'string')
+            ->addOption('baseline', null, InputOption::VALUE_OPTIONAL, 'Compare against baseline', null, 'string')
+            ->addOption('threshold', null, InputOption::VALUE_OPTIONAL, 'Regression threshold', null, 'float');
     }
 
-    public function getDescription(): string
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        return 'Run performance benchmarks.';
-    }
-
-    public function run(array $args): int
-    {
-        $options = $this->parseOptions($args);
-
-        $target = $options['_target'] ?? null;
+        $target = $input->getArgument('target');
+        $options = $input->getOptions();
         $directories = $this->directories($target);
 
         try {
             $scenarios = $this->discoverScenarios($directories, $target, $options);
         } catch (\Throwable $e) {
-            fwrite(STDERR, "Discovery failed: {$e->getMessage()}\n");
+            $output->error("Discovery failed: {$e->getMessage()}");
 
             return 1;
         }
 
         if ($scenarios === []) {
-            fwrite(STDERR, "No benchmarks found.\n");
+            $output->error('No benchmarks found.');
 
             return 1;
         }
 
-        $results = $this->runScenarios($scenarios, $options);
+        $results = $this->runScenarios($scenarios, $options, $output);
 
         if ($results === []) {
-            fwrite(STDERR, "No benchmark results produced.\n");
+            $output->error('No benchmark results produced.');
 
             return 1;
         }
 
         $this->saveBaseline($options, $results);
         $this->report($options, $results);
-        $exitCode = $this->compareBaseline($options, $results);
 
-        return $exitCode;
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function parseOptions(array $args): array
-    {
-        $options = [];
-
-        foreach ($args as $arg) {
-            $arg = (string) $arg;
-
-            if (str_starts_with($arg, '--')) {
-                $option = substr($arg, 2);
-                [$key, $value] = array_pad(explode('=', $option, 2), 2, true);
-                $options[$key] = $value === true ? true : $value;
-            } else {
-                $options['_target'] = $arg;
-            }
-        }
-
-        return $options;
-    }
-
-    /**
-     * @param array<string, mixed> $options
-     * @return list<string>
-     */
-    private function directories(?string $target): array
-    {
-        if ($target !== null && is_dir($target)) {
-            return [$target];
-        }
-
-        $dirs = [$this->basePath . '/benchmarks'];
-
-        if (is_dir($this->basePath . '/app/Benchmarks')) {
-            $dirs[] = $this->basePath . '/app/Benchmarks';
-        }
-
-        return $dirs;
+        return $this->compareBaseline($options, $results);
     }
 
     /**
@@ -192,7 +162,7 @@ class BenchmarkCommand extends Command
      * @param array<string, mixed> $options
      * @return list<BenchmarkResult>
      */
-    private function runScenarios(array $scenarios, array $options): array
+    private function runScenarios(array $scenarios, array $options, OutputInterface $output): array
     {
         $results = [];
         $timeUnit = isset($options['timeUnit']) ? TimeUnit::fromString((string) $options['timeUnit']) : null;
@@ -203,11 +173,30 @@ class BenchmarkCommand extends Command
             : new BenchmarkRunner($timeUnit);
 
         foreach ($scenarios as $scenario) {
-            fwrite(STDOUT, "Benchmarking: {$scenario->name}\n");
+            $output->writeln("Benchmarking: {$scenario->name}");
             $results[] = $runner->run($scenario);
         }
 
         return $results;
+    }
+
+    /**
+     * @param list<string> $directories
+     * @return list<string>
+     */
+    private function directories(?string $target): array
+    {
+        if ($target !== null && is_dir($target)) {
+            return [$target];
+        }
+
+        $dirs = [$this->basePath . '/benchmarks'];
+
+        if (is_dir($this->basePath . '/app/Benchmarks')) {
+            $dirs[] = $this->basePath . '/app/Benchmarks';
+        }
+
+        return $dirs;
     }
 
     /**
@@ -223,7 +212,7 @@ class BenchmarkCommand extends Command
         $store = new BaselineStore($this->basePath . '/storage/benchmarks');
         $store->save((string) $options['save-baseline'], $results);
 
-        fwrite(STDOUT, "Baseline saved to storage/benchmarks/" . $options['save-baseline'] . "\n");
+        echo "Baseline saved to storage/benchmarks/" . $options['save-baseline'] . "\n";
     }
 
     /**
@@ -234,9 +223,9 @@ class BenchmarkCommand extends Command
     {
         $format = (string) ($options['format'] ?? 'console');
         $reporter = $this->reporter($format);
-        $output = isset($options['output']) ? (string) $options['output'] : null;
+        $outputFile = isset($options['output']) ? (string) $options['output'] : null;
 
-        $reporter->report($results, $output);
+        $reporter->report($results, $outputFile);
     }
 
     private function reporter(string $format): Reporter

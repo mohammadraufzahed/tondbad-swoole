@@ -6,31 +6,32 @@ namespace TondbadSwoole\Console\Commands;
 
 use InvalidArgumentException;
 use RuntimeException;
+use TondbadSwoole\Console\Input\InputArgument;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Output\OutputInterface;
 
 abstract class MakeCommand extends Command
 {
-    public function run(array $args): int
+    protected function configure(): void
     {
-        if (empty($args)) {
-            fwrite(STDERR, "Usage: tondbad {$this->getName()} <name>\n");
+        $this->addArgument('name', InputArgument::REQUIRED, 'The name of the class to generate');
+    }
 
-            return 1;
-        }
-
-        $name = $this->normalizeName($args[0]);
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        $name = $this->normalizeName($input->getArgument('name'));
         $path = $this->getDefaultPath($name);
 
         $this->ensureDirectory(dirname($path));
 
         if (file_exists($path)) {
-            fwrite(STDERR, "File already exists: {$path}\n");
+            $output->error("File already exists: {$path}");
 
             return 1;
         }
 
         file_put_contents($path, $this->compileStub($name));
-
-        fwrite(STDOUT, "Created: {$path}\n");
+        $output->success("Created: {$path}");
 
         return 0;
     }
@@ -40,16 +41,21 @@ abstract class MakeCommand extends Command
         return [];
     }
 
+    abstract protected function getStubPath(): string;
+
+    abstract protected function getDefaultPath(string $name): string;
+
     private function normalizeName(string $name): string
     {
         $name = str_replace(['/', '\\'], '/', $name);
         $name = basename($name, '.php');
         $name = preg_replace('/[^A-Za-z0-9]/', '', $name);
-        $name = ucfirst($name);
 
         if ($name === '') {
             throw new InvalidArgumentException('Invalid class name provided.');
         }
+
+        $name = ucfirst($name);
 
         foreach ($this->getNameSuffixes() as $suffix) {
             if (str_ends_with($name, $suffix)) {
@@ -83,8 +89,4 @@ abstract class MakeCommand extends Command
 
         return str_replace(array_keys($replacements), array_values($replacements), $content);
     }
-
-    abstract protected function getStubPath(): string;
-
-    abstract protected function getDefaultPath(string $name): string;
 }

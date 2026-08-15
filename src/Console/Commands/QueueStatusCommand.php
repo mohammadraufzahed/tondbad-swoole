@@ -4,60 +4,44 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Attributes\Option;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Input\InputOption;
+use TondbadSwoole\Console\Output\OutputInterface;
 use TondbadSwoole\Queue\QueueManager;
 
+#[AsCommand('queue:status', 'Show queue metrics by status.')]
 class QueueStatusCommand extends Command
 {
-    public function getName(): string
-    {
-        return 'queue:status';
-    }
+    #[Option('connection', shortcut: 'c', mode: InputOption::VALUE_OPTIONAL, description: 'Queue connection name')]
+    public ?string $connection = null;
 
-    public function getDescription(): string
-    {
-        return 'Show queue metrics by status.';
-    }
+    #[Option('queue', shortcut: 'Q', mode: InputOption::VALUE_OPTIONAL, description: 'Queue name', default: 'default')]
+    public string $queue = 'default';
 
-    public function run(array $args): int
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $options = $this->parseOptions($args);
-        $connectionName = $options['connection'] ?? null;
-        $queue = $options['queue'] ?? 'default';
-
         $app = app();
 
         if ($app === null) {
-            fwrite(STDERR, "Application not booted.\n");
+            $output->error('Application not booted.');
 
             return 1;
         }
 
         $queueManager = $app->container->make(QueueManager::class);
-        $connection = $queueManager->connection($connectionName);
-        $metrics = $connection->getMetrics($queue);
+        $connection = $queueManager->connection($this->connection);
+        $metrics = $connection->getMetrics($this->queue);
 
-        fwrite(STDOUT, "Metrics for queue: {$queue}\n");
-        fwrite(STDOUT, str_repeat('-', 30) . "\n");
+        $rows = [];
 
         foreach ($metrics as $status => $count) {
-            fwrite(STDOUT, sprintf("%-15s %d\n", $status, $count));
+            $rows[] = [$status, $count];
         }
+
+        $output->table(['Status', 'Count'], $rows);
 
         return 0;
-    }
-
-    private function parseOptions(array $args): array
-    {
-        $options = [];
-
-        foreach ($args as $arg) {
-            if (str_starts_with($arg, '--')) {
-                $option = substr($arg, 2);
-                [$key, $value] = array_pad(explode('=', $option, 2), 2, true);
-                $options[$key] = $value === true ? true : $value;
-            }
-        }
-
-        return $options;
     }
 }

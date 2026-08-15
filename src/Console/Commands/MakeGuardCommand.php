@@ -4,26 +4,19 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Attributes\AsCommand;
+
+#[AsCommand('make:guard', 'Create a new guard factory class.')]
 class MakeGuardCommand extends MakeCommand
 {
-    public function getName(): string
+    protected function getNameSuffixes(): array
     {
-        return 'make:guard';
-    }
-
-    public function getDescription(): string
-    {
-        return 'Create a new guard factory class.';
+        return ['GuardFactory', 'Guard'];
     }
 
     protected function getStubPath(): string
     {
         return __DIR__ . '/../../../stubs/guard.stub';
-    }
-
-    protected function getNameSuffixes(): array
-    {
-        return ['GuardFactory', 'Guard'];
     }
 
     protected function getDefaultPath(string $name): string

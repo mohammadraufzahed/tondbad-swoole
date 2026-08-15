@@ -4,39 +4,30 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Attributes\Argument;
+use TondbadSwoole\Console\Input\InputArgument;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Output\OutputInterface;
 use TondbadSwoole\Support\Hash\HashManager;
 
+#[AsCommand('hash:make', 'Hash a plain-text value.')]
 class HashMakeCommand extends Command
 {
-    public function getName(): string
+    #[Argument('value', mode: InputArgument::REQUIRED, description: 'Value to hash')]
+    public string $value;
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        return 'hash:make';
-    }
-
-    public function getDescription(): string
-    {
-        return 'Hash a plain-text value.';
-    }
-
-    public function run(array $args): int
-    {
-        $value = $args[0] ?? null;
-
-        if ($value === null || $value === '') {
-            fwrite(STDERR, "Usage: tondbad {$this->getName()} <value>\n");
-
-            return 1;
-        }
-
         $manager = app()?->container->make(HashManager::class);
 
         if (!$manager instanceof HashManager) {
-            fwrite(STDERR, "HashManager is not available.\n");
+            $output->error('HashManager is not available.');
 
             return 1;
         }
 
-        fwrite(STDOUT, $manager->make($value) . PHP_EOL);
+        $output->writeln($manager->make($this->value));
 
         return 0;
     }

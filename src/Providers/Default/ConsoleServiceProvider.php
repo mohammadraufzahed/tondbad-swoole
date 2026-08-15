@@ -15,9 +15,11 @@ use TondbadSwoole\Console\Commands\BenchmarkCommand;
 use TondbadSwoole\Console\Commands\CacheClearCommand;
 use TondbadSwoole\Console\Commands\CacheForgetTagsCommand;
 use TondbadSwoole\Console\Commands\CacheStatusCommand;
+use TondbadSwoole\Console\Commands\CompletionCommand;
 use TondbadSwoole\Console\Commands\GrpcServeCommand;
 use TondbadSwoole\Console\Commands\HashCheckCommand;
 use TondbadSwoole\Console\Commands\HashMakeCommand;
+use TondbadSwoole\Console\Commands\MakeCommandCommand;
 use TondbadSwoole\Console\Commands\MakeControllerCommand;
 use TondbadSwoole\Console\Commands\MakeEventCommand;
 use TondbadSwoole\Console\Commands\MakeGuardCommand;
@@ -33,6 +35,7 @@ use TondbadSwoole\Console\Commands\MigrateCommand;
 use TondbadSwoole\Console\Commands\QueueRetryCommand;
 use TondbadSwoole\Console\Commands\QueueRetryFailedCommand;
 use TondbadSwoole\Console\Commands\QueueStatusCommand;
+use TondbadSwoole\Console\Commands\QueueDispatchCommand;
 use TondbadSwoole\Console\Commands\QueueWorkCommand;
 use TondbadSwoole\Console\Commands\MigrateFreshCommand;
 use TondbadSwoole\Console\Commands\MigrateRollbackCommand;
@@ -61,7 +64,7 @@ class ConsoleServiceProvider extends ServiceProvider
             $basePath = $app->basePath();
 
             $dispatcher = $container->has(EventDispatcher::class) ? $container->make(EventDispatcher::class) : null;
-            $console = new Application($basePath, $dispatcher);
+            $console = new Application($basePath, $dispatcher, $container);
 
             $this->registerBuiltInCommands($console, $basePath, $container);
             $this->registerConfiguredCommands($console, $container, $config, $basePath);
@@ -82,6 +85,8 @@ class ConsoleServiceProvider extends ServiceProvider
             CacheClearCommand::class,
             CacheForgetTagsCommand::class,
             CacheStatusCommand::class,
+            CompletionCommand::class,
+            MakeCommandCommand::class,
             MakeControllerCommand::class,
             MakeEventCommand::class,
             MakeListenerCommand::class,
@@ -95,6 +100,7 @@ class ConsoleServiceProvider extends ServiceProvider
             HashMakeCommand::class,
             HashCheckCommand::class,
             QueueWorkCommand::class,
+            QueueDispatchCommand::class,
             QueueStatusCommand::class,
             QueueRetryCommand::class,
             QueueRetryFailedCommand::class,

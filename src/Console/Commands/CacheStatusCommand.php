@@ -4,31 +4,24 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Output\OutputInterface;
+
+#[AsCommand('cache:status', 'Show cache statistics.', coroutine: false)]
 class CacheStatusCommand extends Command
 {
-    public function getName(): string
-    {
-        return 'cache:status';
-    }
-
-    public function getDescription(): string
-    {
-        return 'Show cache statistics.';
-    }
-
-    public function run(array $args): int
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $cache = cache();
 
         if ($cache === null) {
-            fwrite(STDERR, "Cache is not available.\n");
+            $output->error('Cache is not available.');
 
             return 1;
         }
 
-        $stats = $cache->stats();
-
-        fwrite(STDOUT, json_encode($stats, JSON_PRETTY_PRINT) . "\n");
+        $output->writeln(json_encode($cache->stats(), JSON_PRETTY_PRINT));
 
         return 0;
     }

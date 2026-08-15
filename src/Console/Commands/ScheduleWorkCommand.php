@@ -6,40 +6,43 @@ namespace TondbadSwoole\Console\Commands;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Attributes\Option;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Input\InputOption;
+use TondbadSwoole\Console\Output\OutputInterface;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Events\Contracts\EventDispatcher;
 use TondbadSwoole\Scheduling\Scheduler;
 use TondbadSwoole\Scheduling\SchedulerWorker;
 
+#[AsCommand('schedule:work', 'Run scheduled tasks in a loop.', coroutine: false)]
 class ScheduleWorkCommand extends Command
 {
-    public function getName(): string
-    {
-        return 'schedule:work';
-    }
+    #[Option('run-once', mode: InputOption::VALUE_NONE, description: 'Run due tasks once and exit')]
+    public bool $runOnce = false;
 
-    public function getDescription(): string
-    {
-        return 'Run scheduled tasks in a loop.';
-    }
+    #[Option('sleep', mode: InputOption::VALUE_OPTIONAL, schema: 'int', description: 'Seconds to sleep between polls', default: 60)]
+    public int $sleep = 60;
 
-    public function run(array $args): int
-    {
-        $options = $this->parseOptions($args);
-        $runOnce = isset($options['run-once']);
-        $sleep = isset($options['sleep']) ? (int) $options['sleep'] : 60;
-        $maxRuns = isset($options['max-runs']) ? (int) $options['max-runs'] : 0;
+    #[Option('max-runs', mode: InputOption::VALUE_OPTIONAL, schema: 'int', description: 'Maximum number of poll cycles', default: 0)]
+    public int $maxRuns = 0;
 
+    #[Option('node-id', mode: InputOption::VALUE_OPTIONAL, description: 'Worker node id')]
+    public ?string $nodeId = null;
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
         $app = app();
 
         if ($app === null) {
-            fwrite(STDERR, "Application not booted.\n");
+            $output->error('Application not booted.');
 
             return 1;
         }
 
         $config = $app->container->make(Config::class);
-        $nodeId = $options['node-id'] ?? $config->get('schedule.node_id') ?? null;
+        $nodeId = $this->nodeId ?? $config->get('schedule.node_id') ?? null;
         $timezone = new DateTimeZone((string) $config->get('schedule.timezone', date_default_timezone_get()));
 
         $scheduler = $app->container->make(Scheduler::class);
@@ -49,25 +52,8 @@ class ScheduleWorkCommand extends Command
 
         $worker = new SchedulerWorker($scheduler, $dispatcher, is_string($nodeId) && $nodeId !== '' ? $nodeId : null);
 
-        $worker->run(new DateTimeImmutable('now', $timezone), $runOnce, $sleep, $maxRuns > 0 ? $maxRuns : null);
+        $worker->run(new DateTimeImmutable('now', $timezone), $this->runOnce, $this->sleep, $this->maxRuns > 0 ? $this->maxRuns : null);
 
         return 0;
-    }
-
-    private function parseOptions(array $args): array
-    {
-        $options = [];
-
-        foreach ($args as $arg) {
-            if (!str_starts_with($arg, '--')) {
-                continue;
-            }
-
-            $option = substr($arg, 2);
-            [$key, $value] = array_pad(explode('=', $option, 2), 2, true);
-            $options[$key] = $value === true ? true : $value;
-        }
-
-        return $options;
     }
 }

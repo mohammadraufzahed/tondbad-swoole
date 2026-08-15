@@ -4,18 +4,11 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Attributes\AsCommand;
+
+#[AsCommand('make:listener', 'Create a new event listener class.')]
 class MakeListenerCommand extends MakeCommand
 {
-    public function getName(): string
-    {
-        return 'make:listener';
-    }
-
-    public function getDescription(): string
-    {
-        return 'Create a new event listener class.';
-    }
-
     protected function getStubPath(): string
     {
         return __DIR__ . '/../../../stubs/listener.stub';

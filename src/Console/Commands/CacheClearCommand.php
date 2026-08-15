@@ -4,25 +4,21 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
-use OpenSwoole\Coroutine;
-use OpenSwoole\Runtime;
 use TondbadSwoole\Bootstrap\App;
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Output\OutputInterface;
 
+#[AsCommand('cache:clear', 'Clear the framework and data caches.', coroutine: false)]
 class CacheClearCommand extends Command
 {
-    public function getName(): string
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        return 'cache:clear';
-    }
+        $cache = cache();
 
-    public function getDescription(): string
-    {
-        return 'Clear the framework and data caches.';
-    }
-
-    public function run(array $args): int
-    {
-        $this->clearDataCache();
+        if ($cache !== null) {
+            $cache->clear();
+        }
 
         [$routeCacheFile, $frameworkDir] = $this->cachePaths();
 
@@ -38,40 +34,13 @@ class CacheClearCommand extends Command
             }
         }
 
-        fwrite(STDOUT, "Caches cleared.\n");
+        $output->success('Caches cleared.');
 
         return 0;
     }
 
-    private function clearDataCache(): void
-    {
-        $cache = cache();
-
-        if ($cache === null) {
-            return;
-        }
-
-        $this->runInCoroutine(fn () => $cache->clear());
-    }
-
-    private function runInCoroutine(callable $callback): mixed
-    {
-        if (Coroutine::getCid() !== -1) {
-            return $callback();
-        }
-
-        Runtime::enableCoroutine(SWOOLE_HOOK_TCP);
-
-        $result = null;
-        Coroutine::run(function () use ($callback, &$result): void {
-            $result = $callback();
-        });
-
-        return $result;
-    }
-
     /**
-     * @return array{0: string, 1: string}
+     * @return array{0: string|null, 1: string|null}
      */
     private function cachePaths(): array
     {
@@ -79,10 +48,11 @@ class CacheClearCommand extends Command
 
         if ($app instanceof App) {
             $basePath = $app->basePath();
-            $routeCacheFile = $app->config->get('app.route_cache_file', $basePath . '/storage/cache/routes.cache.php');
-            $frameworkDir = $app->config->get('app.framework_cache_dir', $basePath . '/storage/framework');
 
-            return [$routeCacheFile, $frameworkDir];
+            return [
+                $app->config->get('app.route_cache_file', $basePath . '/storage/cache/routes.cache.php'),
+                $app->config->get('app.framework_cache_dir', $basePath . '/storage/framework'),
+            ];
         }
 
         return [
