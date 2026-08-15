@@ -170,3 +170,28 @@ class GreeterService extends AttributeServiceAdapter
 ```
 
 The server is built on `OpenSwoole\GRPC\Server`, runs each RPC in its own coroutine, and passes an immutable `Context` to every handler.
+
+## Feature highlights
+
+- Zero new gRPC dependencies — service definitions are generated from the official `protoc` `FileDescriptorSet` and parsed with the `google/protobuf` PHP runtime.
+- `BindableService` + `ServiceInvoker` let implementations accept `Request`, `Context`, `Metadata`, `ServerCallInfo`, or the raw message in any order.
+- `UnaryServerInterceptor` chain supports auth, validation, logging, and metrics.
+- The `Channel` client supports unary calls and server-streaming with automatic client per coroutine.
+
+## Benchmarks
+
+`benchmarks/GrpcBenchmark.php` exercises the full unary dispatch pipeline (request parsing, service lookup, `GreeterGrpcAdapter` → `GreeterImpl`, response serialization) using the generated adapter.
+
+```bash
+php bin/tondbad benchmark benchmarks/GrpcBenchmark.php
+```
+
+Example run:
+
+```
+                          Benchmark  Mode     Cnt   Score    Error    Unit      Ops/s  Outliers
+  ---------------------------------  ----  ------  ------  -------  ------  ---------  --------
+  GrpcBenchmark::benchUnaryDispatch   avg  500000  22.650  ±0.098  μs/op  44,149.76       565
+```
+
+About **22.6 μs per unary call** and **~44,150 ops/sec** for a warm request through the dispatcher.
