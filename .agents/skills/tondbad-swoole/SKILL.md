@@ -176,5 +176,21 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - `php benchmarks/validation.php` compares `Schema::safeParse()` against the legacy `Validator` and prints timing/memory stats.
 - `queue:work --rate-limit=max:window` validates the option with `Schema`; invalid values now throw `InvalidArgumentException`, print a clear error (e.g. `Invalid --rate-limit value: ...`), and exit `1`.
 
+# Unified event dispatcher verification (`devin/events-next-level`)
+- `EventServiceProvider` auto-discovers `app/Listeners/*.php`, instantiates the class via the container, and calls `subscribe($class)`. Listeners may implement `TondbadSwoole\Events\Contracts\EventSubscriber` or be plain classes; methods decorated with `#[Listener]` are also detected.
+- The dispatcher is a single singleton: typed events (e.g. `RouteEvent`, `AuthEvent`, `CacheEvent`, `QueueEvent`, `OrmEvent`, `ConsoleEvent`, `GrpcEvent`) are dispatched as objects, and string/wildcard listeners are dispatched as `GenericEvent`.
+- Framework modules emit typed events:
+  - `route.dispatching`, `route.matched`, `route.dispatched` from `RouteDispatcher`
+  - `auth.login`, `auth.logout` from `AuthManager`
+  - `cache.hit`, `cache.miss`, `cache.set`, `cache.clear` from `HybridStore`
+  - `queue.job.added`, `queue.job.active`, `queue.job.completed`, `queue.job.failed`, etc. from `Queue`
+  - `orm.prePersist`, `orm.postPersist`, `orm.onFlush`, `orm.postFlush` from `EntityEventManager`/`UnitOfWork`
+  - `console.starting`, `console.terminated`, `console.failed`, `console.not_found` from `Console\Application`
+  - `grpc.request`, `grpc.response` from `RouteGrpcMiddleware`
+- To trace events end-to-end, create an `app/Listeners/EventTraceSubscriber` that writes to a table such as `event_traces` from each handler. To listen to a typed event by class, subscribe to the event class name (e.g. `RouteEvent::class`); the handler can call `$event->name()` to get the string event name (`route.matched`).
+- gRPC testing can use `OpenSwoole\Coroutine\Http2\Client` to send HTTP/2 `POST` to `/service/method` with `content-type: application/grpc+json`, `te: trailers`, and a body of `pack('CN', 0, strlen($json)) . $json` (5-byte gRPC length prefix). The response body also starts with the same 5-byte prefix.
+- `CacheClearCommand` calls `file_exists()` and `unlink()` on `config('app.route_cache_file')`; set this to a string path (e.g. `storage/cache/routes.cache.php`) or `cache:clear` will fatal with a `null` argument error.
+- `Model` with typed public properties bypasses `__get()`/`__set()` magic, so read persisted values with `getKey()` or `getAttribute('name')` after `em()->persist()->flush()` instead of `$model->id` or `$model->name`.
+
 # Devin Secrets Needed
 - None for local testing.

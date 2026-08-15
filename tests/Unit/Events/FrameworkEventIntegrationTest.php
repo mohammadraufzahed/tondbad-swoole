@@ -324,10 +324,10 @@ class FrameworkEventProduct extends Model
     protected ?string $table = 'products';
 
     #[Id]
-    public int $id;
+    protected int $id;
 
     #[Column]
-    public string $name;
+    protected string $name;
 
     protected array $fillable = ['name'];
 }
