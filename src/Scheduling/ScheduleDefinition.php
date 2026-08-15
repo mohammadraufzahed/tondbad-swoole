@@ -143,13 +143,13 @@ class ScheduleDefinition
         return $this->trigger->isDue($date);
     }
 
-    public function getNextRunDate(DateTimeInterface $from): DateTimeImmutable
+    public function getNextRunDate(DateTimeInterface $from, bool $allowCurrentDate = true): DateTimeImmutable
     {
         if ($this->nextRunAt !== null && $this->nextRunAt >= $from) {
             return $this->nextRunAt;
         }
 
-        return $this->trigger->getNextRunDate($from, $this->timezone);
+        return $this->trigger->getNextRunDate($from, $this->timezone, $allowCurrentDate);
     }
 
     public function getExpression(): string
@@ -192,16 +192,19 @@ class ScheduleDefinition
             'queue' => $this->queue,
             'connection' => $this->connection,
             'data' => $this->data,
-            'startDate' => $this->startDate?->format('c'),
-            'endDate' => $this->endDate?->format('c'),
+            'startDate' => $this->startDate?->format('Y-m-d H:i:s'),
+            'endDate' => $this->endDate?->format('Y-m-d H:i:s'),
             'tags' => $this->tags,
-            'nextRunAt' => $this->nextRunAt?->format('c'),
-            'lastRunAt' => $this->lastRunAt?->format('c'),
+            'nextRunAt' => $this->nextRunAt?->format('Y-m-d H:i:s'),
+            'lastRunAt' => $this->lastRunAt?->format('Y-m-d H:i:s'),
             'lastRunResult' => $this->lastRunResult,
             'runCount' => $this->runCount,
             'failCount' => $this->failCount,
             'status' => $this->status,
             'version' => $this->version,
+            'lockedUntil' => $this->lockedUntil?->format('Y-m-d H:i:s'),
+            'nodeId' => $this->nodeId,
+            'lockedRunKey' => $this->lockedRunKey,
         ];
     }
 
@@ -215,7 +218,9 @@ class ScheduleDefinition
         );
 
         $definition->description = $data['description'] ?? null;
-        $definition->timezone = isset($data['timezone']) ? new DateTimeZone($data['timezone']) : null;
+        $definition->timezone = (isset($data['timezone']) && $data['timezone'] !== '' && $data['timezone'] !== null)
+            ? new DateTimeZone($data['timezone'])
+            : null;
         $definition->betweenStart = $data['betweenStart'] ?? null;
         $definition->betweenEnd = $data['betweenEnd'] ?? null;
         $definition->unlessBetween = $data['unlessBetween'] ?? false;
@@ -230,16 +235,29 @@ class ScheduleDefinition
         $definition->queue = $data['queue'] ?? null;
         $definition->connection = $data['connection'] ?? null;
         $definition->data = $data['data'] ?? [];
-        $definition->startDate = isset($data['startDate']) ? new DateTimeImmutable($data['startDate']) : null;
-        $definition->endDate = isset($data['endDate']) ? new DateTimeImmutable($data['endDate']) : null;
+        $definition->startDate = (isset($data['startDate']) && $data['startDate'] !== '' && $data['startDate'] !== null)
+            ? new DateTimeImmutable($data['startDate'])
+            : null;
+        $definition->endDate = (isset($data['endDate']) && $data['endDate'] !== '' && $data['endDate'] !== null)
+            ? new DateTimeImmutable($data['endDate'])
+            : null;
         $definition->tags = $data['tags'] ?? [];
-        $definition->nextRunAt = isset($data['nextRunAt']) ? new DateTimeImmutable($data['nextRunAt']) : null;
-        $definition->lastRunAt = isset($data['lastRunAt']) ? new DateTimeImmutable($data['lastRunAt']) : null;
+        $definition->nextRunAt = (isset($data['nextRunAt']) && $data['nextRunAt'] !== '' && $data['nextRunAt'] !== null)
+            ? new DateTimeImmutable($data['nextRunAt'])
+            : null;
+        $definition->lastRunAt = (isset($data['lastRunAt']) && $data['lastRunAt'] !== '' && $data['lastRunAt'] !== null)
+            ? new DateTimeImmutable($data['lastRunAt'])
+            : null;
         $definition->lastRunResult = $data['lastRunResult'] ?? null;
         $definition->runCount = $data['runCount'] ?? 0;
         $definition->failCount = $data['failCount'] ?? 0;
         $definition->status = $data['status'] ?? 'active';
         $definition->version = $data['version'] ?? 0;
+        $definition->lockedUntil = (isset($data['lockedUntil']) && $data['lockedUntil'] !== '' && $data['lockedUntil'] !== null)
+            ? new DateTimeImmutable($data['lockedUntil'])
+            : null;
+        $definition->nodeId = $data['nodeId'] ?? null;
+        $definition->lockedRunKey = $data['lockedRunKey'] ?? null;
 
         return $definition;
     }

@@ -26,7 +26,7 @@ class OnceTrigger implements Trigger
         return $time >= $this->at;
     }
 
-    public function getNextRunDate(DateTimeInterface $from, ?DateTimeZone $tz = null): DateTimeImmutable
+    public function getNextRunDate(DateTimeInterface $from, ?DateTimeZone $tz = null, bool $allowCurrentDate = false): DateTimeImmutable
     {
         $next = $this->at;
 
@@ -50,7 +50,7 @@ class OnceTrigger implements Trigger
     {
         return [
             'type' => 'once',
-            'at' => $this->at->format('c'),
+            'at' => $this->at->format('Y-m-d H:i:s'),
         ];
     }
 }

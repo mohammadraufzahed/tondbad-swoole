@@ -31,7 +31,7 @@ class DelayTrigger implements Trigger
         return $time >= $this->runAt;
     }
 
-    public function getNextRunDate(DateTimeInterface $from, ?DateTimeZone $tz = null): DateTimeImmutable
+    public function getNextRunDate(DateTimeInterface $from, ?DateTimeZone $tz = null, bool $allowCurrentDate = false): DateTimeImmutable
     {
         $next = $this->runAt;
 
@@ -55,7 +55,7 @@ class DelayTrigger implements Trigger
     {
         return [
             'type' => 'delay',
-            'runAt' => $this->runAt->format('c'),
+            'runAt' => $this->runAt->format('Y-m-d H:i:s'),
         ];
     }
 }

@@ -221,15 +221,19 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 
 # Scheduler (`devin/scheduler-rewrite`)
 - `routes/console.php` must return a callable that receives `TondbadSwoole\Scheduling\Schedule` and registers schedules (e.g. `$schedule->call(fn () => ...)->everyMinute()`).
-- `php bin/tondbad schedule:work --run-once` runs one poll tick. Add `--sleep=N`, `--max-runs=M`, and `--node-id=<id>` for controlled or distributed loops.
+- `php bin/tondbad schedule:work --run-once` runs one poll tick. It accepts `--sleep=N`, `--max-runs=M`, and `--node-id=<id>`.
 - `schedule:list`, `schedule:run <id>`, `schedule:pause <id>`, `schedule:resume <id>`, and `schedule:delete <id>` are registered CLI commands.
 - `ScheduleWorkCommand` uses `SchedulerWorker` and accepts `--node-id`; it dispatches `ScheduledJob` for closure/callable tasks unless `queue.default` is `sync` (which runs them in-process).
 - `SchedulerWorker` with a non-null `nodeId` performs an atomic `claim()` on the configured `ScheduleStore`, preventing duplicate execution across clustered workers.
 - `ScheduledJob` rehydrates `ClosureTask` from the `ScheduleRegistry`, so `routes/console.php` must also be loaded in queue worker processes for closure schedules to resolve.
 - Closure schedules get a stable `closureId` (`closure-1`, `closure-2`, ...) derived from the registration order in `routes/console.php`, so the same closure is resolved across `schedule:work` and `queue:work` processes as long as the file is loaded in the same order.
-- `Schedule::addEvent()` merges existing store state (status, last run, locks) before upserting, so `schedule:pause`, `schedule:resume`, and `schedule:delete` persist across `routes/console.php` reloads.
+- `Schedule::addEvent()` merges existing store state (status, last run, locks) before upserting, but persistence depends on a working `ScheduleStore` implementation.
 - `withoutOverlapping()` uses the configured `LockProvider` (`file` by default, `SCHEDULE_LOCKS=redis` for distributed). Two concurrent `schedule:work --run-once` processes against the same schedule should result in only one execution.
 - `SchedulerBenchmark` runs from `php bin/tondbad benchmark benchmarks/SchedulerBenchmark.php`.
+- `ScheduleWorkCommand` no longer enables OpenSwoole runtime hooks or wraps execution in `Coroutine::run`, which prevents `InMemoryCache` timers from keeping one-off `schedule:work --run-once` processes alive when scheduled commands such as `cache:clear` resolve the cache.
+- `ScheduleDefinition::toArray()` serializes run/lock timestamps and `DatabaseScheduleStore` maps them to the `scheduled_jobs` migration columns; `Builder::exists()` is available for the upsert existence check.
+- `ScheduleDefinition::fromArray()` treats empty strings as `null` for timezone and all datetime fields, so `RedisScheduleStore` (and any store using empty-string-nulls) hydrates correctly.
+- `CronTrigger::getNextRunDate` supports `allowCurrentDate` so `warmNextRunDates()` can include the current minute while post-run scheduling advances to the next occurrence.
 
 # Devin Secrets Needed
 - None for local testing.

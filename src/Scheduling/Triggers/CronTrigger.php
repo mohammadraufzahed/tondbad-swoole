@@ -29,9 +29,9 @@ class CronTrigger implements Trigger
         return $this->cron->isDue($time);
     }
 
-    public function getNextRunDate(DateTimeInterface $from, ?DateTimeZone $tz = null): DateTimeImmutable
+    public function getNextRunDate(DateTimeInterface $from, ?DateTimeZone $tz = null, bool $allowCurrentDate = false): DateTimeImmutable
     {
-        $next = $this->cron->getNextRunDate($from);
+        $next = $this->cron->getNextRunDate($from, 0, $allowCurrentDate, $tz?->getName());
 
         if ($tz !== null) {
             $next->setTimezone($tz);

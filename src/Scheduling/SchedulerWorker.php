@@ -85,7 +85,7 @@ class SchedulerWorker
 
     private function sleep(int $seconds): void
     {
-        if (class_exists(\OpenSwoole\Coroutine\System::class) && \OpenSwoole\Coroutine\getCid() >= 0) {
+        if (class_exists(\OpenSwoole\Coroutine\System::class) && \OpenSwoole\Coroutine::getCid() >= 0) {
             \OpenSwoole\Coroutine\System::sleep($seconds);
 
             return;

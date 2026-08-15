@@ -6,8 +6,6 @@ namespace TondbadSwoole\Console\Commands;
 
 use DateTimeImmutable;
 use DateTimeZone;
-use OpenSwoole\Coroutine;
-use OpenSwoole\Runtime;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Events\Contracts\EventDispatcher;
 use TondbadSwoole\Scheduling\Scheduler;
@@ -40,8 +38,6 @@ class ScheduleWorkCommand extends Command
             return 1;
         }
 
-        $this->enableSwooleHooks();
-
         $config = $app->container->make(Config::class);
         $nodeId = $options['node-id'] ?? $config->get('schedule.node_id') ?? null;
         $timezone = new DateTimeZone((string) $config->get('schedule.timezone', date_default_timezone_get()));
@@ -53,15 +49,7 @@ class ScheduleWorkCommand extends Command
 
         $worker = new SchedulerWorker($scheduler, $dispatcher, is_string($nodeId) && $nodeId !== '' ? $nodeId : null);
 
-        $runner = function () use ($worker, $timezone, $runOnce, $sleep, $maxRuns): void {
-            $worker->run(new DateTimeImmutable('now', $timezone), $runOnce, $sleep, $maxRuns > 0 ? $maxRuns : null);
-        };
-
-        if (class_exists(Coroutine::class) && Coroutine::getCid() === -1) {
-            Coroutine::run($runner);
-        } else {
-            $runner();
-        }
+        $worker->run(new DateTimeImmutable('now', $timezone), $runOnce, $sleep, $maxRuns > 0 ? $maxRuns : null);
 
         return 0;
     }
@@ -81,18 +69,5 @@ class ScheduleWorkCommand extends Command
         }
 
         return $options;
-    }
-
-    private function enableSwooleHooks(): void
-    {
-        if (!class_exists(Runtime::class)) {
-            return;
-        }
-
-        $flags = (int) Runtime::getHookFlags();
-
-        if (($flags & Runtime::HOOK_ALL) === 0) {
-            Runtime::enableCoroutine(Runtime::HOOK_ALL);
-        }
     }
 }

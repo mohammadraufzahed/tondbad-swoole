@@ -135,9 +135,9 @@ class Scheduler
         return $definition->isDue($time);
     }
 
-    public function getNextRunDate(ScheduleDefinition $definition, DateTimeInterface $from): DateTimeImmutable
+    public function getNextRunDate(ScheduleDefinition $definition, DateTimeInterface $from, bool $allowCurrentDate = true): DateTimeImmutable
     {
-        return $definition->getNextRunDate($from);
+        return $definition->getNextRunDate($from, $allowCurrentDate);
     }
 
     public function getNextRunDateForAll(DateTimeInterface $from): ?DateTimeImmutable
@@ -145,7 +145,7 @@ class Scheduler
         $next = null;
 
         foreach ($this->store->all() as $definition) {
-            $candidate = $this->getNextRunDate($definition, $from);
+            $candidate = $this->getNextRunDate($definition, $from, false);
 
             if ($next === null || $candidate < $next) {
                 $next = $candidate;
@@ -288,7 +288,7 @@ class Scheduler
                 continue;
             }
 
-            $definition->nextRunAt = $this->calculator->calculate($definition, $time);
+            $definition->nextRunAt = $this->calculator->calculate($definition, $time, true);
             $this->store->upsert($definition);
         }
     }

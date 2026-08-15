@@ -12,7 +12,7 @@ interface Trigger
 {
     public function isDue(DateTimeInterface $time): bool;
 
-    public function getNextRunDate(DateTimeInterface $from, ?DateTimeZone $tz = null): DateTimeImmutable;
+    public function getNextRunDate(DateTimeInterface $from, ?DateTimeZone $tz = null, bool $allowCurrentDate = false): DateTimeImmutable;
 
     /**
      * A stable key for this trigger occurrence at the given time.

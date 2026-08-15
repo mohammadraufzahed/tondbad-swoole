@@ -64,6 +64,14 @@ class DatabaseScheduleStore implements ScheduleStore
         $data['locked_until'] = $data['lockedUntil'];
         $data['node_id'] = $data['nodeId'];
         $data['locked_run_key'] = $data['lockedRunKey'];
+        $data['misfire_policy'] = $data['misfire'];
+        $data['between_start'] = $data['betweenStart'];
+        $data['between_end'] = $data['betweenEnd'];
+        $data['unless_between'] = $data['unlessBetween'];
+        $data['queue'] = $data['queue'];
+        $data['connection'] = $data['connection'];
+        $data['created_at'] = $data['createdAt'] ?? (new DateTimeImmutable())->format('Y-m-d H:i:s');
+        $data['updated_at'] = (new DateTimeImmutable())->format('Y-m-d H:i:s');
 
         unset(
             $data['trigger'],
@@ -84,12 +92,17 @@ class DatabaseScheduleStore implements ScheduleStore
             $data['lockedUntil'],
             $data['nodeId'],
             $data['lockedRunKey'],
-            $data['timezone'],
+            $data['misfire'],
+            $data['betweenStart'],
+            $data['betweenEnd'],
+            $data['unlessBetween'],
+            $data['createdAt'],
         );
 
         $exists = $this->database->table($this->table)->where('id', $definition->id)->exists();
 
         if ($exists) {
+            unset($data['created_at']);
             $this->database->table($this->table)->where('id', $definition->id)->update($data);
         } else {
             $data['id'] = $definition->id;
@@ -193,7 +206,7 @@ class DatabaseScheduleStore implements ScheduleStore
             'outputPath' => $row['output_path'] ?? null,
             'maxAttempts' => (int) ($row['max_attempts'] ?? 1),
             'backoff' => json_decode($row['backoff'] ?? '[]', true),
-            'misfire' => $row['misfire'] ?? 'smart',
+            'misfire' => $row['misfire_policy'] ?? 'smart',
             'rateLimitMax' => isset($row['rate_limit_max']) ? (int) $row['rate_limit_max'] : null,
             'rateLimitWindow' => isset($row['rate_limit_window']) ? (int) $row['rate_limit_window'] : null,
             'queue' => $row['queue'] ?? null,

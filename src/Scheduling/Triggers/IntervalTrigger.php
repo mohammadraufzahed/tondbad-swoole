@@ -33,7 +33,7 @@ class IntervalTrigger implements Trigger
         return $next->getTimestamp() === (int) $time->getTimestamp();
     }
 
-    public function getNextRunDate(DateTimeInterface $from, ?DateTimeZone $tz = null): DateTimeImmutable
+    public function getNextRunDate(DateTimeInterface $from, ?DateTimeZone $tz = null, bool $allowCurrentDate = false): DateTimeImmutable
     {
         $start = $this->startAt ?? $from;
         $startTs = $start->getTimestamp();
@@ -68,7 +68,7 @@ class IntervalTrigger implements Trigger
         return [
             'type' => 'interval',
             'seconds' => $this->seconds,
-            'startAt' => $this->startAt?->format('c'),
+            'startAt' => $this->startAt?->format('Y-m-d H:i:s'),
         ];
     }
 }

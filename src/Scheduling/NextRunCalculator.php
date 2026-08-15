@@ -11,12 +11,12 @@ use TondbadSwoole\Scheduling\Triggers\IntervalTrigger;
 
 class NextRunCalculator
 {
-    public function calculate(ScheduleDefinition $definition, DateTimeInterface $from): DateTimeImmutable
+    public function calculate(ScheduleDefinition $definition, DateTimeInterface $from, bool $allowCurrentDate = false): DateTimeImmutable
     {
-        $next = $definition->trigger->getNextRunDate($from, $definition->timezone);
+        $next = $definition->trigger->getNextRunDate($from, $definition->timezone, $allowCurrentDate);
 
         if ($definition->startDate !== null && $next < $definition->startDate) {
-            $next = $definition->trigger->getNextRunDate($definition->startDate, $definition->timezone);
+            $next = $definition->trigger->getNextRunDate($definition->startDate, $definition->timezone, true);
         }
 
         return $next;

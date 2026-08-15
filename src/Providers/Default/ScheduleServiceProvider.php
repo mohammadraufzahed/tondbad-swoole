@@ -20,6 +20,7 @@ use TondbadSwoole\Scheduling\Locks\NullLockProvider;
 use TondbadSwoole\Scheduling\Schedule;
 use TondbadSwoole\Scheduling\ScheduleRegistry;
 use TondbadSwoole\Scheduling\Scheduler;
+use TondbadSwoole\Scheduling\Stores\DatabaseScheduleStore;
 use TondbadSwoole\Scheduling\Stores\MemoryScheduleStore;
 use TondbadSwoole\Scheduling\Stores\RedisScheduleStore;
 
@@ -27,6 +28,8 @@ class ScheduleServiceProvider extends ServiceProvider
 {
     public function register(Container $container): void
     {
+        $this->loadMigrationsFrom(__DIR__ . '/../../Database/Migrations/Scheduler');
+
         $container->singleton(ScheduleRegistry::class, static fn () => new ScheduleRegistry());
 
         $container->singleton(ScheduleStore::class, function () use ($container) {
@@ -34,7 +37,7 @@ class ScheduleServiceProvider extends ServiceProvider
             $driver = $config->get('schedule.store', 'memory');
 
             return match ($driver) {
-                'database' => $container->make(Stores\DatabaseScheduleStore::class),
+                'database' => $container->make(DatabaseScheduleStore::class),
                 'redis' => new RedisScheduleStore(
                     $config,
                     $container->make(ScheduleRegistry::class),
