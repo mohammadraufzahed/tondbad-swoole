@@ -203,5 +203,21 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - `--baseline=main.json` compares the current run against the saved baseline. With `--threshold=0.05` (default), the command exits `0` and prints `No regressions detected.` if every mean is within 5%; otherwise it exits `1` and prints each regression.
 - To sanity-check regression detection, save a baseline, manually set a result's `mean` to `0.000001` in a copy, then run with `--baseline=copy.json --threshold=0` and confirm exit code `1` and `Performance regressions detected`.
 
+# Module-specific benchmarks (`devin/module-benchmarks`)
+- Run `php bin/tondbad benchmark` from the repo root to discover and execute the module benchmarks in `benchmarks/`:
+  - `AuthBenchmark` (`benchIssueApiToken`, `benchCheck`) — boots `BenchmarkApp`, runs migrations, seeds `users`, and issues/checks API tokens.
+  - `CacheBenchmark` (`benchGet`, `benchSet`) — in-memory cache `get`/`set`.
+  - `ConsoleBenchmark` (`benchRun`) — dispatches a no-op console command.
+  - `EventDispatcherBenchmark` (`benchDispatch`) — plain `Dispatcher` dispatch.
+  - `GrpcBenchmark` (`benchGrpcRouteDispatch`) — dispatches a gRPC route via `GrpcHttpRequest`/`GrpcHttpResponse`.
+  - `OrmBenchmark` (`benchPersist`, `benchFind`, `benchUpdate`) — creates `benchmark_products` via `SchemaTool` and runs EM operations.
+  - `QueueBenchmark` (`benchPush`, `benchPop`) — boots `BenchmarkApp`, migrates, and pushes 10k `NoopQueueJob`s before benchmarking.
+  - `RoutingBenchmark` (`benchRouteDispatch`) — registers `/users/{id}` and dispatches via `RouteDispatcher`.
+  - `SchedulerBenchmark` (`benchDueEvents`, `benchRunDueEvents`) — builds a `Schedule` with 50 call events.
+  - `ValidationBenchmark` (`benchSchema`, `benchValidator`) — compares `Schema::safeParse` with the legacy `Validator`.
+- All module benchmarks boot the framework through `benchmarks/Support/BenchmarkApp.php` using SQLite `:memory:`, in-memory cache, and the database queue driver.
+- `BenchmarkCommand::classNameFromFile` now resolves namespace-less benchmark files (e.g. `benchmarks/AuthBenchmark.php`) by returning `AuthBenchmark`, so a file path works as the positional target: `php bin/tondbad benchmark benchmarks/AuthBenchmark.php`.
+- When comparing against a saved baseline, the default `--threshold=0.05` can flag natural benchmark variance as a regression. For stable pass/fail comparisons, use `--threshold=0.10` or higher; for a strict regression gate, keep the default or lower.
+
 # Devin Secrets Needed
 - None for local testing.
