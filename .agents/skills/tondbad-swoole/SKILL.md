@@ -192,5 +192,16 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - `CacheClearCommand` calls `file_exists()` and `unlink()` on `config('app.route_cache_file')`; set this to a string path (e.g. `storage/cache/routes.cache.php`) or `cache:clear` will fatal with a `null` argument error.
 - `Model` with typed public properties bypasses `__get()`/`__set()` magic, so read persisted values with `getKey()` or `getAttribute('name')` after `em()->persist()->flush()` instead of `$model->id` or `$model->name`.
 
+# Benchmark module verification (`devin/benchmark-module`)
+- Run benchmarks from the repo root with `php bin/tondbad benchmark`. It auto-discovers classes annotated with `#[Benchmark]` in `benchmarks/` and `app/Benchmarks/`.
+- Console output shows `Benchmark`, `Mode`, `Cnt`, `Score`, `Error`, `Unit`, `Ops/s`, and `Outliers` for each scenario. `Cnt` equals `iterations × invocations` (multiplied by `forks` when forking).
+- Use `--iterations=N`, `--warmup=N`, `--invocations=N`, `--forks=N`, `--mode=avg|throughput|sample|single`, `--timeUnit=us|ms|ns|s` to override the `#[Benchmark]` defaults.
+- Filter to one benchmark by passing a class/name fragment as the positional argument, e.g. `php bin/tondbad benchmark EventDispatcherBenchmark`.
+- `--forks=2` spawns child PHP processes via `proc_open([PHP_BINARY, 'bin/benchmark-runner.php', <base64-encoded scenario>])`; the child re-runs the scenario and returns JSON.
+- `--format=json --output=/tmp/bench.json` writes machine-readable results; `--format=md --output=/tmp/bench.md` writes a markdown table.
+- `--save-baseline=main.json` writes results to `storage/benchmarks/main.json`.
+- `--baseline=main.json` compares the current run against the saved baseline. With `--threshold=0.05` (default), the command exits `0` and prints `No regressions detected.` if every mean is within 5%; otherwise it exits `1` and prints each regression.
+- To sanity-check regression detection, save a baseline, manually set a result's `mean` to `0.000001` in a copy, then run with `--baseline=copy.json --threshold=0` and confirm exit code `1` and `Performance regressions detected`.
+
 # Devin Secrets Needed
 - None for local testing.
