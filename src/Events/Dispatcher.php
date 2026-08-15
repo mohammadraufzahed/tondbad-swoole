@@ -11,117 +11,411 @@ use ReflectionMethod;
 use ReflectionNamedType;
 use ReflectionParameter;
 use TondbadSwoole\Core\Container;
+use TondbadSwoole\Events\Contracts\EventDispatcher as EventDispatcherContract;
+use TondbadSwoole\Events\Contracts\EventSubscriber;
+use TondbadSwoole\Events\Contracts\QueueableEvent;
+use TondbadSwoole\Queue\Jobs\Job;
 use TondbadSwoole\Queue\QueueInterface;
 
-class Dispatcher
+class Dispatcher implements EventDispatcherContract
 {
+    private int $counter = 0;
+
     /**
-     * @var array<string, list<Closure>>
+     * @var array<string, list<array{0:int,1:Closure,2:string,3:mixed}>>
      */
     private array $listeners = [];
 
-    public function __construct(
-        private readonly Container $container,
-        private readonly ?QueueInterface $queue = null,
-    ) {
-    }
+    /**
+     * @var array<string, list<array{0:int,1:Closure,2:string,3:mixed}>>
+     */
+    private array $wildcards = [];
 
     /**
-     * @param callable|array{0: class-string|object, 1: string}|class-string $listener
+     * @var array<string, list<Closure>>
      */
-    public function listen(string $event, callable|array|string $listener): void
-    {
-        $listener = $this->normalizeListener($listener);
+    private array $sorted = [];
 
-        if ($this->shouldQueue($listener)) {
-            $this->listeners[$event][] = $this->queueListenerClosure($listener);
+    /**
+     * @var array<string, true>
+     */
+    private array $sortedStale = [];
+
+    /**
+     * @var array<string, array{key: string, wildcard: bool}>
+     */
+    private array $idMap = [];
+
+    public function __construct(private readonly Container $container)
+    {
+    }
+
+    public function listen(string|object $event, callable|array|string $listener, int $priority = 0): ListenerId
+    {
+        $key = $this->eventKey($event);
+        $normalized = $this->normalizeListener($listener);
+        $flags = $this->listenerFlags($normalized);
+        $id = $this->nextId();
+        $closure = ($flags['queued'] || $flags['async'])
+            ? $this->wrapQueuedAsync($normalized, $flags['queued'], $flags['async'])
+            : $this->wrapListener($normalized);
+
+        if ($this->isWildcard($key)) {
+            $this->wildcards[$key][] = [$priority, $closure, $id, $normalized];
+        } else {
+            $this->listeners[$key][] = [$priority, $closure, $id, $normalized];
+        }
+
+        $this->idMap[$id] = ['key' => $key, 'wildcard' => $this->isWildcard($key)];
+        $this->markStale($key);
+
+        return new ListenerId($id);
+    }
+
+    public function once(string|object $event, callable|array|string $listener, int $priority = 0): ListenerId
+    {
+        $id = $this->nextId();
+        $key = $this->eventKey($event);
+        $normalized = $this->normalizeListener($listener);
+        $flags = $this->listenerFlags($normalized);
+
+        $wrapper = function (object $event, ?string $eventName = null) use ($id, $normalized, $flags): mixed {
+            $this->off(new ListenerId($id));
+
+            if ($flags['queued']) {
+                $this->pushToQueue($normalized, $event, $eventName);
+
+                return null;
+            }
+
+            if ($flags['async']) {
+                $this->runAsync($normalized, $event, $eventName);
+
+                return null;
+            }
+
+            return $this->callListener($normalized, $event, $eventName);
+        };
+
+        if ($this->isWildcard($key)) {
+            $this->wildcards[$key][] = [$priority, $wrapper, $id, $normalized];
+        } else {
+            $this->listeners[$key][] = [$priority, $wrapper, $id, $normalized];
+        }
+
+        $this->idMap[$id] = ['key' => $key, 'wildcard' => $this->isWildcard($key)];
+        $this->markStale($key);
+
+        return new ListenerId($id);
+    }
+
+    public function off(ListenerId|string $event, callable|array|string|null $listener = null): void
+    {
+        if ($event instanceof ListenerId) {
+            $this->offById($event->value);
 
             return;
         }
 
-        $this->listeners[$event][] = $this->listenerClosure($listener);
-    }
+        $key = $this->eventKey($event);
 
-    public function dispatch(string|object $event, mixed $payload = null): array
-    {
-        [$eventName, $payload] = $this->normalizeEvent($event, $payload);
-        $responses = [];
+        if ($listener === null) {
+            unset($this->listeners[$key], $this->wildcards[$key]);
+            $this->markStale($key);
 
-        foreach ($this->getListeners($eventName) as $listener) {
-            $responses[] = $listener($payload, $eventName);
+            return;
         }
 
-        return $responses;
+        $normalized = $this->normalizeListener($listener);
+
+        if ($this->isWildcard($key)) {
+            $this->removeMatching($this->wildcards, $key, $normalized);
+        } else {
+            $this->removeMatching($this->listeners, $key, $normalized);
+        }
+
+        $this->markStale($key);
+    }
+
+    public function forget(string $event): void
+    {
+        $this->off($event);
+    }
+
+    public function subscribe(string|object $subscriber): void
+    {
+        $subscriber = is_string($subscriber) ? $this->container->make($subscriber) : $subscriber;
+
+        if ($subscriber instanceof EventSubscriber) {
+            foreach ($subscriber->getSubscribedEvents() as $event => $config) {
+                [$method, $priority, $queued, $async] = $this->parseSubscriberConfig($config);
+                $this->registerListener($event, [$subscriber, $method], $priority ?? 0, $queued, $async);
+            }
+        }
+
+        if (method_exists($subscriber, 'subscribe')) {
+            $reflection = new ReflectionMethod($subscriber, 'subscribe');
+            $parameters = $reflection->getParameters();
+
+            if (count($parameters) === 1 && $parameters[0]->getType() instanceof ReflectionNamedType && $parameters[0]->getType()->getName() === EventDispatcherContract::class) {
+                $subscriber->subscribe($this);
+            }
+        }
+
+        $reflection = new ReflectionClass($subscriber);
+
+        $classAttributes = $reflection->getAttributes(Listener::class);
+        foreach ($classAttributes as $attribute) {
+            /** @var Listener $listener */
+            $listener = $attribute->newInstance();
+            foreach ($listener->events as $event) {
+                $this->registerListener($event, [$subscriber, 'handle'], $listener->priority ?? 0, $listener->queued, $listener->async);
+            }
+        }
+
+        foreach ($reflection->getMethods() as $method) {
+            $attributes = $method->getAttributes(Listener::class);
+            foreach ($attributes as $attribute) {
+                /** @var Listener $listener */
+                $listener = $attribute->newInstance();
+                foreach ($listener->events as $event) {
+                    $this->registerListener($event, [$subscriber, $method->getName()], $listener->priority ?? 0, $listener->queued, $listener->async);
+                }
+            }
+        }
+    }
+
+    public function dispatch(string|object $event, mixed $payload = null): DispatchResult
+    {
+        [$eventObject, $eventName] = $this->normalizeEvent($event, $payload);
+
+        $listeners = $this->getListenersFor($eventObject, $eventName);
+
+        if ($listeners === [] && $eventObject instanceof Event && !$eventObject instanceof DeadEvent) {
+            return $this->dispatch(new DeadEvent($eventObject));
+        }
+
+        $responses = [];
+        $errors = [];
+
+        foreach ($listeners as $listener) {
+            if ($eventObject instanceof Event && $eventObject->isPropagationStopped()) {
+                break;
+            }
+
+            try {
+                $responses[] = $listener($eventObject, $eventName);
+            } catch (\Throwable $e) {
+                $errors[] = new ListenerError(
+                    $eventName,
+                    $this->listenerName($listener),
+                    $e,
+                );
+            }
+        }
+
+        return new DispatchResult(
+            $eventObject,
+            $responses,
+            $eventObject instanceof Event ? $eventObject->isPropagationStopped() : false,
+            $errors,
+        );
     }
 
     public function until(string|object $event, mixed $payload = null): mixed
     {
-        [$eventName, $payload] = $this->normalizeEvent($event, $payload);
+        [$eventObject, $eventName] = $this->normalizeEvent($event, $payload);
+        $listeners = $this->getListenersFor($eventObject, $eventName);
 
-        foreach ($this->getListeners($eventName) as $listener) {
-            $response = $listener($payload, $eventName);
+        foreach ($listeners as $listener) {
+            if ($eventObject instanceof Event && $eventObject->isPropagationStopped()) {
+                break;
+            }
 
-            if ($response !== null) {
-                return $response;
+            try {
+                $result = $listener($eventObject, $eventName);
+
+                if ($result !== null) {
+                    return $result;
+                }
+            } catch (\Throwable $e) {
+                // until() does not collect errors; a failing listener is treated as no result.
             }
         }
 
         return null;
     }
 
-    public function forget(string $event): void
+    public function hasListeners(string|object $event): bool
     {
-        unset($this->listeners[$event]);
+        return $this->getListenersForEventKey($this->eventKey($event)) !== [];
+    }
+
+    public function getListeners(string|object $event): array
+    {
+        return $this->getListenersForEventKey($this->eventKey($event));
     }
 
     /**
-     * @param class-string|object $subscriber
+     * @param class-string|object $event
      */
-    public function subscribe(string|object $subscriber): void
+    private function eventKey(string|object $event): string
     {
-        $subscriber = is_string($subscriber) ? $this->container->make($subscriber) : $subscriber;
+        return is_string($event) ? $event : $event::class;
+    }
 
-        if (!is_object($subscriber) || !method_exists($subscriber, 'subscribe')) {
-            throw new \InvalidArgumentException('Subscriber must have a subscribe method.');
+    private function isWildcard(string $key): bool
+    {
+        return str_contains($key, '*');
+    }
+
+    private function nextId(): string
+    {
+        return 'listener_' . ++$this->counter;
+    }
+
+    private function markStale(string $key): void
+    {
+        $this->sortedStale[$key] = true;
+
+        foreach (array_keys($this->sorted) as $resolvedKey) {
+            if ($resolvedKey === $key || $this->wildcardMatches($resolvedKey, $key) || $this->wildcardMatches($key, $resolvedKey)) {
+                unset($this->sorted[$resolvedKey]);
+            }
+        }
+    }
+
+    private function wildcardMatches(string $pattern, string $subject): bool
+    {
+        if (!str_contains($pattern, '*')) {
+            return false;
         }
 
-        $subscriber->subscribe($this);
+        $regex = '/^' . str_replace('\\*', '.*', preg_quote($pattern, '/')) . '$/';
+
+        return (bool) preg_match($regex, $subject);
     }
 
-    /**
-     * @return list<Closure>
-     */
-    public function getListeners(string $event): array
+    private function registerListener(string $event, callable|array $listener, int $priority, bool $queued, bool $async): void
     {
-        return $this->listeners[$event] ?? [];
-    }
-
-    /**
-     * @return list<string>
-     */
-    public function getEvents(): array
-    {
-        return array_keys($this->listeners);
-    }
-
-    /**
-     * @param array{0: class-string|object, 1: string}|callable $listener
-     */
-    public function callListener(array|callable $listener, mixed $payload, ?string $eventName = null): mixed
-    {
-        $listener = $this->normalizeListener($listener);
-
-        if (is_array($listener) && is_string($listener[0])) {
-            $listener[0] = $this->container->make($listener[0]);
+        if ($queued || $async) {
+            $listener = $this->wrapQueuedAsync($listener, $queued, $async);
         }
 
-        $parameters = $this->resolveParameters($listener, $payload, $eventName);
-
-        return $this->container->call($listener, $parameters);
+        $this->listen($event, $listener, $priority);
     }
 
     /**
-     * @param callable|array{0: class-string|object, 1: string}|class-string $listener
+     * @return array{0: string, 1?: int, 2?: bool, 3?: bool}
+     */
+    private function parseSubscriberConfig(string|array $config): array
+    {
+        if (is_string($config)) {
+            return [$config, 0, false, false];
+        }
+
+        return [
+            $config[0] ?? '',
+            $config[1] ?? 0,
+            $config[2] ?? false,
+            $config[3] ?? false,
+        ];
+    }
+
+    private function offById(string $id): void
+    {
+        $meta = $this->idMap[$id] ?? null;
+
+        if ($meta === null) {
+            return;
+        }
+
+        if ($meta['wildcard']) {
+            $this->removeById($this->wildcards, $meta['key'], $id);
+        } else {
+            $this->removeById($this->listeners, $meta['key'], $id);
+        }
+
+        unset($this->idMap[$id]);
+        $this->markStale($meta['key']);
+    }
+
+    /**
+     * @param array<string, list<array{0:int,1:Closure,2:string,3:mixed}>> $store
+     */
+    private function removeById(array &$store, string $key, string $id): void
+    {
+        if (!isset($store[$key])) {
+            return;
+        }
+
+        $store[$key] = array_values(array_filter($store[$key], fn (array $entry) => $entry[2] !== $id));
+
+        if ($store[$key] === []) {
+            unset($store[$key]);
+        }
+    }
+
+    /**
+     * @param array<string, list<array{0:int,1:Closure,2:string,3:mixed}>> $store
+     * @param array{0: class-string|object, 1: string}|callable $normalized
+     */
+    private function removeMatching(array &$store, string $key, array|callable $normalized): void
+    {
+        if (!isset($store[$key])) {
+            return;
+        }
+
+        $store[$key] = array_values(array_filter($store[$key], function (array $entry) use ($normalized): bool {
+            return !$this->listenersMatch($entry[3], $normalized);
+        }));
+
+        if ($store[$key] === []) {
+            unset($store[$key]);
+        }
+    }
+
+    /**
+     * @param array{0: class-string|object, 1: string}|callable $a
+     * @param array{0: class-string|object, 1: string}|callable $b
+     */
+    private function listenersMatch(array|callable $a, array|callable $b): bool
+    {
+        if ($a instanceof Closure && $b instanceof Closure) {
+            return $a === $b;
+        }
+
+        if (is_array($a) && is_array($b)) {
+            return $a[0] === $b[0] && ($a[1] ?? 'handle') === ($b[1] ?? 'handle');
+        }
+
+        if (is_string($a) && is_string($b)) {
+            return $a === $b;
+        }
+
+        return false;
+    }
+
+    /**
+     * @return array{0: object, 1: string}
+     */
+    private function normalizeEvent(string|object $event, mixed $payload): array
+    {
+        if (is_string($event)) {
+            if ($payload instanceof Event) {
+                return [$payload, $event];
+            }
+
+            $subject = is_object($payload) ? $payload : null;
+
+            return [new GenericEvent($event, $payload, $subject), $event];
+        }
+
+        return [$event, $event::class];
+    }
+
+    /**
+     * @param class-string|object|callable $listener
      * @return array{0: class-string|object, 1: string}|callable
      */
     private function normalizeListener(callable|array|string $listener): array|callable
@@ -144,83 +438,218 @@ class Dispatcher
     /**
      * @param array{0: class-string|object, 1: string}|callable $listener
      */
-    private function shouldQueue(array|callable $listener): bool
+    private function wrapListener(array|callable $listener): Closure
     {
-        if (!is_array($listener) || !is_string($listener[0])) {
-            return false;
+        return function (object $event, ?string $eventName = null) use ($listener): mixed {
+            return $this->callListener($listener, $event, $eventName);
+        };
+    }
+
+    /**
+     * @param array{0: class-string|object, 1: string}|callable $listener
+     * @return array{queued: bool, async: bool}
+     */
+    private function listenerFlags(array|callable $listener): array
+    {
+        if (is_array($listener) && is_string($listener[0]) && class_exists($listener[0])) {
+            $attributes = (new ReflectionClass($listener[0]))->getAttributes(Listener::class);
+
+            foreach ($attributes as $attribute) {
+                $instance = $attribute->newInstance();
+
+                return ['queued' => $instance->queued, 'async' => $instance->async];
+            }
         }
 
-        $listenerClass = $listener[0];
-
-        if (is_subclass_of($listenerClass, ShouldQueue::class) || in_array(ShouldQueue::class, class_implements($listenerClass), true)) {
-            return true;
-        }
-
-        $attribute = (new ReflectionClass($listenerClass))->getAttributes(Listener::class)[0] ?? null;
-
-        if ($attribute !== null) {
-            return $attribute->newInstance()->queued;
-        }
-
-        return false;
+        return ['queued' => false, 'async' => false];
     }
 
     /**
      * @param array{0: class-string|object, 1: string}|callable $listener
      */
-    private function listenerClosure(array|callable $listener): Closure
+    private function wrapQueuedAsync(array|callable $listener, bool $queued, bool $async): Closure
     {
-        return function (mixed $payload, ?string $eventName = null) use ($listener): mixed {
-            return $this->callListener($listener, $payload, $eventName);
-        };
-    }
+        return function (object $event, ?string $eventName = null) use ($listener, $queued, $async): mixed {
+            if ($queued) {
+                $this->pushToQueue($listener, $event, $eventName);
 
-    /**
-     * @param array{0: class-string, 1: string} $listener
-     */
-    private function queueListenerClosure(array $listener): Closure
-    {
-        return function (mixed $payload, ?string $eventName = null) use ($listener): void {
-            if ($this->queue === null) {
-                return;
+                return null;
             }
 
-            $this->queue->push(new CallListenerJob($listener[0], $listener[1], $eventName ?? '', $payload));
+            if ($async) {
+                $this->runAsync($listener, $event, $eventName);
+
+                return null;
+            }
+
+            return $this->callListener($listener, $event, $eventName);
         };
     }
 
     /**
-     * @return array{0: string, 1: mixed}
+     * @param array{0: class-string|object, 1: string}|callable $listener
      */
-    private function normalizeEvent(string|object $event, mixed $payload): array
+    private function pushToQueue(array|callable $listener, object $event, ?string $eventName): void
     {
-        if (is_object($event)) {
-            $payload = $event;
-            $event = $event::class;
+        $queue = $this->resolveQueue();
+
+        if ($queue === null) {
+            return;
         }
 
-        return [$event, $payload];
+        if (!is_array($listener) || !is_string($listener[0])) {
+            throw new \RuntimeException('Queued listeners must be class-based.');
+        }
+
+        $job = new CallListenerJob($listener[0], $listener[1] ?? 'handle', $event, $eventName ?? $event->name());
+        $queue->push($job);
     }
 
     /**
-     * @return array<string, mixed>
+     * @param array{0: class-string|object, 1: string}|callable $listener
      */
-    private function resolveParameters(array|callable $listener, mixed $payload, ?string $eventName): array
+    private function runAsync(array|callable $listener, object $event, ?string $eventName): void
     {
-        $reflection = $this->getReflection($listener);
+        if (!class_exists(\OpenSwoole\Coroutine::class)) {
+            return;
+        }
+
+        \OpenSwoole\Coroutine::create(function () use ($listener, $event, $eventName): void {
+            try {
+                $this->callListener($listener, $event, $eventName);
+            } catch (\Throwable $e) {
+                // Fire-and-forget async listeners should not crash the request.
+            }
+        });
+    }
+
+    private function resolveQueue(): ?QueueInterface
+    {
+        if (!$this->container->has(QueueInterface::class)) {
+            return null;
+        }
+
+        try {
+            return $this->container->make(QueueInterface::class);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * @return list<Closure>
+     */
+    private function getListenersFor(object $event, ?string $eventName): array
+    {
+        if ($eventName === null) {
+            return $this->getListenersForEventKey($event::class);
+        }
+
+        $key = $event instanceof GenericEvent ? $eventName : $event::class;
+
+        return $this->getListenersForEventKey($key);
+    }
+
+    /**
+     * @return list<Closure>
+     */
+    private function getListenersForEventKey(string $key): array
+    {
+        if (!isset($this->sortedStale[$key]) && isset($this->sorted[$key])) {
+            return $this->sorted[$key];
+        }
+
+        $entries = [];
+
+        if (!$this->isWildcard($key)) {
+            if (isset($this->listeners[$key])) {
+                foreach ($this->listeners[$key] as $entry) {
+                    $entries[$entry[2]] = $entry;
+                }
+            }
+
+            // Parent class and interface listeners for typed events.
+            if (class_exists($key) || interface_exists($key)) {
+                foreach (array_merge(class_parents($key) ?: [], class_implements($key) ?: []) as $parent) {
+                    if (isset($this->listeners[$parent])) {
+                        foreach ($this->listeners[$parent] as $entry) {
+                            $entries[$entry[2]] = $entry;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Wildcards match the key (string events) or class name (typed events).
+        foreach ($this->wildcards as $pattern => $patternEntries) {
+            if ($this->wildcardMatches($pattern, $key)) {
+                foreach ($patternEntries as $entry) {
+                    $entries[$entry[2]] = $entry;
+                }
+            }
+        }
+
+        uasort($entries, function (array $a, array $b): int {
+            if ($a[0] !== $b[0]) {
+                return $b[0] <=> $a[0];
+            }
+
+            return strcmp($a[2], $b[2]);
+        });
+
+        $closures = array_values(array_map(fn (array $entry) => $entry[1], $entries));
+        $this->sorted[$key] = $closures;
+        unset($this->sortedStale[$key]);
+
+        return $closures;
+    }
+
+    /**
+     * @param array{0: class-string|object, 1: string}|callable $listener
+     */
+    public function callListener(array|callable $listener, object $event, ?string $eventName = null): mixed
+    {
+        $resolved = $this->resolveInstance($listener);
+        $reflection = $this->listenerReflection($resolved);
         $parameters = [];
 
-        foreach ($reflection->getParameters() as $parameter) {
-            $parameters = array_merge($parameters, $this->resolveParameter($parameter, $payload, $eventName));
+        foreach ($reflection->getParameters() as $index => $parameter) {
+            $resolvedParam = $this->resolveParameterFor($parameter, $index, $event, $eventName);
+
+            if ($resolvedParam !== null) {
+                $parameters[$parameter->getName()] = $resolvedParam;
+            }
         }
 
-        return $parameters;
+        return $this->container->call($resolved, $parameters);
     }
 
     /**
-     * @return array<string, mixed>
+     * @param array{0: class-string|object, 1: string}|callable $listener
+     * @return array{0: object, 1: string}|callable
      */
-    private function resolveParameter(ReflectionParameter $parameter, mixed $payload, ?string $eventName): array
+    private function resolveInstance(array|callable $listener): array|callable
+    {
+        if (is_array($listener) && is_string($listener[0])) {
+            $listener[0] = $this->container->make($listener[0]);
+        }
+
+        return $listener;
+    }
+
+    /**
+     * @param array{0: object, 1: string}|callable $listener
+     */
+    private function listenerReflection(array|callable $listener): \ReflectionFunctionAbstract
+    {
+        if (is_array($listener)) {
+            return new ReflectionMethod($listener[0], $listener[1]);
+        }
+
+        return new ReflectionFunction($listener);
+    }
+
+    private function resolveParameterFor(ReflectionParameter $parameter, int $index, object $event, ?string $eventName): mixed
     {
         $name = $parameter->getName();
         $type = $parameter->getType();
@@ -228,40 +657,79 @@ class Dispatcher
         if ($type instanceof ReflectionNamedType && !$type->isBuiltin()) {
             $typeName = $type->getName();
 
-            if (is_object($payload) && $payload instanceof $typeName) {
-                return [$name => $payload];
+            if ($event instanceof $typeName) {
+                return $event;
             }
 
-            if ($eventName !== null && class_exists($eventName) && $eventName === $typeName) {
-                return [$name => $payload];
-            }
+            if ($event instanceof GenericEvent) {
+                $payload = $event->payload();
 
-            if ($typeName === 'array' && $payload !== null && !is_object($payload)) {
-                return [$name => is_array($payload) ? $payload : [$payload]];
+                if (is_object($payload) && $payload instanceof $typeName) {
+                    return $payload;
+                }
             }
         }
 
-        if ($name === 'event' || $name === 'eventName') {
-            return [$name => $eventName ?? $payload];
+        if ($type instanceof ReflectionNamedType && $type->getName() === 'array' && $event instanceof GenericEvent && is_array($event->payload())) {
+            return $event->payload();
         }
 
-        return [$name => $payload];
+        if ($name === 'eventName' && ($type === null || ($type instanceof ReflectionNamedType && $type->getName() === 'string'))) {
+            return $eventName ?? $event->name();
+        }
+
+        if ($name === 'event') {
+            if ($type === null) {
+                return $event;
+            }
+
+            if ($type instanceof ReflectionNamedType && $type->getName() === 'string') {
+                return $eventName ?? $event->name();
+            }
+
+            if ($type instanceof ReflectionNamedType && !$type->isBuiltin()) {
+                $parameterClass = $type->getName();
+
+                if ($event instanceof $parameterClass) {
+                    return $event;
+                }
+            }
+
+            if ($type instanceof ReflectionNamedType && ($type->getName() === 'object' || $type->getName() === 'mixed')) {
+                return $event;
+            }
+        }
+
+        if ($type instanceof ReflectionNamedType && ($type->getName() === 'object' || $type->getName() === 'mixed')) {
+            if ($index === 0) {
+                return $event instanceof GenericEvent ? $event->payload() : $event;
+            }
+
+            return null;
+        }
+
+        if ($type === null && $index === 0) {
+            if ($event instanceof GenericEvent) {
+                return $event->payload();
+            }
+
+            return $event;
+        }
+
+        return null;
     }
 
-    private function getReflection(array|callable $listener): \ReflectionFunctionAbstract
+    private function listenerName(Closure $listener): string
     {
-        if (is_array($listener) && is_object($listener[0])) {
-            return new ReflectionMethod($listener[0], $listener[1]);
-        }
+        try {
+            $reflection = new ReflectionFunction($listener);
+            $name = $reflection->getName();
+            $file = $reflection->getFileName();
+            $line = $reflection->getStartLine();
 
-        if (is_array($listener) && is_string($listener[0])) {
-            return new ReflectionMethod($listener[0], $listener[1]);
+            return $name . ($file !== false ? " ({$file}:{$line})" : '');
+        } catch (\Throwable $e) {
+            return 'closure';
         }
-
-        if ($listener instanceof Closure || is_string($listener)) {
-            return new ReflectionFunction($listener);
-        }
-
-        throw new \InvalidArgumentException('Unsupported listener type.');
     }
 }

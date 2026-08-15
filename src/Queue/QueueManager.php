@@ -8,6 +8,7 @@ use Predis\Client as PredisClient;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Database\DatabaseManager;
+use TondbadSwoole\Events\Contracts\EventDispatcher;
 use TondbadSwoole\Queue\Drivers\DatabaseQueue;
 use TondbadSwoole\Queue\Drivers\RedisQueue;
 use TondbadSwoole\Queue\Drivers\SyncQueue;
@@ -33,6 +34,7 @@ class QueueManager
 
         if (!isset($this->queues[$name])) {
             $this->queues[$name] = $this->createConnection($name);
+            $this->wireDispatcher($this->queues[$name]);
         }
 
         return $this->queues[$name];
@@ -70,6 +72,19 @@ class QueueManager
     protected function getConnectionConfig(string $name): array
     {
         return (array) $this->config->get("queue.connections.{$name}", []);
+    }
+
+    private function wireDispatcher(QueueInterface $connection): void
+    {
+        if (!$connection instanceof Queue || !$this->container->has(EventDispatcher::class)) {
+            return;
+        }
+
+        try {
+            $connection->setEventDispatcher($this->container->make(EventDispatcher::class));
+        } catch (\Throwable $e) {
+            // Event dispatcher not available in this context.
+        }
     }
 
     private function redisParameters(array $config): array

@@ -43,6 +43,7 @@ use TondbadSwoole\Console\Commands\ScheduleWorkCommand;
 use TondbadSwoole\Console\Commands\ServeCommand;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
+use TondbadSwoole\Events\Contracts\EventDispatcher;
 use TondbadSwoole\Providers\Contracts\ServiceProvider;
 
 class ConsoleServiceProvider extends ServiceProvider
@@ -54,7 +55,8 @@ class ConsoleServiceProvider extends ServiceProvider
             $config = $container->make(Config::class);
             $basePath = $app->basePath();
 
-            $console = new Application($basePath);
+            $dispatcher = $container->has(EventDispatcher::class) ? $container->make(EventDispatcher::class) : null;
+            $console = new Application($basePath, $dispatcher);
 
             $this->registerBuiltInCommands($console, $basePath, $container);
             $this->registerConfiguredCommands($console, $container, $config, $basePath);

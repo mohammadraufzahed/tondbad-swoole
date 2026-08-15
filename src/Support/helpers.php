@@ -14,7 +14,8 @@ use TondbadSwoole\Database\ConnectionInterface;
 use TondbadSwoole\Database\DatabaseManager;
 use TondbadSwoole\Database\EntityManagerInterface;
 use TondbadSwoole\Database\Schema\Builder as SchemaBuilder;
-use TondbadSwoole\Events\Dispatcher;
+use TondbadSwoole\Events\Contracts\EventDispatcher;
+use TondbadSwoole\Events\DispatchResult;
 use TondbadSwoole\Queue\QueueInterface;
 use TondbadSwoole\Queue\QueueManager;
 use TondbadSwoole\Scheduling\Schedule;
@@ -89,10 +90,17 @@ if (!function_exists('schedule')) {
     }
 }
 
-if (!function_exists('event')) {
-    function event(string|object $event, mixed $payload = null): array
+if (!function_exists('dispatcher')) {
+    function dispatcher(): ?EventDispatcher
     {
-        return app()?->container->make(Dispatcher::class)->dispatch($event, $payload) ?? [];
+        return app()?->container->make(EventDispatcher::class);
+    }
+}
+
+if (!function_exists('event')) {
+    function event(string|object $event, mixed $payload = null): ?DispatchResult
+    {
+        return app()?->container->make(EventDispatcher::class)?->dispatch($event, $payload);
     }
 }
 

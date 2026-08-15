@@ -8,6 +8,7 @@ use OpenSwoole\GRPC\Server as GrpcServer;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Route\Route;
+use TondbadSwoole\Events\Contracts\EventDispatcher;
 use TondbadSwoole\GRPC\RouteGrpcMiddleware;
 use TondbadSwoole\Providers\Contracts\ServiceProvider;
 
@@ -45,7 +46,8 @@ class GrpcServiceProvider extends ServiceProvider
             }
 
             $route = $container->make(Route::class);
-            $server->addMiddleware(new RouteGrpcMiddleware($route->getRouteDispatcher()));
+            $dispatcher = $container->has(EventDispatcher::class) ? $container->make(EventDispatcher::class) : null;
+            $server->addMiddleware(new RouteGrpcMiddleware($route->getRouteDispatcher(), $dispatcher));
 
             return $server;
         });

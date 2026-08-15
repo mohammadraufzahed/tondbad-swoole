@@ -7,20 +7,20 @@ namespace TondbadSwoole\Providers\Default;
 use TondbadSwoole\Bootstrap\App;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
+use TondbadSwoole\Events\Contracts\EventDispatcher;
 use TondbadSwoole\Events\Dispatcher;
-use TondbadSwoole\Events\Listener as ListenerAttribute;
 use TondbadSwoole\Providers\Contracts\ServiceProvider;
-use TondbadSwoole\Queue\QueueInterface;
 
 class EventServiceProvider extends ServiceProvider
 {
     public function register(Container $container): void
     {
+        $container->singleton(EventDispatcher::class, function () use ($container): EventDispatcher {
+            return new Dispatcher($container);
+        });
+
         $container->singleton(Dispatcher::class, function () use ($container): Dispatcher {
-            return new Dispatcher(
-                $container,
-                $container->has(QueueInterface::class) ? $container->make(QueueInterface::class) : null,
-            );
+            return $container->make(EventDispatcher::class);
         });
     }
 
@@ -28,7 +28,7 @@ class EventServiceProvider extends ServiceProvider
     {
         $app = $container->make(App::class);
         $config = $container->make(Config::class);
-        $dispatcher = $container->make(Dispatcher::class);
+        $dispatcher = $container->make(EventDispatcher::class);
         $listenersDir = $app->basePath($config->get('app.paths.listeners', 'app/Listeners'));
 
         if (!is_dir($listenersDir)) {
@@ -42,19 +42,7 @@ class EventServiceProvider extends ServiceProvider
                 continue;
             }
 
-            $reflection = new \ReflectionClass($class);
-            $attributes = $reflection->getAttributes(ListenerAttribute::class);
-
-            if (count($attributes) === 0) {
-                continue;
-            }
-
-            /** @var ListenerAttribute $attribute */
-            $attribute = $attributes[0]->newInstance();
-
-            foreach ($attribute->events as $event) {
-                $dispatcher->listen($event, $class);
-            }
+            $dispatcher->subscribe($class);
         }
     }
 

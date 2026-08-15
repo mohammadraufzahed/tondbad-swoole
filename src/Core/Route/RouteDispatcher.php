@@ -13,7 +13,9 @@ use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Contracts\MiddlewareInterface;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Pipeline\Pipeline;
+use TondbadSwoole\Core\Route\Events\RouteEvent;
 use TondbadSwoole\Database\DatabaseManager;
+use TondbadSwoole\Events\Contracts\EventDispatcher;
 use TondbadSwoole\Http\Request;
 use TondbadSwoole\Http\Response;
 use TondbadSwoole\Routing\Contracts\Guard as RouteGuard;
@@ -30,7 +32,8 @@ class RouteDispatcher
         private readonly Container $container,
         private readonly ContextInterface $context,
         private readonly DatabaseManager $databaseManager,
-        private readonly array $middlewares = []
+        private readonly array $middlewares = [],
+        private readonly ?EventDispatcher $dispatcher = null,
     ) {
     }
 
@@ -45,6 +48,8 @@ class RouteDispatcher
             $this->context->set('request', $request);
             $this->context->set('response', $response);
 
+            $this->emit(new RouteEvent('dispatching', $request, $response));
+
             $httpMethod = $request->method();
             $uri = $request->path();
 
@@ -52,9 +57,11 @@ class RouteDispatcher
 
             switch ($routeInfo[0]) {
                 case Dispatcher::NOT_FOUND:
+                    $this->emit(new RouteEvent('not_found', $request, $response));
                     $fallbackId = $this->registrar->getFallbackId();
 
                     if ($fallbackId !== null) {
+                        $this->emit(new RouteEvent('fallback', $request, $response));
                         $this->dispatchRoute($request, $response, $fallbackId, ['path' => ltrim($uri, '/')]);
                     } else {
                         $response->status(404)->end('404 Not Found');
@@ -62,6 +69,7 @@ class RouteDispatcher
 
                     break;
                 case Dispatcher::METHOD_NOT_ALLOWED:
+                    $this->emit(new RouteEvent('method_not_allowed', $request, $response));
                     $response->status(405)->end('405 Method Not Allowed');
                     break;
                 case Dispatcher::FOUND:
@@ -71,12 +79,17 @@ class RouteDispatcher
                     $validatedVars = $this->validateRouteParameters($request, $response, $handlerId, $vars);
 
                     if ($validatedVars === null) {
+                        $this->emit(new RouteEvent('not_found', $request, $response));
+
                         return;
                     }
 
+                    $this->emit(new RouteEvent('matched', $request, $response, $validatedVars, ['handler_id' => $handlerId]));
                     $this->dispatchRoute($request, $response, $handlerId, $validatedVars);
                     break;
             }
+
+            $this->emit(new RouteEvent('dispatched', $request, $response));
         } catch (Throwable $e) {
             $this->errorHandler->handle($e, $swooleResponse);
         } finally {
@@ -191,5 +204,16 @@ class RouteDispatcher
                 }
             );
         };
+    }
+
+    private function emit(RouteEvent $event): void
+    {
+        if ($this->dispatcher === null) {
+            return;
+        }
+
+        if ($this->dispatcher->hasListeners($event) || $this->dispatcher->hasListeners($event->name())) {
+            $this->dispatcher->dispatch($event);
+        }
     }
 }

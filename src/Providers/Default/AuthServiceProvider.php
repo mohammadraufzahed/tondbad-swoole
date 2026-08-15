@@ -23,6 +23,7 @@ use TondbadSwoole\Core\Cache\RedisCache;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Database\DatabaseManager;
+use TondbadSwoole\Events\Contracts\EventDispatcher;
 use TondbadSwoole\Providers\Contracts\ServiceProvider;
 
 class AuthServiceProvider extends ServiceProvider
@@ -72,6 +73,7 @@ class AuthServiceProvider extends ServiceProvider
                 $container->make(Config::class),
                 $container->make(ContextInterface::class),
                 $container->make(SessionManager::class),
+                $container->has(EventDispatcher::class) ? $container->make(EventDispatcher::class) : null,
             );
         });
 

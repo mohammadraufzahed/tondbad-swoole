@@ -10,6 +10,8 @@ use TondbadSwoole\Database\Attributes\OnDelete;
 use TondbadSwoole\Database\Attributes\OnFlush;
 use TondbadSwoole\Database\Attributes\OnLoad;
 use TondbadSwoole\Database\Attributes\OnUpdate;
+use TondbadSwoole\Database\Events\OrmEvent;
+use TondbadSwoole\Events\Contracts\EventDispatcher;
 
 class EntityEventManager
 {
@@ -21,6 +23,10 @@ class EntityEventManager
 
     /** @var array<class-string, array<string, list<\ReflectionMethod>>> */
     private array $hookMap = [];
+
+    public function __construct(private readonly ?EventDispatcher $dispatcher = null)
+    {
+    }
 
     public function addEventSubscriber(object $subscriber): void
     {
@@ -39,6 +45,20 @@ class EntityEventManager
         $this->dispatchToListeners($event, $eventObject);
         $this->dispatchToSubscribers($event, $eventObject);
         $this->dispatchToEntityHooks($event, $entity, $eventObject);
+        $this->dispatchGlobal($event, $entity);
+    }
+
+    private function dispatchGlobal(string $event, object $entity): void
+    {
+        if ($this->dispatcher === null) {
+            return;
+        }
+
+        $ormEvent = new OrmEvent($event, $entity);
+
+        if ($this->dispatcher->hasListeners($ormEvent) || $this->dispatcher->hasListeners($ormEvent->name())) {
+            $this->dispatcher->dispatch($ormEvent);
+        }
     }
 
     private function dispatchToListeners(string $event, EntityEvent $eventObject): void

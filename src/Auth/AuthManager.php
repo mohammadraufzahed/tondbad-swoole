@@ -8,6 +8,7 @@ use TondbadSwoole\Auth\Contracts\Authenticatable;
 use TondbadSwoole\Auth\Contracts\Guard;
 use TondbadSwoole\Auth\Contracts\GuardFactory;
 use TondbadSwoole\Auth\Contracts\UserProvider;
+use TondbadSwoole\Auth\Events\AuthEvent;
 use TondbadSwoole\Auth\Guards\ApiKeyGuard;
 use TondbadSwoole\Auth\Guards\AccessTokenGuard;
 use TondbadSwoole\Auth\Guards\BasicAuthGuard;
@@ -34,6 +35,7 @@ use TondbadSwoole\Contracts\ContextInterface;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Database\DatabaseManager;
+use TondbadSwoole\Events\Contracts\EventDispatcher;
 use TondbadSwoole\Http\Request;
 use Closure;
 use InvalidArgumentException;
@@ -67,6 +69,7 @@ class AuthManager
         private readonly Config $config,
         private readonly ContextInterface $context,
         private ?SessionManager $sessionManager = null,
+        private readonly ?EventDispatcher $dispatcher = null,
     ) {
     }
 
@@ -149,13 +152,17 @@ class AuthManager
 
     public function login(Authenticatable $user, ?string $guard = null, array $claims = []): AuthSession
     {
-        $guard = $this->guard($guard);
+        $guardName = $guard ?? $this->getDefaultGuard();
+        $guard = $this->guard($guardName);
 
         if (!$guard instanceof \TondbadSwoole\Auth\Contracts\StatefulGuard) {
             throw new InvalidArgumentException('Guard does not support login.');
         }
 
-        return $guard->login($user, $claims);
+        $session = $guard->login($user, $claims);
+        $this->emit('login', $user, $session, $guardName);
+
+        return $session;
     }
 
     /**
@@ -163,9 +170,12 @@ class AuthManager
      */
     public function signIn(string $strategy, array $credentials = [], ?string $guard = null): ?AuthSession
     {
+        $guardName = $guard ?? $this->getDefaultGuard();
         $user = $this->strategy($strategy, $guard)->authenticate($credentials);
 
         if ($user === null) {
+            $this->emit('failed', null, null, $guardName, null, ['strategy' => $strategy]);
+
             return null;
         }
 
@@ -177,11 +187,14 @@ class AuthManager
      */
     public function signUp(string $strategy, array $data = [], ?string $guard = null): ?AuthSession
     {
+        $guardName = $guard ?? $this->getDefaultGuard();
         $user = $this->strategy($strategy, $guard)->register($data);
 
         if ($user === null) {
             return null;
         }
+
+        $this->emit('register', $user, null, $guardName);
 
         return $this->login($user, $guard);
     }
@@ -193,7 +206,13 @@ class AuthManager
 
     public function refreshSession(string $refreshToken, ?string $guard = null): ?AuthSession
     {
-        return $this->sessionManager()->refreshSession($refreshToken);
+        $session = $this->sessionManager()->refreshSession($refreshToken);
+
+        if ($session !== null) {
+            $this->emit('session.refreshed', null, $session, $guard ?? $this->getDefaultGuard());
+        }
+
+        return $session;
     }
 
     /**
@@ -202,6 +221,8 @@ class AuthManager
     public function issueApiToken(string|int $userId, array $claims = [], ?int $ttl = null): AccessToken
     {
         $session = $this->sessionManager()->create($userId, $claims, 'stateless');
+
+        $this->emit('token.issued', null, $session, null, (string) $userId);
 
         return $session->accessToken;
     }
@@ -229,14 +250,20 @@ class AuthManager
 
     public function handleIdentity(IdentityToken $token, ?string $guard = null): AuthSession
     {
+        $guardName = $guard ?? $this->getDefaultGuard();
         $user = $this->userManager()->findOrCreateFromIdentity($token);
+        $session = $this->login($user, $guard);
 
-        return $this->login($user, $guard);
+        $this->emit('identity.linked', $user, $session, $guardName);
+
+        return $session;
     }
 
     public function revokeSession(string $sessionId): void
     {
         $this->sessionManager()->revokeSession($sessionId);
+
+        $this->emit('revoked', null, null, null, null, ['session_id' => $sessionId]);
     }
 
     /**
@@ -245,6 +272,8 @@ class AuthManager
     public function revokeAllSessions(string|int $userId): void
     {
         $this->sessionManager()->revokeAllForUser($userId);
+
+        $this->emit('revoked.all', null, null, null, (string) $userId);
     }
 
     /**
@@ -304,10 +333,16 @@ class AuthManager
 
     public function logout(?string $guard = null): void
     {
-        $guard = $this->guard($guard);
+        $guardName = $guard ?? $this->getDefaultGuard();
+        $guard = $this->guard($guardName);
+        $user = $guard->user();
 
         if ($guard instanceof \TondbadSwoole\Auth\Contracts\StatefulGuard) {
             $guard->logout();
+        }
+
+        if ($user !== null) {
+            $this->emit('logout', $user, null, $guardName);
         }
     }
 
@@ -428,6 +463,15 @@ class AuthManager
             $refreshTokenRepository,
             $store,
         );
+    }
+
+    private function emit(string $type, ?Authenticatable $user = null, ?AuthSession $session = null, ?string $guard = null, ?string $userId = null, array $metadata = []): void
+    {
+        if ($this->dispatcher === null) {
+            return;
+        }
+
+        $this->dispatcher->dispatch(new AuthEvent($type, $user, $session, $guard, $userId, $metadata));
     }
 
     private function resolveProvider(?string $name): UserProvider

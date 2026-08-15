@@ -6,16 +6,17 @@ namespace TondbadSwoole\Events;
 
 use Attribute;
 
-#[Attribute(Attribute::TARGET_CLASS)]
-class Listener
+#[Attribute(Attribute::TARGET_CLASS | Attribute::TARGET_METHOD)]
+final class Listener
 {
     /**
      * @param list<string> $events
-     * @param bool $queued
      */
     public function __construct(
         public readonly array $events = [],
+        public readonly ?int $priority = null,
         public readonly bool $queued = false,
+        public readonly bool $async = false,
     ) {
     }
 }

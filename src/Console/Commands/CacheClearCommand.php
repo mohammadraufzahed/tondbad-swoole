@@ -26,11 +26,15 @@ class CacheClearCommand extends Command
 
         [$routeCacheFile, $frameworkDir] = $this->cachePaths();
 
-        $this->deleteFiles($routeCacheFile);
+        if (is_string($routeCacheFile) && $routeCacheFile !== '') {
+            $this->deleteFiles($routeCacheFile);
+        }
 
-        foreach (glob($frameworkDir . '/*') ?: [] as $file) {
-            if (is_file($file)) {
-                $this->deleteFiles($file);
+        if (is_string($frameworkDir) && $frameworkDir !== '') {
+            foreach (glob($frameworkDir . '/*') ?: [] as $file) {
+                if (is_file($file)) {
+                    $this->deleteFiles($file);
+                }
             }
         }
 
