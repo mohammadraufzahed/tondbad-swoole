@@ -149,14 +149,13 @@ class BenchmarkCommand extends Command
             return null;
         }
 
-        if (preg_match('/namespace\s+([^;]+);/', $contents, $matches) !== 1) {
-            return null;
-        }
-
-        $namespace = $matches[1];
         $name = basename($file, '.php');
 
-        return $namespace . '\\' . $name;
+        if (preg_match('/namespace\s+([^;]+);/', $contents, $matches) !== 1) {
+            return $name;
+        }
+
+        return $matches[1] . '\\' . $name;
     }
 
     /**
