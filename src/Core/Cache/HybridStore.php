@@ -9,10 +9,14 @@ use TondbadSwoole\Contracts\Cache\CacheItem;
 use TondbadSwoole\Contracts\Cache\CacheStats;
 use TondbadSwoole\Contracts\CacheContract;
 use TondbadSwoole\Contracts\CacheInterface;
+use TondbadSwoole\Core\Cache\Events\CacheEvent;
+use TondbadSwoole\Events\Contracts\EventDispatcher;
 
 class HybridStore implements CacheContract
 {
     private CacheStats $stats;
+
+    private ?EventDispatcher $dispatcher = null;
 
     public function __construct(
         private readonly CacheInterface $l1,
@@ -23,6 +27,11 @@ class HybridStore implements CacheContract
         private readonly int $lockWaitMs = 5000,
     ) {
         $this->stats = new CacheStats();
+    }
+
+    public function setEventDispatcher(?EventDispatcher $dispatcher): void
+    {
+        $this->dispatcher = $dispatcher;
     }
 
     public function get(string $key, mixed $default = null): mixed
@@ -51,6 +60,8 @@ class HybridStore implements CacheContract
             $this->l2->delete($key);
         }
 
+        $this->dispatchEvent(new CacheEvent('delete', $key));
+
         return true;
     }
 
@@ -61,6 +72,8 @@ class HybridStore implements CacheContract
         if ($this->l2 !== null) {
             $this->l2->clear();
         }
+
+        $this->dispatchEvent(new CacheEvent('clear', '*'));
 
         return true;
     }
@@ -107,8 +120,10 @@ class HybridStore implements CacheContract
 
         if ($entry !== null && !$this->isRefreshDue($entry)) {
             $this->stats->recordHit(true);
+            $value = $this->deserializeValue($entry->value);
+            $this->dispatchEvent(new CacheEvent('hit', $key, $value));
 
-            return $this->deserializeValue($entry->value);
+            return $value;
         }
 
         if ($this->lock !== null && $this->lock->acquire($key, $this->lockWaitMs)) {
@@ -116,8 +131,13 @@ class HybridStore implements CacheContract
                 $entry = $this->getEntry($key);
 
                 if ($entry !== null && !$this->isRefreshDue($entry)) {
-                    return $this->deserializeValue($entry->value);
+                    $value = $this->deserializeValue($entry->value);
+                    $this->dispatchEvent(new CacheEvent('hit', $key, $value));
+
+                    return $value;
                 }
+
+                $this->dispatchEvent(new CacheEvent('miss', $key));
 
                 return $this->load($key, $callback, $ttl);
             } finally {
@@ -128,8 +148,13 @@ class HybridStore implements CacheContract
         $entry = $this->getEntry($key);
 
         if ($entry !== null && !$this->isRefreshDue($entry)) {
-            return $this->deserializeValue($entry->value);
+            $value = $this->deserializeValue($entry->value);
+            $this->dispatchEvent(new CacheEvent('hit', $key, $value));
+
+            return $value;
         }
+
+        $this->dispatchEvent(new CacheEvent('miss', $key));
 
         return $this->load($key, $callback, $ttl);
     }
@@ -139,12 +164,15 @@ class HybridStore implements CacheContract
         $this->tagManager?->invalidate($tags);
         $this->l1->clear();
 
+        $this->dispatchEvent(new CacheEvent('invalidated', '*', null, $tags, ['tags' => $tags]));
+
         return true;
     }
 
     public function refresh(string $key): bool
     {
         $this->stats->recordRefresh();
+        $this->dispatchEvent(new CacheEvent('refresh', $key));
 
         return $this->delete($key);
     }
@@ -244,6 +272,8 @@ class HybridStore implements CacheContract
             $this->l2->set($key, $raw, $ttl);
         }
 
+        $this->dispatchEvent(new CacheEvent('set', $key, $value, $item->tags, ['weight' => $item->weight]));
+
         return $this->l1->set($key, $raw, $ttl);
     }
 
@@ -324,5 +354,23 @@ class HybridStore implements CacheContract
         $end->add($ttl);
 
         return $end->getTimestamp() - $now->getTimestamp();
+    }
+
+    private function dispatchEvent(CacheEvent $event): void
+    {
+        $dispatcher = $this->eventDispatcher();
+
+        if ($dispatcher === null) {
+            return;
+        }
+
+        if ($dispatcher->hasListeners($event) || $dispatcher->hasListeners($event->name())) {
+            $dispatcher->dispatch($event);
+        }
+    }
+
+    private function eventDispatcher(): ?EventDispatcher
+    {
+        return $this->dispatcher ?? dispatcher();
     }
 }

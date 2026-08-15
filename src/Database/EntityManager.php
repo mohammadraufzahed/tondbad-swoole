@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace TondbadSwoole\Database;
 
 use InvalidArgumentException;
+use TondbadSwoole\Events\Contracts\EventDispatcher;
 
 class EntityManager implements EntityManagerInterface
 {
@@ -16,9 +17,10 @@ class EntityManager implements EntityManagerInterface
 
     public function __construct(
         private readonly ConnectionInterface $connection,
+        private readonly ?EventDispatcher $dispatcher = null,
     ) {
         $this->identityMap = new IdentityMap();
-        $this->eventManager = new EntityEventManager();
+        $this->eventManager = new EntityEventManager($dispatcher);
         $this->unitOfWork = new UnitOfWork($this, $this->identityMap, $this->eventManager);
     }
 

@@ -11,11 +11,15 @@ use OpenSwoole\GRPC\RequestHandlerInterface;
 use OpenSwoole\GRPC\Response;
 use OpenSwoole\GRPC\Status;
 use TondbadSwoole\Core\Route\RouteDispatcher;
+use TondbadSwoole\Events\Contracts\EventDispatcher;
+use TondbadSwoole\GRPC\Events\GrpcEvent;
 
 class RouteGrpcMiddleware implements MiddlewareInterface
 {
-    public function __construct(private readonly RouteDispatcher $dispatcher)
-    {
+    public function __construct(
+        private readonly RouteDispatcher $dispatcher,
+        private readonly ?EventDispatcher $eventDispatcher = null,
+    ) {
     }
 
     public function process(MessageInterface $request, RequestHandlerInterface $handler): MessageInterface
@@ -23,6 +27,11 @@ class RouteGrpcMiddleware implements MiddlewareInterface
         if (!$request instanceof Request) {
             return $handler->handle($request);
         }
+
+        $this->emit(new GrpcEvent('request', $request, [
+            'service' => $request->getService(),
+            'method' => $request->getMethod(),
+        ]));
 
         $context = $request->getContext();
         $rawRequest = $context->getValue(\OpenSwoole\Http\Request::class);
@@ -65,7 +74,16 @@ class RouteGrpcMiddleware implements MiddlewareInterface
             ->withValue(\OpenSwoole\GRPC\Constant::GRPC_STATUS, $grpcStatus)
             ->withValue(\OpenSwoole\GRPC\Constant::GRPC_MESSAGE, $grpcMessage);
 
-        return new Response($newContext, $httpResponse->capturedBody);
+        $response = new Response($newContext, $httpResponse->capturedBody);
+
+        $this->emit(new GrpcEvent('response', $response, [
+            'service' => $request->getService(),
+            'method' => $request->getMethod(),
+            'status' => $grpcStatus,
+            'message' => $grpcMessage,
+        ]));
+
+        return $response;
     }
 
     /**
@@ -117,5 +135,16 @@ class RouteGrpcMiddleware implements MiddlewareInterface
         }
 
         return [$grpcStatus, $message];
+    }
+
+    private function emit(GrpcEvent $event): void
+    {
+        if ($this->eventDispatcher === null) {
+            return;
+        }
+
+        if ($this->eventDispatcher->hasListeners($event) || $this->eventDispatcher->hasListeners($event->name())) {
+            $this->eventDispatcher->dispatch($event);
+        }
     }
 }

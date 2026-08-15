@@ -86,7 +86,10 @@ class Route implements RouteInterface
         $errorHandler = new ErrorHandler($this->config, $this->logger);
         $middlewares = $this->config->get('app.middlewares', []);
         $databaseManager = $this->container->make(DatabaseManager::class);
-        $this->dispatcher = new RouteDispatcher($this->registrar, $invoker, $errorHandler, $this->container, $this->context, $databaseManager, $middlewares);
+        $eventDispatcher = $this->container->has(\TondbadSwoole\Events\Contracts\EventDispatcher::class)
+            ? $this->container->make(\TondbadSwoole\Events\Contracts\EventDispatcher::class)
+            : null;
+        $this->dispatcher = new RouteDispatcher($this->registrar, $invoker, $errorHandler, $this->container, $this->context, $databaseManager, $middlewares, $eventDispatcher);
     }
 
     public function addRoute(

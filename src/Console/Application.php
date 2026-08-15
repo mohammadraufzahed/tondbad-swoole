@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace TondbadSwoole\Console;
 
 use InvalidArgumentException;
+use TondbadSwoole\Console\Events\ConsoleEvent;
+use TondbadSwoole\Events\Contracts\EventDispatcher;
 
 class Application
 {
@@ -13,8 +15,10 @@ class Application
      */
     private array $commands = [];
 
-    public function __construct(private readonly string $basePath)
-    {
+    public function __construct(
+        private readonly string $basePath,
+        private readonly ?EventDispatcher $dispatcher = null,
+    ) {
     }
 
     public function register(CommandInterface $command): self
@@ -38,12 +42,25 @@ class Application
         }
 
         if ($name === null || !isset($this->commands[$name])) {
+            $this->emit(new ConsoleEvent('not_found', $name, $argv, $name === null ? 0 : 1));
             $this->printHelp($name);
 
             return $name === null ? 0 : 1;
         }
 
-        return $this->commands[$name]->run(array_slice($argv, 2));
+        $this->emit(new ConsoleEvent('starting', $name, $argv));
+
+        try {
+            $exitCode = $this->commands[$name]->run(array_slice($argv, 2));
+        } catch (\Throwable $e) {
+            $this->emit(new ConsoleEvent('failed', $name, $argv, 1, $e));
+
+            throw $e;
+        }
+
+        $this->emit(new ConsoleEvent('terminated', $name, $argv, $exitCode));
+
+        return $exitCode;
     }
 
     private function printHelp(?string $unknownName): void
@@ -64,5 +81,16 @@ class Application
     private function printVersion(): void
     {
         fwrite(STDOUT, "Tondbad Swoole version 1.0.0\n");
+    }
+
+    private function emit(ConsoleEvent $event): void
+    {
+        if ($this->dispatcher === null) {
+            return;
+        }
+
+        if ($this->dispatcher->hasListeners($event) || $this->dispatcher->hasListeners($event->name())) {
+            $this->dispatcher->dispatch($event);
+        }
     }
 }

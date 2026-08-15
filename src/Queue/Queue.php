@@ -6,13 +6,27 @@ namespace TondbadSwoole\Queue;
 
 use Closure;
 use Throwable;
+use TondbadSwoole\Events\Contracts\EventDispatcher;
+use TondbadSwoole\Queue\Events\QueueEvent;
 use TondbadSwoole\Queue\Jobs\Job;
 
 abstract class Queue implements QueueInterface
 {
+    private ?EventDispatcher $dispatcher = null;
+
     public function __construct(
         protected readonly QueueEvents $events = new QueueEvents(),
     ) {
+    }
+
+    public function setEventDispatcher(?EventDispatcher $dispatcher): void
+    {
+        $this->dispatcher = $dispatcher;
+    }
+
+    public function getEventDispatcher(): ?EventDispatcher
+    {
+        return $this->dispatcher;
     }
 
     public function add(Job $job, ?string $queue = null, array $options = []): mixed
@@ -63,6 +77,8 @@ abstract class Queue implements QueueInterface
     public function emit(string $event, array $data = []): void
     {
         $this->events->emit($event, $data);
+
+        $this->dispatcher?->dispatch((new QueueEvent($event, $data['queue'] ?? null, $data))->name(), new QueueEvent($event, $data['queue'] ?? null, $data));
     }
 
     abstract public function push(Job $job, ?string $queue = null): mixed;

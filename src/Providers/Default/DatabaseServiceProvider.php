@@ -13,6 +13,7 @@ use TondbadSwoole\Database\DatabaseManager;
 use TondbadSwoole\Database\EntityManager;
 use TondbadSwoole\Database\EntityManagerInterface;
 use TondbadSwoole\Database\Migrations\MigrationCreator;
+use TondbadSwoole\Events\Contracts\EventDispatcher;
 use TondbadSwoole\Database\Migrations\MigrationPathManager;
 use TondbadSwoole\Database\Migrations\MigrationRepository;
 use TondbadSwoole\Database\Migrations\Migrator;
@@ -68,7 +69,8 @@ class DatabaseServiceProvider extends ServiceProvider
             $entityManager = $context->get($key);
 
             if (!$entityManager instanceof EntityManagerInterface) {
-                $entityManager = new EntityManager($container->make(ConnectionInterface::class));
+                $dispatcher = $container->has(EventDispatcher::class) ? $container->make(EventDispatcher::class) : null;
+                $entityManager = new EntityManager($container->make(ConnectionInterface::class), $dispatcher);
                 $context->set($key, $entityManager);
             }
 

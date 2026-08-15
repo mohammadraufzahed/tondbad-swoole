@@ -13,6 +13,8 @@ use Monolog\Logger;
 use Throwable;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
+use TondbadSwoole\Events\Contracts\EventDispatcher;
+use TondbadSwoole\Scheduling\Events\ScheduleEvent;
 
 class Event
 {
@@ -291,9 +293,14 @@ class Event
             ob_start();
         }
 
+        $dispatcher = $this->resolveDispatcher($container);
+        $this->emit($dispatcher, new ScheduleEvent('starting', $this->getDescription()));
+
         try {
             ($this->callback)();
         } catch (Throwable $e) {
+            $this->emit($dispatcher, new ScheduleEvent('failed', $this->getDescription(), ['error' => $e->getMessage()]));
+
             try {
                 $logger = $container->make(Logger::class);
                 $logger->error('Scheduled task failed: ' . $e->getMessage(), ['exception' => $e]);
@@ -301,6 +308,10 @@ class Event
                 fwrite(STDERR, 'Scheduled task failed: ' . $e->getMessage() . "\n");
             }
         } finally {
+            if (!isset($e)) {
+                $this->emit($dispatcher, new ScheduleEvent('ran', $this->getDescription()));
+            }
+
             if ($this->outputPath !== null) {
                 $output = ob_get_clean();
 
@@ -395,6 +406,26 @@ class Event
     {
         if (!is_dir($path)) {
             mkdir($path, 0775, true);
+        }
+    }
+
+    private function resolveDispatcher(Container $container): ?EventDispatcher
+    {
+        try {
+            return $container->make(EventDispatcher::class);
+        } catch (Exception) {
+            return null;
+        }
+    }
+
+    private function emit(?EventDispatcher $dispatcher, ScheduleEvent $event): void
+    {
+        if ($dispatcher === null) {
+            return;
+        }
+
+        if ($dispatcher->hasListeners($event) || $dispatcher->hasListeners($event->name())) {
+            $dispatcher->dispatch($event);
         }
     }
 }
