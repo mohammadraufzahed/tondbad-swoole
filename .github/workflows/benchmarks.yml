@@ -1,0 +1,59 @@
+name: Benchmarks
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: benchmarks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  run-and-save:
+    if: "!contains(github.event.head_commit.message, '[benchmark results]')"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: openswoole, mbstring, xml, zip
+          coverage: none
+
+      - name: Validate composer files
+        run: composer validate --strict
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress
+
+      - name: Ensure results directory
+        run: mkdir -p benchmarks/results
+
+      - name: Run benchmarks (JSON)
+        run: php bin/tondbad benchmark --format=json --output=benchmarks/results/latest.json --iterations=100 --warmup=1 --forks=1
+
+      - name: Run benchmarks (Markdown)
+        run: php bin/tondbad benchmark --format=md --output=benchmarks/results/latest.md --iterations=100 --warmup=1 --forks=1
+
+      - name: Timestamp results
+        run: |
+          timestamp=$(date -u +%Y%m%d-%H%M%S)
+          sha=$(git rev-parse --short HEAD)
+          cp benchmarks/results/latest.json "benchmarks/results/main-${sha}-${timestamp}.json"
+          cp benchmarks/results/latest.md "benchmarks/results/main-${sha}-${timestamp}.md"
+
+      - name: Commit benchmark results
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'chore: add benchmark results for main [benchmark results]'
+          file_pattern: 'benchmarks/results/*'
+          commit_options: '--no-verify'
