@@ -223,15 +223,21 @@ class ScheduleDefinition
             : null;
         $definition->betweenStart = $data['betweenStart'] ?? null;
         $definition->betweenEnd = $data['betweenEnd'] ?? null;
-        $definition->unlessBetween = $data['unlessBetween'] ?? false;
-        $definition->withoutOverlappingLease = $data['withoutOverlappingLease'] ?? null;
-        $definition->runInBackground = $data['runInBackground'] ?? false;
+        $definition->unlessBetween = (bool) ($data['unlessBetween'] ?? false);
+        $definition->withoutOverlappingLease = isset($data['withoutOverlappingLease']) && $data['withoutOverlappingLease'] !== ''
+            ? (int) $data['withoutOverlappingLease']
+            : null;
+        $definition->runInBackground = (bool) ($data['runInBackground'] ?? false);
         $definition->outputPath = $data['outputPath'] ?? null;
-        $definition->maxAttempts = $data['maxAttempts'] ?? 1;
+        $definition->maxAttempts = (int) ($data['maxAttempts'] ?? 1);
         $definition->backoff = $data['backoff'] ?? [];
         $definition->misfire = $data['misfire'] ?? 'smart';
-        $definition->rateLimitMax = $data['rateLimitMax'] ?? null;
-        $definition->rateLimitWindow = $data['rateLimitWindow'] ?? null;
+        $definition->rateLimitMax = isset($data['rateLimitMax']) && $data['rateLimitMax'] !== ''
+            ? (int) $data['rateLimitMax']
+            : null;
+        $definition->rateLimitWindow = isset($data['rateLimitWindow']) && $data['rateLimitWindow'] !== ''
+            ? (int) $data['rateLimitWindow']
+            : null;
         $definition->queue = $data['queue'] ?? null;
         $definition->connection = $data['connection'] ?? null;
         $definition->data = $data['data'] ?? [];
@@ -249,10 +255,10 @@ class ScheduleDefinition
             ? new DateTimeImmutable($data['lastRunAt'])
             : null;
         $definition->lastRunResult = $data['lastRunResult'] ?? null;
-        $definition->runCount = $data['runCount'] ?? 0;
-        $definition->failCount = $data['failCount'] ?? 0;
+        $definition->runCount = (int) ($data['runCount'] ?? 0);
+        $definition->failCount = (int) ($data['failCount'] ?? 0);
         $definition->status = $data['status'] ?? 'active';
-        $definition->version = $data['version'] ?? 0;
+        $definition->version = (int) ($data['version'] ?? 0);
         $definition->lockedUntil = (isset($data['lockedUntil']) && $data['lockedUntil'] !== '' && $data['lockedUntil'] !== null)
             ? new DateTimeImmutable($data['lockedUntil'])
             : null;

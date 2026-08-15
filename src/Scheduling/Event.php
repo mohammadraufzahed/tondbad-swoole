@@ -30,7 +30,6 @@ class Event
         private readonly string $basePath,
         private readonly ScheduleRegistry $registry,
     ) {
-        $this->scheduler->upsert($this->definition);
     }
 
     public function getDefinition(): ScheduleDefinition
@@ -268,6 +267,11 @@ class Event
         $this->scheduler->upsert($this->definition);
 
         return $this;
+    }
+
+    public function name(string $description): self
+    {
+        return $this->description($description);
     }
 
     public function onQueue(string $queue): self

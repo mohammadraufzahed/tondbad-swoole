@@ -104,13 +104,25 @@ class ScheduleServiceProvider extends ServiceProvider
         $schedule = $container->make(Schedule::class);
         $consoleRoutes = $app->basePath('/routes/console.php');
 
-        if (file_exists($consoleRoutes)) {
-            $closure = require $consoleRoutes;
+        if (!file_exists($consoleRoutes)) {
+            return;
+        }
 
-            if ($closure instanceof Closure) {
-                $closure($schedule);
+        $closure = require $consoleRoutes;
+
+        if (!$closure instanceof Closure) {
+            return;
+        }
+
+        if ($container->make(Config::class)->get('schedule.store', 'memory') === 'database') {
+            $schema = schema();
+
+            if ($schema !== null && !$schema->hasTable('scheduled_jobs')) {
+                return;
             }
         }
+
+        $closure($schedule);
     }
 
     /**

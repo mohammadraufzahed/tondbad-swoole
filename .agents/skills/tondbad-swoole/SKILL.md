@@ -227,13 +227,14 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - `SchedulerWorker` with a non-null `nodeId` performs an atomic `claim()` on the configured `ScheduleStore`, preventing duplicate execution across clustered workers.
 - `ScheduledJob` rehydrates `ClosureTask` from the `ScheduleRegistry`, so `routes/console.php` must also be loaded in queue worker processes for closure schedules to resolve.
 - Closure schedules get a stable `closureId` (`closure-1`, `closure-2`, ...) derived from the registration order in `routes/console.php`, so the same closure is resolved across `schedule:work` and `queue:work` processes as long as the file is loaded in the same order.
-- `Schedule::addEvent()` merges existing store state (status, last run, locks) before upserting, but persistence depends on a working `ScheduleStore` implementation.
+- `Schedule::addEvent()` merges existing store state (status, last run, locks) before upserting, but `Event::__construct()` calls `scheduler->upsert()` with the freshly-built definition *before* `addEvent()` can merge the persisted state. This means the stored row is overwritten to `status=active` on every process boot, so `schedule:pause`, `schedule:resume`, and `schedule:delete` do **not** actually persist across separate `bin/tondbad` invocations. The constructor upsert must be removed or moved after the merge.
 - `withoutOverlapping()` uses the configured `LockProvider` (`file` by default, `SCHEDULE_LOCKS=redis` for distributed). Two concurrent `schedule:work --run-once` processes against the same schedule should result in only one execution.
 - `SchedulerBenchmark` runs from `php bin/tondbad benchmark benchmarks/SchedulerBenchmark.php`.
 - `ScheduleWorkCommand` no longer enables OpenSwoole runtime hooks or wraps execution in `Coroutine::run`, which prevents `InMemoryCache` timers from keeping one-off `schedule:work --run-once` processes alive when scheduled commands such as `cache:clear` resolve the cache.
 - `ScheduleDefinition::toArray()` serializes run/lock timestamps and `DatabaseScheduleStore` maps them to the `scheduled_jobs` migration columns; `Builder::exists()` is available for the upsert existence check.
 - `ScheduleDefinition::fromArray()` treats empty strings as `null` for timezone and all datetime fields, so `RedisScheduleStore` (and any store using empty-string-nulls) hydrates correctly.
 - `CronTrigger::getNextRunDate` supports `allowCurrentDate` so `warmNextRunDates()` can include the current minute while post-run scheduling advances to the next occurrence.
+- `RedisScheduleStore::hydrate()` decodes JSON for `trigger`/`task`/`tags`/`data`/`backoff` and normalizes empty strings for datetime fields, but it does **not** cast string values back to the typed `bool`/`int` properties (`unlessBetween`, `runInBackground`, `maxAttempts`, `runCount`, `failCount`, `version`, etc.). Loading a definition from Redis therefore raises `TypeError: Cannot assign string to property ... of type bool/int`. Redis store values must be cast before `ScheduleDefinition::fromArray()` is called.
 
 # Devin Secrets Needed
 - None for local testing.
