@@ -4,36 +4,47 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Output\OutputInterface;
 use TondbadSwoole\Grpc\Compiler\DescriptorSetParser;
 use TondbadSwoole\Grpc\Compiler\StubGenerator;
 
 class GrpcCompileCommand extends Command
 {
-    public function getName(): string
+    protected function configure(): void
     {
-        return 'grpc:compile';
+        $this->setName('grpc:compile');
+        $this->setDescription('Compile .proto files into PHP gRPC message classes and service stubs.');
+
+        $this->addOption('proto-path', null, \TondbadSwoole\Console\Input\InputOption::VALUE_REQUIRED, 'Directory containing .proto files', $this->basePath . '/protos');
+        $this->addOption('out', null, \TondbadSwoole\Console\Input\InputOption::VALUE_REQUIRED, 'Output directory for PHP message classes', $this->basePath . '/generated');
+        $this->addOption('stub-out', null, \TondbadSwoole\Console\Input\InputOption::VALUE_REQUIRED, 'Output directory for generated gRPC stubs');
+        $this->addOption('namespace-prefix', null, \TondbadSwoole\Console\Input\InputOption::VALUE_REQUIRED, 'Namespace prefix for generated stubs', 'App\\Grpc\\Generated');
+        $this->addOption('impl-namespace', null, \TondbadSwoole\Console\Input\InputOption::VALUE_REQUIRED, 'Namespace for service implementation classes', 'App\\Grpc\\Services');
+        $this->addOption('impl-suffix', null, \TondbadSwoole\Console\Input\InputOption::VALUE_REQUIRED, 'Suffix for service implementation class names', 'Impl');
+        $this->addOption('protoc', null, \TondbadSwoole\Console\Input\InputOption::VALUE_REQUIRED, 'Path to the protoc binary');
+        $this->addOption('descriptor-set', null, \TondbadSwoole\Console\Input\InputOption::VALUE_REQUIRED, 'Path to a pre-built FileDescriptorSet');
     }
 
-    public function getDescription(): string
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        return 'Compile .proto files into PHP gRPC message classes and service stubs.';
-    }
-
-    public function run(array $args): int
-    {
-        $options = $this->parseArgs($args);
-
-        $protoPath = rtrim($options['proto_path'] ?? $this->basePath . '/protos', '/');
-        $out = rtrim($options['out'] ?? $this->basePath . '/generated', '/');
-        $stubOut = rtrim($options['stub_out'] ?? $out . '/Grpc', '/');
-        $namespacePrefix = $options['namespace_prefix'] ?? 'App\\Grpc\\Generated';
-        $implNamespace = $options['impl_namespace'] ?? 'App\\Grpc\\Services';
-        $implSuffix = $options['impl_suffix'] ?? 'Impl';
-        $protoc = $options['protoc'] ?? $this->findProtoc();
-        $descriptorSet = $options['descriptor_set'] ?? null;
+        $protoPath = rtrim((string) $input->getOption('proto-path'), '/');
+        $out = rtrim((string) $input->getOption('out'), '/');
+        $stubOut = $input->hasOption('stub-out') && $input->getOption('stub-out') !== null
+            ? rtrim((string) $input->getOption('stub-out'), '/')
+            : $out . '/Grpc';
+        $namespacePrefix = (string) $input->getOption('namespace-prefix');
+        $implNamespace = (string) $input->getOption('impl-namespace');
+        $implSuffix = (string) $input->getOption('impl-suffix');
+        $protoc = $input->hasOption('protoc') && $input->getOption('protoc') !== null
+            ? (string) $input->getOption('protoc')
+            : $this->findProtoc();
+        $descriptorSet = $input->hasOption('descriptor-set') && $input->getOption('descriptor-set') !== null
+            ? (string) $input->getOption('descriptor-set')
+            : null;
 
         if ($descriptorSet === null && $protoc === null) {
-            fwrite(STDERR, "protoc binary not found. Install it, pass --protoc, or use --descriptor-set.\n");
+            $output->writeln('<error>protoc binary not found. Install it, pass --protoc, or use --descriptor-set.</error>');
 
             return 1;
         }
@@ -47,7 +58,7 @@ class GrpcCompileCommand extends Command
         }
 
         if (!is_file($descriptorSet)) {
-            fwrite(STDERR, "Descriptor set not found: {$descriptorSet}\n");
+            $output->writeln("<error>Descriptor set not found: {$descriptorSet}</error>");
 
             return 1;
         }
@@ -60,33 +71,16 @@ class GrpcCompileCommand extends Command
             foreach ($generator->generate($file) as $path => $content) {
                 $this->ensureDirectory(dirname($path));
                 file_put_contents($path, $content);
-                fwrite(STDOUT, "Generated {$path}\n");
+                $output->writeln("Generated {$path}");
                 ++$written;
             }
         }
 
         if ($written === 0) {
-            fwrite(STDOUT, "No services found in descriptor set.\n");
+            $output->writeln('No services found in descriptor set.');
         }
 
         return 0;
-    }
-
-    private function parseArgs(array $args): array
-    {
-        $options = [];
-
-        foreach ($args as $arg) {
-            if (!str_starts_with($arg, '--')) {
-                continue;
-            }
-
-            $arg = ltrim($arg, '-');
-            [$key, $value] = array_pad(explode('=', $arg, 2), 2, '1');
-            $options[str_replace('-', '_', $key)] = $value;
-        }
-
-        return $options;
     }
 
     private function findProtoc(): ?string
@@ -143,5 +137,4 @@ class GrpcCompileCommand extends Command
 
         return $tmp;
     }
-
 }
