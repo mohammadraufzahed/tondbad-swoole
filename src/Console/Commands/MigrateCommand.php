@@ -4,30 +4,24 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Output\OutputInterface;
 use TondbadSwoole\Database\Migrations\Migrator;
 
+#[AsCommand('migrate', 'Run database migrations.')]
 class MigrateCommand extends Command
 {
-    public function getName(): string
-    {
-        return 'migrate';
-    }
-
-    public function getDescription(): string
-    {
-        return 'Run database migrations.';
-    }
-
-    public function run(array $args): int
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $migrator = $this->getMigrator();
         $migrations = $migrator->run();
 
         if (empty($migrations)) {
-            fwrite(STDOUT, "Nothing to migrate.\n");
+            $output->writeln('Nothing to migrate.');
         } else {
             foreach ($migrations as $migration) {
-                fwrite(STDOUT, "Migrated: {$migration}\n");
+                $output->success("Migrated: {$migration}");
             }
         }
 

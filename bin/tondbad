@@ -29,6 +29,20 @@ if (!$autoloadFound) {
 
 $basePath = getcwd() ?: dirname(__DIR__);
 
+$env = null;
+foreach ($argv as $i => $arg) {
+    if ($arg === '--env' || $arg === '-e') {
+        $env = $argv[$i + 1] ?? null;
+    } elseif (str_starts_with($arg, '--env=')) {
+        $env = substr($arg, 6);
+    }
+}
+
+if ($env !== null) {
+    $_SERVER['APP_ENV'] = $env;
+    $_ENV['APP_ENV'] = $env;
+}
+
 $app = AppFactory::create($basePath);
 $app->boot();
 

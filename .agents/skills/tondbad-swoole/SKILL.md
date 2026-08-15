@@ -240,5 +240,19 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - `DatabaseScheduleStore::upsert()` now catches `UNIQUE constraint` / duplicate-key `PDOException`s on `insert()` and falls back to `update()`, so concurrent `schedule:work` workers can safely boot against an empty `scheduled_jobs` table without a fatal `scheduled_jobs.id` race. Pre-warming the schedule with one `schedule:list` or `schedule:run` is no longer required.
 - `ScheduledJob` queue dispatch writes the job to `jobs`/`failed_jobs`; run `php bin/tondbad queue:work --connection=database --queue=default --max-jobs=1 --stop-when-empty` after `schedule:work` to execute it.
 
+# Console/CLI rewrite (`devin/console-rewrite`)
+- Commands are attribute-driven: use `#[AsCommand('name', 'description', coroutine: bool)]` on a class extending `TondbadSwoole\Console\Commands\Command`, with public properties annotated by `#[Argument]` and/or `#[Option]`.
+- `Command::execute(InputInterface, OutputInterface): int` is the entry point. Use `$output->writeln()`, `$output->success()`, `$output->error()`, etc.
+- Global options are handled by `Application`: `--help`, `--quiet`/`-q`, `--verbose`/`-v`, `--ansi`, `--no-ansi`. They are parsed before the command name and passed to `ConsoleOutput` / `ArgvInput`.
+- `php bin/tondbad --help` prints a grouped list (`General`, `auth:`, `cache:`, `hash:`, `make:`, `migrate:`, `queue:`, `route:`, `schedule:`, `serve:`).
+- `php bin/tondbad <command> --help` prints usage, arguments, and options from `InputDefinition::getHelp()`.
+- `php bin/tondbad hash:make <value>` exits `0` and prints a `$2y$` bcrypt hash; missing required arguments exit `1` with an `ERROR` block.
+- `php bin/tondbad cache:status` prints JSON cache statistics; `-q` suppresses output; `--no-ansi` removes escape codes.
+- `php bin/tondbad completion bash` generates `_tondbad_completion()` with `complete -F`; `completion zsh` generates `#compdef tondbad` output.
+- `php bin/tondbad make:model User` creates `app/Models/User.php` (namespace `App\Models`, extends `Model`). The file is lint-clean. `app/` is not in `composer.json` autoload by default; command discovery for `app/Console/Commands` uses `config('app.paths.commands')` and `config('app.namespaces.commands')`.
+- `php bin/tondbad benchmark ConsoleBenchmark` runs the built-in console benchmark and reports ops/sec.
+- `php bin/tondbad queue:dispatch <JobClass> [--connection=database] [--queue=default] [--data='[1]']` instantiates the job (`new $job(...$json)`) and pushes it; `queue:work --connection=database --queue=default --max-jobs=1 --stop-when-empty` processes one job and exits.
+- `php bin/tondbad serve` starts the OpenSwoole HTTP server. A temporary `routes/http.php` can be used for sanity checks; route handlers that use `TondbadSwoole\Http\Response` must call `$response->text('...')` / `$response->end()` to send output.
+
 # Devin Secrets Needed
 - None for local testing.

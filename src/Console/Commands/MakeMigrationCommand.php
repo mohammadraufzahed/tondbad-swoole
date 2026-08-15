@@ -4,49 +4,58 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Attributes\Argument;
+use TondbadSwoole\Console\Attributes\Option;
+use TondbadSwoole\Console\Input\InputArgument;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Input\InputOption;
+use TondbadSwoole\Console\Output\OutputInterface;
 use TondbadSwoole\Database\Migrations\MigrationCreator;
 use TondbadSwoole\Database\Migrations\MigrationPathManager;
 
+#[AsCommand('make:migration', 'Create a new migration file.')]
 class MakeMigrationCommand extends Command
 {
-    public function getName(): string
-    {
-        return 'make:migration';
-    }
+    #[Argument('name', mode: InputArgument::REQUIRED, description: 'Migration name')]
+    public string $name;
 
-    public function getDescription(): string
-    {
-        return 'Create a new migration file.';
-    }
+    #[Option('create', mode: InputOption::VALUE_OPTIONAL, description: 'Create a new table', default: null)]
+    public ?string $create = null;
 
-    public function run(array $args): int
-    {
-        if (empty($args)) {
-            fwrite(STDERR, "Usage: tondbad make:migration <name> [--create=<table>] [--table=<table>]\n");
+    #[Option('table', mode: InputOption::VALUE_OPTIONAL, description: 'Modify an existing table', default: null)]
+    public ?string $table = null;
 
-            return 1;
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        $create = $this->create;
+        $table = $this->table;
+        $isCreate = false;
+
+        foreach ($input->getTokens() as $token) {
+            if ($token === '--create') {
+                $isCreate = true;
+
+                if ($create === null) {
+                    $create = $this->name;
+                }
+            } elseif (str_starts_with($token, '--create=')) {
+                $isCreate = true;
+                $create = substr($token, 9);
+            }
         }
 
-        $name = array_shift($args);
-        $create = null;
-        $table = null;
-
-        foreach ($args as $arg) {
-            if (str_starts_with($arg, '--create=')) {
-                $create = substr($arg, 9);
-                $table = $create;
-            } elseif (str_starts_with($arg, '--table=')) {
-                $table = substr($arg, 8);
-            }
+        if ($isCreate) {
+            $table = $create ?? $this->name;
         }
 
         $path = $this->getDefaultPath();
         $this->ensureDirectory($path);
 
         $creator = $this->getCreator();
-        $file = $creator->create($name, $path, $table, $create !== null);
+        $file = $creator->create($this->name, $path, $table, $isCreate);
 
-        fwrite(STDOUT, "Created: {$file}\n");
+        $output->success("Created: {$file}");
 
         return 0;
     }

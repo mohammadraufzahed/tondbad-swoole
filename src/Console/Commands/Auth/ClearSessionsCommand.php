@@ -4,52 +4,26 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands\Auth;
 
-use OpenSwoole\Coroutine;
-use OpenSwoole\Runtime;
+use TondbadSwoole\Console\Attributes\AsCommand;
 use TondbadSwoole\Console\Commands\Command;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Output\OutputInterface;
 use TondbadSwoole\Database\DatabaseManager;
 
+#[AsCommand('auth:clear-sessions', 'Revoke all active sessions and refresh tokens.')]
 class ClearSessionsCommand extends Command
 {
-    public function getName(): string
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        return 'auth:clear-sessions';
-    }
+        $databaseManager = app()?->container?->make(DatabaseManager::class);
 
-    public function getDescription(): string
-    {
-        return 'Revoke all active sessions and refresh tokens.';
-    }
-
-    public function run(array $args): int
-    {
-        $this->runInCoroutine(function (): void {
-            $databaseManager = app()?->container?->make(DatabaseManager::class);
-
-            if ($databaseManager !== null) {
-                $databaseManager->table('sessions')->delete();
-                $databaseManager->table('refresh_tokens')->update(['revoked' => true]);
-            }
-        });
-
-        fwrite(STDOUT, "All sessions and refresh tokens cleared.\n");
-
-        return 0;
-    }
-
-    private function runInCoroutine(callable $callback): mixed
-    {
-        if (Coroutine::getCid() !== -1) {
-            return $callback();
+        if ($databaseManager !== null) {
+            $databaseManager->table('sessions')->delete();
+            $databaseManager->table('refresh_tokens')->update(['revoked' => true]);
         }
 
-        Runtime::enableCoroutine(SWOOLE_HOOK_TCP);
+        $output->success('All sessions and refresh tokens cleared.');
 
-        $result = null;
-        Coroutine::run(function () use ($callback, &$result): void {
-            $result = $callback();
-        });
-
-        return $result;
+        return 0;
     }
 }

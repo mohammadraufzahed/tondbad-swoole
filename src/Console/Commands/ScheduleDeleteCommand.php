@@ -4,42 +4,33 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Attributes\Argument;
+use TondbadSwoole\Console\Input\InputArgument;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Output\OutputInterface;
 use TondbadSwoole\Scheduling\Scheduler;
 
+#[AsCommand('schedule:delete', 'Delete a scheduled task by id.')]
 class ScheduleDeleteCommand extends Command
 {
-    public function getName(): string
+    #[Argument('id', mode: InputArgument::REQUIRED, description: 'Scheduled task id')]
+    public string $id;
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        return 'schedule:delete';
-    }
-
-    public function getDescription(): string
-    {
-        return 'Delete a scheduled task by id.';
-    }
-
-    public function run(array $args): int
-    {
-        $id = $args[0] ?? null;
-
-        if ($id === null) {
-            fwrite(STDERR, "Usage: schedule:delete <id>\n");
-
-            return 1;
-        }
-
         $app = app();
 
         if ($app === null) {
-            fwrite(STDERR, "Application not booted.\n");
+            $output->error('Application not booted.');
 
             return 1;
         }
 
         $scheduler = $app->container->make(Scheduler::class);
-        $scheduler->remove((string) $id);
+        $scheduler->remove($this->id);
 
-        fwrite(STDOUT, "Deleted scheduled task: {$id}\n");
+        $output->success("Deleted scheduled task: {$this->id}");
 
         return 0;
     }

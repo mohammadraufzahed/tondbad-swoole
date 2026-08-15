@@ -4,41 +4,39 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Attributes\Option;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Input\InputOption;
+use TondbadSwoole\Console\Output\OutputInterface;
 use TondbadSwoole\Queue\Failed\FailedJobProviderInterface;
 use TondbadSwoole\Queue\Jobs\Job;
 use TondbadSwoole\Queue\QueueManager;
 
+#[AsCommand('queue:retry-failed', 'Retry all failed jobs for a queue.')]
 class QueueRetryFailedCommand extends Command
 {
-    public function getName(): string
-    {
-        return 'queue:retry-failed';
-    }
+    #[Option('connection', shortcut: 'c', mode: InputOption::VALUE_OPTIONAL, description: 'Queue connection name')]
+    public ?string $connection = null;
 
-    public function getDescription(): string
-    {
-        return 'Retry all failed jobs for a queue.';
-    }
+    #[Option('queue', shortcut: 'Q', mode: InputOption::VALUE_OPTIONAL, description: 'Queue name', default: 'default')]
+    public string $queue = 'default';
 
-    public function run(array $args): int
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $options = $this->parseOptions($args);
-        $connectionName = $options['connection'] ?? null;
-        $queue = $options['queue'] ?? 'default';
-
         $app = app();
 
         if ($app === null) {
-            fwrite(STDERR, "Application not booted.\n");
+            $output->error('Application not booted.');
 
             return 1;
         }
 
         $queueManager = $app->container->make(QueueManager::class);
-        $connection = $queueManager->connection($connectionName);
+        $connection = $queueManager->connection($this->connection);
         $failer = $app->container->make(FailedJobProviderInterface::class);
 
-        $failed = $failer->forQueue($queue);
+        $failed = $failer->forQueue($this->queue);
         $retried = 0;
 
         foreach ($failed as $row) {
@@ -52,28 +50,13 @@ class QueueRetryFailedCommand extends Command
                 $connection->delete($originalId);
             }
 
-            $connection->add($job, $queue);
+            $connection->add($job, $this->queue);
             $failer->delete((int) $row['id']);
             $retried++;
         }
 
-        fwrite(STDOUT, "Retried {$retried} failed job(s) on queue {$queue}.\n");
+        $output->success("Retried {$retried} failed job(s) on queue {$this->queue}.");
 
         return 0;
-    }
-
-    private function parseOptions(array $args): array
-    {
-        $options = [];
-
-        foreach ($args as $arg) {
-            if (str_starts_with($arg, '--')) {
-                $option = substr($arg, 2);
-                [$key, $value] = array_pad(explode('=', $option, 2), 2, true);
-                $options[$key] = $value === true ? true : $value;
-            }
-        }
-
-        return $options;
     }
 }

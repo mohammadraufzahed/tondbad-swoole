@@ -4,46 +4,33 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Attributes\Option;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Input\InputOption;
+use TondbadSwoole\Console\Output\OutputInterface;
 use TondbadSwoole\Database\Migrations\Migrator;
 
+#[AsCommand('migrate:rollback', 'Rollback the last batch of migrations.')]
 class MigrateRollbackCommand extends Command
 {
-    public function getName(): string
-    {
-        return 'migrate:rollback';
-    }
+    #[Option('step', shortcut: 's', mode: InputOption::VALUE_OPTIONAL, schema: 'int', description: 'Number of batches to rollback')]
+    public ?int $step = null;
 
-    public function getDescription(): string
-    {
-        return 'Rollback the last batch of migrations.';
-    }
-
-    public function run(array $args): int
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $migrator = $this->getMigrator();
-        $steps = $this->resolveSteps($args);
-        $migrations = $migrator->rollback($steps);
+        $migrations = $migrator->rollback($this->step);
 
         if (empty($migrations)) {
-            fwrite(STDOUT, "Nothing to rollback.\n");
+            $output->writeln('Nothing to rollback.');
         } else {
             foreach ($migrations as $migration) {
-                fwrite(STDOUT, "Rolled back: {$migration}\n");
+                $output->success("Rolled back: {$migration}");
             }
         }
 
         return 0;
-    }
-
-    protected function resolveSteps(array $args): ?int
-    {
-        foreach ($args as $arg) {
-            if (str_starts_with($arg, '--step=')) {
-                return (int) substr($arg, 7);
-            }
-        }
-
-        return null;
     }
 
     protected function getMigrator(): Migrator

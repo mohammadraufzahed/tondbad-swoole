@@ -4,26 +4,19 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Attributes\AsCommand;
+
+#[AsCommand('make:controller', 'Create a new controller class.')]
 class MakeControllerCommand extends MakeCommand
 {
-    public function getName(): string
+    protected function getNameSuffixes(): array
     {
-        return 'make:controller';
-    }
-
-    public function getDescription(): string
-    {
-        return 'Create a new controller class.';
+        return ['Controller'];
     }
 
     protected function getStubPath(): string
     {
         return __DIR__ . '/../../../stubs/controller.stub';
-    }
-
-    protected function getNameSuffixes(): array
-    {
-        return ['Controller'];
     }
 
     protected function getDefaultPath(string $name): string

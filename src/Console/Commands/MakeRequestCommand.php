@@ -4,16 +4,14 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Attributes\AsCommand;
+
+#[AsCommand('make:request', 'Create a new form request class.')]
 class MakeRequestCommand extends MakeCommand
 {
-    public function getName(): string
+    protected function getNameSuffixes(): array
     {
-        return 'make:request';
-    }
-
-    public function getDescription(): string
-    {
-        return 'Create a new form request class.';
+        return ['Request'];
     }
 
     protected function getStubPath(): string

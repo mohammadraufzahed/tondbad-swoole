@@ -3,12 +3,17 @@
 declare(strict_types=1);
 
 use TondbadSwoole\Console\Commands\MakePolicyCommand;
+use TondbadSwoole\Console\Input\ArgvInput;
+use TondbadSwoole\Console\Output\ConsoleOutput;
 
 it('creates a policy stub', function () {
     $basePath = $this->tempDir('tondbad_make_policy_test');
 
     $command = new MakePolicyCommand($basePath);
-    $exit = $command->run(['Post']);
+    $exit = $command->run(
+        new ArgvInput(['Post'], $command->getDefinition()),
+        new ConsoleOutput(),
+    );
 
     expect($exit)->toBe(0);
 
@@ -25,7 +30,15 @@ it('refuses to overwrite an existing policy', function () {
     $basePath = $this->tempDir('tondbad_make_policy_test');
 
     $command = new MakePolicyCommand($basePath);
-    $command->run(['Post']);
+    $command->run(
+        new ArgvInput(['Post'], $command->getDefinition()),
+        new ConsoleOutput(),
+    );
 
-    expect($command->run(['Post']))->toBe(1);
+    $exit = $command->run(
+        new ArgvInput(['Post'], $command->getDefinition()),
+        new ConsoleOutput(),
+    );
+
+    expect($exit)->toBe(1);
 });

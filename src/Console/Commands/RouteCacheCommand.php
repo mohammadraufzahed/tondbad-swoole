@@ -6,20 +6,14 @@ namespace TondbadSwoole\Console\Commands;
 
 use TondbadSwoole\Bootstrap\App;
 use TondbadSwoole\Bootstrap\AppFactory;
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Output\OutputInterface;
 
+#[AsCommand('route:cache', 'Pre-compile the route cache.')]
 class RouteCacheCommand extends Command
 {
-    public function getName(): string
-    {
-        return 'route:cache';
-    }
-
-    public function getDescription(): string
-    {
-        return 'Pre-compile the route cache.';
-    }
-
-    public function run(array $args): int
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $app = app();
 
@@ -29,7 +23,7 @@ class RouteCacheCommand extends Command
 
         $app->routes()->warmRouteCache();
 
-        fwrite(STDOUT, "Route cache compiled.\n");
+        $output->success('Route cache compiled.');
 
         return 0;
     }

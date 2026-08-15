@@ -4,18 +4,11 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Attributes\AsCommand;
+
+#[AsCommand('make:job', 'Create a new job class.')]
 class MakeJobCommand extends MakeCommand
 {
-    public function getName(): string
-    {
-        return 'make:job';
-    }
-
-    public function getDescription(): string
-    {
-        return 'Create a new job class.';
-    }
-
     protected function getStubPath(): string
     {
         return __DIR__ . '/../../../stubs/job.stub';

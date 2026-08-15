@@ -3,12 +3,17 @@
 declare(strict_types=1);
 
 use TondbadSwoole\Console\Commands\MakeGuardCommand;
+use TondbadSwoole\Console\Input\ArgvInput;
+use TondbadSwoole\Console\Output\ConsoleOutput;
 
 it('creates a guard factory stub', function () {
     $basePath = $this->tempDir('tondbad_make_guard_test');
 
     $command = new MakeGuardCommand($basePath);
-    $exit = $command->run(['Jwt']);
+    $exit = $command->run(
+        new ArgvInput(['Jwt'], $command->getDefinition()),
+        new ConsoleOutput(),
+    );
 
     expect($exit)->toBe(0);
 
@@ -25,7 +30,15 @@ it('refuses to overwrite an existing guard', function () {
     $basePath = $this->tempDir('tondbad_make_guard_test');
 
     $command = new MakeGuardCommand($basePath);
-    $command->run(['Jwt']);
+    $command->run(
+        new ArgvInput(['Jwt'], $command->getDefinition()),
+        new ConsoleOutput(),
+    );
 
-    expect($command->run(['Jwt']))->toBe(1);
+    $exit = $command->run(
+        new ArgvInput(['Jwt'], $command->getDefinition()),
+        new ConsoleOutput(),
+    );
+
+    expect($exit)->toBe(1);
 });
