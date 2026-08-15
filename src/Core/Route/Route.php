@@ -20,6 +20,7 @@ use TondbadSwoole\Http\Request as HttpRequest;
 use TondbadSwoole\Http\Response as HttpResponse;
 use TondbadSwoole\Routing\ResourceRegistrar;
 use TondbadSwoole\Routing\SignedUrl;
+use TondbadSwoole\Validation\Schema;
 
 class Route implements RouteInterface
 {
@@ -247,6 +248,11 @@ class Route implements RouteInterface
     public function setConstraint(int $id, string $parameter, string $pattern): void
     {
         $this->registrar->setConstraint($id, $parameter, $pattern);
+    }
+
+    public function setSchema(int $id, string $parameter, Schema $schema): void
+    {
+        $this->registrar->setSchema($id, $parameter, $schema);
     }
 
     public function setName(int $id, string $name): void

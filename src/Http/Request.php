@@ -6,6 +6,7 @@ namespace TondbadSwoole\Http;
 
 use OpenSwoole\Http\Request as SwooleRequest;
 use TondbadSwoole\Database\DatabaseManager;
+use TondbadSwoole\Validation\Schema;
 use TondbadSwoole\Validation\ValidationException;
 use TondbadSwoole\Validation\Validator;
 
@@ -165,10 +166,33 @@ class Request
      */
     public function validate(array $rules, array $messages = []): array
     {
-        $manager = function_exists('app') ? app()?->container->make(DatabaseManager::class) : null;
+        $manager = $this->resolveDatabaseManager();
 
         $validator = new Validator($this->all(), $rules, $messages, $manager);
 
         return $validator->validated();
+    }
+
+    /**
+     * @param array<string, string> $messages
+     * @return mixed
+     * @throws ValidationException
+     */
+    public function validateSchema(Schema $schema, array $messages = []): mixed
+    {
+        return $schema->parse($this->all(), $this->resolveDatabaseManager(), $messages);
+    }
+
+    private function resolveDatabaseManager(): ?DatabaseManager
+    {
+        if (!function_exists('app') || app() === null) {
+            return null;
+        }
+
+        try {
+            return app()->container->make(DatabaseManager::class);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

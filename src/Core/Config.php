@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Core;
 
+use TondbadSwoole\Validation\Schema;
+
 class Config
 {
     /**
@@ -47,6 +49,28 @@ class Config
         }
 
         return $this->getFromArray($key, $this->config, $default);
+    }
+
+    /**
+     * @throws \TondbadSwoole\Core\Exceptions\ConfigurationException
+     */
+    public function validate(string $key, Schema $schema, bool $throw = true): mixed
+    {
+        $value = $this->get($key);
+
+        $result = $schema->safeParse($value);
+
+        if (!$result->valid) {
+            if ($throw) {
+                $messages = array_column($result->errors, 'message');
+
+                throw new \TondbadSwoole\Core\Exceptions\ConfigurationException('Invalid configuration value: ' . implode('; ', $messages));
+            }
+
+            return null;
+        }
+
+        return $result->data;
     }
 
     public function set(string $key, mixed $value): void

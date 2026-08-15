@@ -16,6 +16,7 @@ use TondbadSwoole\Core\Exceptions\ConfigurationException;
 use TondbadSwoole\Core\Route\Route;
 use TondbadSwoole\Providers\Contracts\ServiceProvider;
 use TondbadSwoole\Support\Context;
+use TondbadSwoole\Validation\Schema;
 
 class App
 {
@@ -70,36 +71,30 @@ class App
      */
     private function validateConfiguration(): void
     {
-        $rules = [
-            'app.name' => 'string',
-            'app.type' => 'string',
-            'app.debug' => 'bool',
-            'app.logging.path' => 'string',
-            'app.http.host' => 'string',
-            'app.http.port' => 'int',
-            'app.grpc.host' => 'string',
-            'app.grpc.port' => 'int',
-            'app.middlewares' => 'array',
-        ];
+        $schema = Schema::object([
+            'name' => Schema::string()->required(),
+            'type' => Schema::enum('http', 'grpc')->required(),
+            'debug' => Schema::bool()->required(),
+            'logging' => Schema::object([
+                'path' => Schema::string()->required(),
+            ])->required(),
+            'http' => Schema::object([
+                'host' => Schema::string()->required(),
+                'port' => Schema::int()->required()->gte(1)->lte(65535),
+            ])->required(),
+            'grpc' => Schema::object([
+                'host' => Schema::string()->required(),
+                'port' => Schema::int()->required()->gte(1)->lte(65535),
+            ])->required(),
+            'middlewares' => Schema::array(Schema::mixed())->required(),
+        ])->required()->lax();
 
-        foreach ($rules as $key => $expected) {
-            $value = $this->config->get($key);
-            $valid = match ($expected) {
-                'string' => is_string($value) && $value !== '',
-                'bool' => is_bool($value),
-                'int' => is_int($value) && $value > 0 && $value <= 65535,
-                'array' => is_array($value),
-                default => true,
-            };
+        $result = $schema->safeParse($this->config->get('app', []));
 
-            if (!$valid) {
-                throw new ConfigurationException("Configuration value '{$key}' must be a non-empty {$expected}.");
-            }
-        }
+        if (!$result->valid) {
+            $messages = array_column($result->errors, 'message');
 
-        $appType = $this->config->get('app.type');
-        if (!in_array($appType, ['http', 'grpc'], true)) {
-            throw new ConfigurationException("Configuration 'app.type' must be 'http' or 'grpc', '{$appType}' given.");
+            throw new ConfigurationException('Invalid application configuration: ' . implode('; ', $messages));
         }
     }
 

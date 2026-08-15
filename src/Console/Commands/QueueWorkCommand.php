@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace TondbadSwoole\Console\Commands;
 
 use TondbadSwoole\Queue\Drivers\RedisQueue;
+use InvalidArgumentException;
 use TondbadSwoole\Queue\QueueManager;
 use TondbadSwoole\Queue\Worker;
 use TondbadSwoole\Queue\WorkerOptions;
+use TondbadSwoole\Validation\Schema;
 
 class QueueWorkCommand extends Command
 {
@@ -31,7 +33,14 @@ class QueueWorkCommand extends Command
         $maxJobs = isset($options['max-jobs']) ? (int) $options['max-jobs'] : 0;
         $stopWhenEmpty = isset($options['stop-when-empty']);
         $concurrency = isset($options['concurrency']) ? (int) $options['concurrency'] : 1;
-        $rateLimiter = $this->parseRateLimiter($options['rate-limit'] ?? null);
+
+        try {
+            $rateLimiter = $this->parseRateLimiter($options['rate-limit'] ?? null);
+        } catch (InvalidArgumentException $e) {
+            fwrite(STDERR, $e->getMessage() . "\n");
+
+            return 1;
+        }
 
         $app = app();
 
@@ -157,25 +166,31 @@ class QueueWorkCommand extends Command
             return null;
         }
 
+        $schema = Schema::object([
+            'max' => Schema::int()->coerce()->required(),
+            'window' => Schema::int()->coerce()->default(60),
+            'key' => Schema::string()->default('queue'),
+        ])->lax();
+
         if (is_string($value) && str_contains($value, ':')) {
             [$max, $window] = explode(':', $value, 2);
 
-            return [
-                'max' => (int) $max,
-                'window' => (int) $window,
-                'key' => 'queue',
-            ];
+            $result = $schema->safeParse(['max' => $max, 'window' => $window]);
+
+            if (!$result->valid) {
+                throw new InvalidArgumentException('Invalid --rate-limit value: ' . implode('; ', array_column($result->errors, 'message')));
+            }
+
+            return $result->data;
         }
 
-        if (is_string($value) || is_int($value)) {
-            return [
-                'max' => (int) $value,
-                'window' => 60,
-                'key' => 'queue',
-            ];
+        $result = $schema->safeParse(['max' => $value]);
+
+        if (!$result->valid) {
+            throw new InvalidArgumentException('Invalid --rate-limit value: ' . implode('; ', array_column($result->errors, 'message')));
         }
 
-        return null;
+        return $result->data;
     }
 
     private function enableSwooleHooks(): void

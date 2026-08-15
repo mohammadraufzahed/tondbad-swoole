@@ -19,7 +19,7 @@ class Response
 
     public function status(int $status): self
     {
-        $this->response->status($status);
+        @$this->response->status($status);
 
         return $this;
     }
@@ -40,7 +40,7 @@ class Response
 
     public function end(?string $content = null): void
     {
-        $this->response->end($content);
+        @$this->response->end($content);
     }
 
     public function redirect(string $url, int $status = 302): void
