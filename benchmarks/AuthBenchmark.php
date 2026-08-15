@@ -23,7 +23,10 @@ class AuthBenchmark
         BenchmarkApp::migrate();
 
         db()->getPdo()->exec('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT, password TEXT)');
-        db()->getPdo()->exec("INSERT OR IGNORE INTO users (id, email, password) VALUES (1, 'test@example.com', '" . password_hash('secret', PASSWORD_BCRYPT) . "')");
+        db()->getPdo()->exec('DELETE FROM users');
+
+        $password = password_hash('secret', PASSWORD_BCRYPT);
+        db()->getPdo()->prepare('INSERT INTO users (id, email, password) VALUES (?, ?, ?)')->execute([1, 'test@example.com', $password]);
 
         $this->token = auth()->issueApiToken(1)->value;
 
