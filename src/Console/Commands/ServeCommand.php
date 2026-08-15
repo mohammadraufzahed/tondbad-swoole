@@ -6,20 +6,14 @@ namespace TondbadSwoole\Console\Commands;
 
 use TondbadSwoole\Bootstrap\App;
 use TondbadSwoole\Bootstrap\AppFactory;
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Output\OutputInterface;
 
+#[AsCommand('serve', 'Start the HTTP server.', coroutine: false)]
 class ServeCommand extends Command
 {
-    public function getName(): string
-    {
-        return 'serve';
-    }
-
-    public function getDescription(): string
-    {
-        return 'Start the HTTP server.';
-    }
-
-    public function run(array $args): int
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $app = app();
 

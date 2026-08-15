@@ -1,0 +1,21 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Console\Commands;
+
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Commands\Command;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Output\OutputInterface;
+
+#[AsCommand('{slug}', 'Description of {Name}Command.')]
+class {Name}Command extends Command
+{
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        $output->success('{Name}Command executed.');
+
+        return 0;
+    }
+}

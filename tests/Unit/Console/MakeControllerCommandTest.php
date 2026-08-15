@@ -3,12 +3,22 @@
 declare(strict_types=1);
 
 use TondbadSwoole\Console\Commands\MakeControllerCommand;
+use TondbadSwoole\Console\Input\ArgvInput;
+use TondbadSwoole\Console\Output\ConsoleOutput;
+
+function runMakeControllerCommand(MakeControllerCommand $command, array $args): int
+{
+    return $command->run(
+        new ArgvInput($args, $command->getDefinition()),
+        new ConsoleOutput(),
+    );
+}
 
 it('creates a controller using the new attribute style', function () {
     $basePath = $this->tempDir('tondbad_make_controller_test');
 
     $command = new MakeControllerCommand($basePath);
-    $exit = $command->run(['Test']);
+    $exit = runMakeControllerCommand($command, ['Test']);
 
     expect($exit)->toBe(0);
 
@@ -27,7 +37,7 @@ it('refuses to overwrite an existing controller', function () {
     $basePath = $this->tempDir('tondbad_make_controller_test');
 
     $command = new MakeControllerCommand($basePath);
-    $command->run(['Test']);
+    runMakeControllerCommand($command, ['Test']);
 
-    expect($command->run(['Test']))->toBe(1);
+    expect(runMakeControllerCommand($command, ['Test']))->toBe(1);
 });

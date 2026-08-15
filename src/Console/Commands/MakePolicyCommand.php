@@ -4,26 +4,19 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Attributes\AsCommand;
+
+#[AsCommand('make:policy', 'Create a new policy class.')]
 class MakePolicyCommand extends MakeCommand
 {
-    public function getName(): string
+    protected function getNameSuffixes(): array
     {
-        return 'make:policy';
-    }
-
-    public function getDescription(): string
-    {
-        return 'Create a new policy class.';
+        return ['Policy'];
     }
 
     protected function getStubPath(): string
     {
         return __DIR__ . '/../../../stubs/policy.stub';
-    }
-
-    protected function getNameSuffixes(): array
-    {
-        return ['Policy'];
     }
 
     protected function getDefaultPath(string $name): string

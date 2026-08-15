@@ -4,26 +4,20 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Output\OutputInterface;
 use TondbadSwoole\Core\Route\Route;
 
+#[AsCommand('route:list', 'List all registered routes.')]
 class RouteListCommand extends Command
 {
-    public function getName(): string
-    {
-        return 'route:list';
-    }
-
-    public function getDescription(): string
-    {
-        return 'List all registered routes.';
-    }
-
-    public function run(array $args): int
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $app = app();
 
         if ($app === null) {
-            fwrite(STDERR, "Application not booted.\n");
+            $output->error('Application not booted.');
 
             return 1;
         }
@@ -32,19 +26,19 @@ class RouteListCommand extends Command
         $routes = $route->getRoutes();
 
         if (count($routes) === 0) {
-            fwrite(STDOUT, "No routes registered.\n");
+            $output->writeln('No routes registered.');
 
             return 0;
         }
 
-        fwrite(STDOUT, sprintf("%-8s %-30s %s\n", 'Method', 'Path', 'Handler'));
-        fwrite(STDOUT, str_repeat('-', 70) . "\n");
+        $rows = [];
 
         foreach ($routes as [$method, $path, $handler]) {
             $handlerString = is_array($handler) ? implode('::', $handler) : 'Closure';
-
-            fwrite(STDOUT, sprintf("%-8s %-30s %s\n", $method, $path, $handlerString));
+            $rows[] = [$method, $path, $handlerString];
         }
+
+        $output->table(['Method', 'Path', 'Handler'], $rows);
 
         return 0;
     }

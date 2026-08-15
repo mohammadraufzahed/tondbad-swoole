@@ -4,63 +4,36 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
-use OpenSwoole\Coroutine;
-use OpenSwoole\Runtime;
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Attributes\Argument;
+use TondbadSwoole\Console\Input\InputArgument;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Output\OutputInterface;
 
+#[AsCommand('cache:forget-tags', 'Invalidate all cache entries associated with one or more tags.', coroutine: false)]
 class CacheForgetTagsCommand extends Command
 {
-    public function getName(): string
+    #[Argument('tags', mode: InputArgument::REQUIRED | InputArgument::IS_ARRAY, description: 'Tags to invalidate')]
+    public array $tags = [];
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        return 'cache:forget-tags';
-    }
-
-    public function getDescription(): string
-    {
-        return 'Invalidate all cache entries associated with one or more tags.';
-    }
-
-    public function run(array $args): int
-    {
-        if ($args === []) {
-            fwrite(STDERR, "Usage: cache:forget-tags {tag1} [{tag2} ...]\n");
-
-            return 1;
-        }
-
         $cache = cache();
 
         if ($cache === null) {
-            fwrite(STDERR, "Cache is not available.\n");
+            $output->error('Cache is not available.');
 
             return 1;
         }
 
-        $success = $this->runInCoroutine(fn () => $cache->invalidateTags($args));
-
-        if (!$success) {
-            fwrite(STDERR, "Failed to invalidate tags.\n");
+        if (!$cache->invalidateTags($this->tags)) {
+            $output->error('Failed to invalidate tags.');
 
             return 1;
         }
 
-        fwrite(STDOUT, "Forgot tags: " . implode(', ', $args) . "\n");
+        $output->success('Forgot tags: ' . implode(', ', $this->tags));
 
         return 0;
-    }
-
-    private function runInCoroutine(callable $callback): mixed
-    {
-        if (Coroutine::getCid() !== -1) {
-            return $callback();
-        }
-
-        Runtime::enableCoroutine(SWOOLE_HOOK_TCP);
-
-        $result = null;
-        Coroutine::run(function () use ($callback, &$result): void {
-            $result = $callback();
-        });
-
-        return $result;
     }
 }

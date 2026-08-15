@@ -9,6 +9,8 @@ use TondbadSwoole\Benchmark\Attributes\Setup;
 use TondbadSwoole\Benchmark\Blackhole;
 use TondbadSwoole\Console\Application;
 use TondbadSwoole\Console\Commands\Command;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Output\OutputInterface;
 
 class NoopConsoleCommand extends Command
 {
@@ -22,7 +24,7 @@ class NoopConsoleCommand extends Command
         return 'Noop command for benchmarking.';
     }
 
-    public function run(array $args): int
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         return 0;
     }

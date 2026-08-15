@@ -4,33 +4,28 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Output\OutputInterface;
+use TondbadSwoole\Database\Migrations\MigrationRepository;
 use TondbadSwoole\Database\Migrations\Migrator;
 
+#[AsCommand('migrate:status', 'Show the status of each migration.')]
 class MigrateStatusCommand extends Command
 {
-    public function getName(): string
-    {
-        return 'migrate:status';
-    }
-
-    public function getDescription(): string
-    {
-        return 'Show the status of each migration.';
-    }
-
-    public function run(array $args): int
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $migrator = $this->getMigrator();
         $files = $migrator->getMigrationFiles();
-        $ran = app()->container->make(\TondbadSwoole\Database\Migrations\MigrationRepository::class)->getRan();
+        $ran = app()->container->make(MigrationRepository::class)->getRan();
 
-        fwrite(STDOUT, str_pad('Migration', 50) . ' Status' . "\n");
-        fwrite(STDOUT, str_repeat('-', 60) . "\n");
+        $rows = [];
 
         foreach ($files as $file) {
-            $status = in_array($file, $ran, true) ? 'Ran' : 'Pending';
-            fwrite(STDOUT, str_pad($file, 50) . ' ' . $status . "\n");
+            $rows[] = [$file, in_array($file, $ran, true) ? 'Ran' : 'Pending'];
         }
+
+        $output->table(['Migration', 'Status'], $rows);
 
         return 0;
     }

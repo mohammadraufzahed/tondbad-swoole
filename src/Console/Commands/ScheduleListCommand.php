@@ -6,27 +6,21 @@ namespace TondbadSwoole\Console\Commands;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Output\OutputInterface;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Scheduling\Schedule;
 
+#[AsCommand('schedule:list', 'List all scheduled tasks.')]
 class ScheduleListCommand extends Command
 {
-    public function getName(): string
-    {
-        return 'schedule:list';
-    }
-
-    public function getDescription(): string
-    {
-        return 'List all scheduled tasks.';
-    }
-
-    public function run(array $args): int
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $app = app();
 
         if ($app === null) {
-            fwrite(STDERR, "Application not booted.\n");
+            $output->error('Application not booted.');
 
             return 1;
         }
@@ -38,23 +32,22 @@ class ScheduleListCommand extends Command
         $events = $schedule->events();
 
         if (count($events) === 0) {
-            fwrite(STDOUT, "No scheduled tasks.\n");
+            $output->writeln('No scheduled tasks.');
 
             return 0;
         }
 
-        fwrite(STDOUT, sprintf("%-28s %-30s %-30s\n", 'Expression', 'Description', 'Next Run'));
-        fwrite(STDOUT, str_repeat('-', 88) . "\n");
+        $rows = [];
 
         foreach ($events as $event) {
-            $next = $event->getNextRunDate($now)->format('Y-m-d H:i:s e');
-            fwrite(STDOUT, sprintf(
-                "%-28s %-30s %-30s\n",
+            $rows[] = [
                 $event->getExpression(),
                 $event->getDescription(),
-                $next,
-            ));
+                $event->getNextRunDate($now)->format('Y-m-d H:i:s e'),
+            ];
         }
+
+        $output->table(['Expression', 'Description', 'Next Run'], $rows);
 
         return 0;
     }

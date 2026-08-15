@@ -6,6 +6,8 @@ require __DIR__ . '/../../vendor/autoload.php';
 
 use TondbadSwoole\Bootstrap\App;
 use TondbadSwoole\Console\Commands\ScheduleWorkCommand;
+use TondbadSwoole\Console\Input\ArgvInput;
+use TondbadSwoole\Console\Output\ConsoleOutput;
 
 $marker = sys_get_temp_dir() . '/tondbad_schedule_work_' . uniqid() . '.marker';
 
@@ -17,7 +19,10 @@ $schedule->call(function () use ($marker): void {
 })->everyMinute();
 
 $command = new ScheduleWorkCommand($app->basePath());
-$exitCode = $command->run(['--run-once']);
+$exitCode = $command->run(
+    new ArgvInput(['--run-once'], $command->getDefinition()),
+    new ConsoleOutput(),
+);
 
 echo json_encode([
     'exitCode' => $exitCode,

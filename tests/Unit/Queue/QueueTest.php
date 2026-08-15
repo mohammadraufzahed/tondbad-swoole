@@ -305,7 +305,10 @@ it('retries a failed job via the retry command', function () {
     $failedId = (int) $failed['id'];
 
     $command = new \TondbadSwoole\Console\Commands\QueueRetryCommand($this->app->basePath());
-    $exit = $command->run([$failedId, '--connection=database']);
+    $exit = $command->run(
+        new \TondbadSwoole\Console\Input\ArgvInput([$failedId, '--connection=database'], $command->getDefinition()),
+        new \TondbadSwoole\Console\Output\ConsoleOutput(),
+    );
 
     expect($exit)->toBe(0);
     expect(db()->table('failed_jobs')->count())->toBe(0);

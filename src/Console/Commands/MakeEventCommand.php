@@ -4,18 +4,11 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Attributes\AsCommand;
+
+#[AsCommand('make:event', 'Create a new event class.')]
 class MakeEventCommand extends MakeCommand
 {
-    public function getName(): string
-    {
-        return 'make:event';
-    }
-
-    public function getDescription(): string
-    {
-        return 'Create a new event class.';
-    }
-
     protected function getStubPath(): string
     {
         return __DIR__ . '/../../../stubs/event.stub';

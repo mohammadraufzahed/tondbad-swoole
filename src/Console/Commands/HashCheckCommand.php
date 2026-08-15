@@ -4,40 +4,33 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Console\Commands;
 
+use TondbadSwoole\Console\Attributes\AsCommand;
+use TondbadSwoole\Console\Attributes\Argument;
+use TondbadSwoole\Console\Input\InputArgument;
+use TondbadSwoole\Console\Input\InputInterface;
+use TondbadSwoole\Console\Output\OutputInterface;
 use TondbadSwoole\Support\Hash\HashManager;
 
+#[AsCommand('hash:check', 'Check a plain-text value against a hash.')]
 class HashCheckCommand extends Command
 {
-    public function getName(): string
+    #[Argument('value', mode: InputArgument::REQUIRED, description: 'Plain text value')]
+    public string $value;
+
+    #[Argument('hash', mode: InputArgument::REQUIRED, description: 'Hash to check against')]
+    public string $hash;
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        return 'hash:check';
-    }
-
-    public function getDescription(): string
-    {
-        return 'Check a plain-text value against a hash.';
-    }
-
-    public function run(array $args): int
-    {
-        $value = $args[0] ?? null;
-        $hash = $args[1] ?? null;
-
-        if ($value === null || $value === '' || $hash === null || $hash === '') {
-            fwrite(STDERR, "Usage: tondbad {$this->getName()} <value> <hash>\n");
-
-            return 1;
-        }
-
         $manager = app()?->container->make(HashManager::class);
 
         if (!$manager instanceof HashManager) {
-            fwrite(STDERR, "HashManager is not available.\n");
+            $output->error('HashManager is not available.');
 
             return 1;
         }
 
-        fwrite(STDOUT, ($manager->check($value, $hash) ? 'true' : 'false') . PHP_EOL);
+        $output->writeln($manager->check($this->value, $this->hash) ? 'true' : 'false');
 
         return 0;
     }
