@@ -10,7 +10,7 @@ class Post extends Model
 {
     protected ?string $table = 'posts';
 
-    protected array $fillable = ['user_id', 'title', 'body'];
+    protected array $fillable = ['user_id', 'title', 'body', 'views'];
 
     public function user()
     {

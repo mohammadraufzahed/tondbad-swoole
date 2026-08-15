@@ -14,4 +14,24 @@ class MySqlGrammar extends Grammar
     {
         parent::__construct(new MySqlOperations(), new MySqlFeatures());
     }
+
+    public function jsonContainsBindings(string $path, mixed $value): array
+    {
+        return [$value, $path];
+    }
+
+    protected function whereJsonContains(array $where): string
+    {
+        return ($where['not'] ? 'not ' : '') . 'json_contains(' . $this->wrap($where['column']) . ', cast(? as json), ?)';
+    }
+
+    public function jsonLengthBindings(string $path, mixed $value): array
+    {
+        return [$path, $value];
+    }
+
+    protected function whereJsonLength(array $where): string
+    {
+        return 'json_length(' . $this->wrap($where['column']) . ', ?) ' . $where['operator'] . ' cast(? as unsigned)';
+    }
 }

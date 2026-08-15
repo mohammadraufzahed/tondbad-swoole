@@ -8,6 +8,7 @@ use PDO;
 use PDOStatement;
 use Throwable;
 use TondbadSwoole\Contracts\ContextInterface;
+use TondbadSwoole\Database\Postgres\SwoolePostgresStatement;
 use TondbadSwoole\Database\Query\Builder;
 use TondbadSwoole\Database\Query\Grammar;
 use TondbadSwoole\Database\Schema\Builder as SchemaBuilder;
@@ -195,7 +196,7 @@ class DatabaseWrapper implements ConnectionInterface
 
         try {
             $statement = $pdo->prepare($sql);
-            $statement->execute($bindings);
+            $this->executeStatement($statement, $bindings);
 
             return $callback($statement);
         } catch (Throwable $e) {
@@ -203,6 +204,28 @@ class DatabaseWrapper implements ConnectionInterface
         } finally {
             $this->putPdo($pdo);
         }
+    }
+
+    protected function executeStatement(PDOStatement $statement, array $bindings): bool
+    {
+        if ($statement instanceof SwoolePostgresStatement) {
+            return $statement->execute($bindings);
+        }
+
+        $index = 1;
+
+        foreach ($bindings as $value) {
+            $type = match (true) {
+                $value === null => PDO::PARAM_NULL,
+                is_bool($value) => PDO::PARAM_BOOL,
+                is_int($value) => PDO::PARAM_INT,
+                default => PDO::PARAM_STR,
+            };
+
+            $statement->bindValue($index++, $value, $type);
+        }
+
+        return $statement->execute();
     }
 
     protected function affectingStatement(string $sql, array $bindings): int

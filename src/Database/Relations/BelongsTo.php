@@ -57,4 +57,19 @@ class BelongsTo extends Relation
             $model->setRelation($this->relationName, $dictionary[$key] ?? null);
         }
     }
+
+    public function addWhereHasConstraints(string $parentTable): void
+    {
+        $relatedTable = $this->newRelatedInstance()->getTable();
+        $this->query->whereColumn(
+            $relatedTable . '.' . $this->localKey,
+            '=',
+            $parentTable . '.' . $this->foreignKey
+        );
+    }
+
+    public function getWhereHasGroupByColumn(): string
+    {
+        return $this->newRelatedInstance()->getTable() . '.' . $this->localKey;
+    }
 }
