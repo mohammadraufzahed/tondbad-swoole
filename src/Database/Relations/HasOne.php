@@ -51,4 +51,10 @@ class HasOne extends Relation
     {
         return $model->getAttribute($this->foreignKey);
     }
+
+    public function addWhereHasConstraints(string $parentTable): void
+    {
+        [$related, $parent] = $this->getWhereHasColumns($parentTable);
+        $this->query->whereColumn($related, '=', $parent);
+    }
 }

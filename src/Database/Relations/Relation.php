@@ -35,6 +35,31 @@ abstract class Relation
         return $this;
     }
 
+    public function getRelated(): Model
+    {
+        return $this->newRelatedInstance();
+    }
+
+    public function getParent(): Model
+    {
+        return $this->parent;
+    }
+
+    public function getForeignKey(): string
+    {
+        return $this->foreignKey;
+    }
+
+    public function getLocalKey(): string
+    {
+        return $this->localKey;
+    }
+
+    public function getRelationName(): string
+    {
+        return $this->relationName;
+    }
+
     abstract public function getResults(): mixed;
 
     abstract public function getEager(): array;
@@ -48,6 +73,21 @@ abstract class Relation
     public function getQuery(): ModelBuilder
     {
         return $this->query;
+    }
+
+    abstract public function addWhereHasConstraints(string $parentTable): void;
+
+    public function getWhereHasGroupByColumn(): string
+    {
+        return $this->newRelatedInstance()->getTable() . '.' . $this->foreignKey;
+    }
+
+    protected function getWhereHasColumns(string $parentTable): array
+    {
+        return [
+            $this->newRelatedInstance()->getTable() . '.' . $this->foreignKey,
+            $parentTable . '.' . $this->localKey,
+        ];
     }
 
     protected function newRelatedInstance(): Model

@@ -363,3 +363,97 @@ protected array $casts = [
     'price' => MoneyCast::class,
 ];
 ```
+
+## Advanced query layer
+
+### Relation filtering and aggregate eager loading
+
+```php
+$users = User::whereHas('posts')->get();
+
+$users = User::whereHas('posts', fn ($q) => $q->where('published', true))->get();
+
+$users = User::has('posts', '>=', 3)->get();
+
+$users = User::doesntHave('posts')->get();
+
+$users = User::withCount('posts')->get();
+// each $user->posts_count
+
+$users = User::withSum('posts', 'views')
+    ->withAvg('posts', 'views')
+    ->withMax('posts', 'views')
+    ->withMin('posts', 'views')
+    ->get();
+```
+
+### Conditional eager loading
+
+```php
+$users = User::with(['posts' => fn ($q) => $q->where('published', true)])->get();
+
+$user = User::find(1);
+$user->loadMissing(['posts.comments']);
+$user->loadCount('posts');
+```
+
+### JSON predicates and subqueries
+
+```php
+User::query()->whereJsonContains('settings->tags', 'news')->get();
+User::query()->whereJsonLength('settings->tags', '>=', 2)->get();
+
+User::query()->whereExists(
+    fn ($q) => $q->from('posts')->whereColumn('posts.user_id', 'users.id')
+)->get();
+
+User::query()->whereAny(['name', 'email'], 'like', '%ava%')->get();
+User::query()->whereAll(['name', 'email'], 'like', '%ava%')->get();
+```
+
+### Chunking, cursor and pagination
+
+```php
+foreach (User::cursor(1000) as $user) {
+    // process
+}
+
+User::chunkById(100, function (array $users) {
+    // process batch
+});
+
+$paginator = User::paginate(20, 1);
+$paginator->toArray(); // items, total, per_page, current_page, last_page
+```
+
+### Find helpers and batch deletes
+
+```php
+$users = User::findMany([1, 2, 3]);
+
+$user = User::firstOrNew(['email' => 'ava@example.com'], ['name' => 'Ava']);
+$user = User::firstOrFail();
+
+User::destroy(1);
+User::destroy([1, 2, 3]);
+```
+
+### Scopes and soft deletes
+
+```php
+use TondbadSwoole\Database\Concerns\SoftDeletes;
+
+class Post extends Model
+{
+    use SoftDeletes;
+}
+
+Post::all();               // excludes deleted rows
+Post::withTrashed()->get(); // includes deleted rows
+Post::onlyTrashed()->get(); // only deleted rows
+
+$post->delete();      // soft delete
+$post->trashed();     // true
+$post->restore();     // un-delete
+$post->forceDelete(); // permanently remove
+```
