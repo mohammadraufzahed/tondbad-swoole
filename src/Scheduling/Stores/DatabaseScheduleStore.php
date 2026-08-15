@@ -6,6 +6,7 @@ namespace TondbadSwoole\Scheduling\Stores;
 
 use DateTimeImmutable;
 use DateTimeInterface;
+use PDOException;
 use TondbadSwoole\Database\DatabaseManager;
 use TondbadSwoole\Scheduling\Contracts\ScheduleStore;
 use TondbadSwoole\Scheduling\ScheduleDefinition;
@@ -104,11 +105,37 @@ class DatabaseScheduleStore implements ScheduleStore
         if ($exists) {
             unset($data['created_at']);
             $this->database->table($this->table)->where('id', $definition->id)->update($data);
-        } else {
-            $data['id'] = $definition->id;
-            $data['name'] = $definition->name;
-            $this->database->table($this->table)->insert($data);
+
+            return;
         }
+
+        $insertData = $data;
+        $insertData['id'] = $definition->id;
+        $insertData['name'] = $definition->name;
+
+        $updateData = $data;
+        unset($updateData['created_at']);
+
+        try {
+            $this->database->table($this->table)->insert($insertData);
+        } catch (PDOException $e) {
+            if (!$this->isUniqueConstraintViolation($e)) {
+                throw $e;
+            }
+
+            $this->database->table($this->table)->where('id', $definition->id)->update($updateData);
+        }
+    }
+
+    private function isUniqueConstraintViolation(PDOException $e): bool
+    {
+        $code = $e->getCode();
+
+        return $code === '23000'
+            || $code === 23000
+            || stripos($e->getMessage(), 'UNIQUE constraint failed') !== false
+            || stripos($e->getMessage(), 'Duplicate entry') !== false
+            || stripos($e->getMessage(), 'unique constraint') !== false;
     }
 
     public function delete(string $id): void
