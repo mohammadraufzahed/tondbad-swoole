@@ -21,6 +21,7 @@ it('exposes gRPC health and reflection services', function () {
             'APP_GRPC_HOST' => '127.0.0.1',
             'GRPC_HEALTH' => '1',
             'GRPC_REFLECTION' => '1',
+            'GRPC_DESCRIPTOR_SET' => 'tests/Fixtures/Grpc/descriptors.pb',
         ],
     );
 

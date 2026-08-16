@@ -12,4 +12,5 @@ return [
     'interceptors' => [],
     'reflection' => (bool) (getenv('GRPC_REFLECTION') ?: false),
     'health' => (bool) (getenv('GRPC_HEALTH') ?: false),
+    'descriptor_set' => getenv('GRPC_DESCRIPTOR_SET') ?: null,
 ];
