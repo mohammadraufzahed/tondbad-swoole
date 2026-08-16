@@ -6,7 +6,7 @@ namespace TondbadSwoole\Grpc;
 
 final class InterceptorChain
 {
-    /** @param UnaryServerInterceptor[] $interceptors */
+    /** @param ServerInterceptor[] $interceptors */
     public function __construct(
         private readonly array $interceptors,
         private readonly ServerCallInfo $info,
@@ -35,7 +35,7 @@ final class InterceptorChain
                 return $result;
             }
 
-            return new Response($result, Status::ok());
+            return new Response($result ?? null, Status::ok());
         };
     }
 }

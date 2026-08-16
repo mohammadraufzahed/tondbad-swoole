@@ -45,6 +45,22 @@ abstract class Relation
 
     abstract public function match(array $models, array $results): void;
 
+    abstract public function getRelationExistenceQuery(ModelBuilder $parent, string $parentTable): ModelBuilder;
+
+    abstract public function getHasGroupByColumn(): string;
+
+    public function addHasExistenceQuery(
+        ModelBuilder $parent,
+        string $parentTable,
+        string $operator,
+        int $count,
+        string $boolean,
+        bool $not,
+        ?\Closure $callback = null,
+    ): bool {
+        return false;
+    }
+
     public function getQuery(): ModelBuilder
     {
         return $this->query;

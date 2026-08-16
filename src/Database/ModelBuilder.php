@@ -38,6 +38,85 @@ class ModelBuilder extends Builder
         return $this->entityManager;
     }
 
+    public function has(string $relation, string $operator = '>=', int $count = 1, string $boolean = 'and', ?\Closure $callback = null): self
+    {
+        return $this->withHas($relation, $operator, $count, $boolean, false, $callback);
+    }
+
+    public function orHas(string $relation, string $operator = '>=', int $count = 1): self
+    {
+        return $this->has($relation, $operator, $count, 'or');
+    }
+
+    public function whereHas(string $relation, ?\Closure $callback = null, string $operator = '>=', int $count = 1, string $boolean = 'and'): self
+    {
+        return $this->has($relation, $operator, $count, $boolean, $callback);
+    }
+
+    public function orWhereHas(string $relation, ?\Closure $callback = null, string $operator = '>=', int $count = 1): self
+    {
+        return $this->has($relation, $operator, $count, 'or', $callback);
+    }
+
+    public function doesntHave(string $relation, string $boolean = 'and', ?\Closure $callback = null): self
+    {
+        return $this->withHas($relation, '>=', 1, $boolean, true, $callback);
+    }
+
+    public function orDoesntHave(string $relation): self
+    {
+        return $this->doesntHave($relation, 'or');
+    }
+
+    protected function withHas(string $relation, string $operator, int $count, string $boolean, bool $not, ?\Closure $callback): self
+    {
+        $relationObj = $this->getRelationObject($relation);
+
+        if ($relationObj === null) {
+            return $this;
+        }
+
+        $parentTable = $this->from;
+
+        if ($relationObj->addHasExistenceQuery($this, $parentTable, $operator, $count, $boolean, $not, $callback)) {
+            return $this;
+        }
+
+        $sub = $relationObj->getRelationExistenceQuery($this, $parentTable);
+
+        if ($callback !== null) {
+            $callback($sub);
+        }
+
+        if ($operator !== '>=' || $count !== 1) {
+            $sub = $this->addHasCountConstraints($sub, $relationObj, $operator, $count);
+        }
+
+        return $this->whereExists($sub, $boolean, $not);
+    }
+
+    protected function getRelationObject(string $relation): ?Relations\Relation
+    {
+        if ($this->model === null) {
+            return null;
+        }
+
+        $instance = new $this->model();
+
+        if (!method_exists($instance, $relation)) {
+            return null;
+        }
+
+        return $instance->$relation();
+    }
+
+    protected function addHasCountConstraints(ModelBuilder $query, Relations\Relation $relation, string $operator, int $count): ModelBuilder
+    {
+        return $query->select($this->raw('1'))
+            ->groupBy($relation->getHasGroupByColumn())
+            ->having($this->raw('count(*)'), $operator, $count);
+    }
+
     public function with(array|string $relations): self
     {
         if (is_string($relations)) {

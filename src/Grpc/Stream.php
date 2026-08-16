@@ -10,5 +10,5 @@ interface Stream
 
     public function send(object $message): void;
 
-    public function close(?Status $status = null): void;
+    public function close(?Status $status = null): ?object;
 }

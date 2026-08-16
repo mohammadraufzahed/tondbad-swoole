@@ -258,6 +258,87 @@ class Builder
         return $this->whereNotBetween($column, $values, 'or');
     }
 
+    public function whereExists(self|\Closure $callback, string $boolean = 'and', bool $not = false): self
+    {
+        if ($callback instanceof \Closure) {
+            $query = $this->newQuery();
+            $callback($query);
+        } else {
+            $query = $callback;
+        }
+
+        $this->wheres[] = [
+            'type' => 'Exists',
+            'query' => $query,
+            'boolean' => $boolean,
+            'not' => $not,
+        ];
+
+        $this->addNestedBindings($query, 'where');
+
+        return $this;
+    }
+
+    public function orWhereExists(self|\Closure $callback): self
+    {
+        return $this->whereExists($callback, 'or');
+    }
+
+    public function whereNotExists(self|\Closure $callback, string $boolean = 'and'): self
+    {
+        return $this->whereExists($callback, $boolean, true);
+    }
+
+    public function orWhereNotExists(self|\Closure $callback): self
+    {
+        return $this->whereExists($callback, 'or', true);
+    }
+
+    public function whereColumn(string|array $first, ?string $operator = null, ?string $second = null, string $boolean = 'and'): self
+    {
+        if (is_array($first)) {
+            foreach ($first as $columns) {
+                if (!is_array($columns) || count($columns) < 2) {
+                    throw new \InvalidArgumentException('whereColumn array entries must contain at least two column names.');
+                }
+
+                $op = $columns[2] ?? '=';
+                $this->whereColumn($columns[0], $op, $columns[1], $boolean);
+            }
+
+            return $this;
+        }
+
+        if (func_num_args() === 2) {
+            $second = $operator;
+            $operator = '=';
+        }
+
+        if ($second === null || $operator === null) {
+            throw new \InvalidArgumentException('whereColumn requires two columns and an operator.');
+        }
+
+        $this->wheres[] = [
+            'type' => 'Column',
+            'first' => $first,
+            'operator' => $operator,
+            'second' => $second,
+            'boolean' => $boolean,
+        ];
+
+        return $this;
+    }
+
+    public function orWhereColumn(string $first, ?string $operator = null, ?string $second = null): self
+    {
+        if (func_num_args() === 2) {
+            $second = $operator;
+            $operator = '=';
+        }
+
+        return $this->whereColumn($first, $operator, $second, 'or');
+    }
+
     public function whereRaw(string $sql, array $bindings = [], string $boolean = 'and'): self
     {
         $this->wheres[] = [

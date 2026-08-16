@@ -361,6 +361,26 @@ class Grammar
         return '(' . $sql . ')';
     }
 
+    protected function whereExists(array $where): string
+    {
+        $query = $where['query'];
+        $not = ($where['not'] ?? false) ? 'not ' : '';
+
+        $columns = $query->columns;
+        $query->columns = [new Expression('1')];
+
+        $sql = $this->compileSelect($query);
+
+        $query->columns = $columns;
+
+        return '(' . $not . 'exists (' . ltrim($sql) . '))';
+    }
+
+    protected function whereColumn(array $where): string
+    {
+        return $this->wrap($where['first']) . ' ' . $where['operator'] . ' ' . $this->wrap($where['second']);
+    }
+
     protected function whereRaw(array $where): string
     {
         return $where['sql'];

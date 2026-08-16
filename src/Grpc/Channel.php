@@ -6,12 +6,14 @@ namespace TondbadSwoole\Grpc;
 
 use Google\Protobuf\Internal\Message;
 use OpenSwoole\Coroutine;
-use OpenSwoole\GRPC\Client as OpenSwooleClient;
-use OpenSwoole\GRPC\Exception\GRPCException;
+use OpenSwoole\Coroutine\Http2\Client as Http2Client;
+use OpenSwoole\Http2\Request;
 
 final class Channel
 {
-    /** @var array<int, OpenSwooleClient> */
+    private const DEFAULT_TIMEOUT = 30;
+
+    /** @var array<int, Http2Client> */
     private array $clients = [];
 
     public function __construct(
@@ -23,49 +25,74 @@ final class Channel
 
     /**
      * @template T of Message
+     *
      * @param class-string<T> $responseClass
+     *
      * @return T
      */
     public function invoke(string $method, Message $request, string $responseClass, array $metadata = []): object
     {
         $client = $this->client();
-        $streamId = $client->send($method, $request, 'proto');
+        $contentType = $this->contentType($metadata);
+        $payload = Frame::encode($request, $contentType);
+        $streamId = $this->send($client, $method, $payload, $metadata, false);
 
-        if ($streamId === false || $streamId <= 0) {
-            throw new StatusException(Status::unavailable('Failed to send gRPC request'));
+        $response = $client->recv($this->timeout());
+
+        if (!$response || $response->streamId !== $streamId) {
+            throw new StatusException(Status::unavailable('Failed to receive gRPC response'));
         }
 
-        [$data, $trailers] = $client->recv($streamId);
+        $this->checkStatus($response->headers);
 
-        $this->checkStatus($trailers);
+        $messages = [];
 
-        return $this->deserialize($data, $responseClass);
+        if ($response->data !== null && $response->data !== '') {
+            /** @var list<T> $messages */
+            $messages = iterator_to_array(Frame::decode($response->data, $responseClass), false);
+        }
+
+        return $messages[0] ?? new $responseClass();
     }
 
     /**
      * @template T of Message
+     *
      * @param class-string<T> $responseClass
+     *
      * @return Stream<T>
      */
     public function stream(string $method, Message $request, string $responseClass, array $metadata = []): Stream
     {
         $client = $this->client();
-        $streamId = $client->send($method, $request, 'proto');
+        $contentType = $this->contentType($metadata);
+        $payload = Frame::encode($request, $contentType);
+        $streamId = $this->send($client, $method, $payload, $metadata, false);
 
-        if ($streamId === false || $streamId <= 0) {
-            throw new StatusException(Status::unavailable('Failed to send gRPC request'));
-        }
-
-        return new ServerStream($client, $streamId, $responseClass);
+        return new ServerStream($client, $streamId, $responseClass, $contentType);
     }
 
-    private function client(): OpenSwooleClient
+    /**
+     * @template T of Message
+     *
+     * @param class-string<T> $responseClass
+     */
+    public function clientStream(string $method, string $responseClass, array $metadata = []): ClientStream
+    {
+        $client = $this->client();
+        $contentType = $this->contentType($metadata);
+        $streamId = $this->send($client, $method, '', $metadata, true);
+
+        return new ClientStream($client, $streamId, $responseClass, $contentType);
+    }
+
+    private function client(): Http2Client
     {
         $cid = Coroutine::getCid();
 
         if (!isset($this->clients[$cid])) {
-            $client = new OpenSwooleClient($this->host, $this->port);
-            $client->set($this->options);
+            $client = new Http2Client($this->host, $this->port);
+            $client->set(array_merge(['timeout' => self::DEFAULT_TIMEOUT], $this->options));
 
             if (!$client->connect()) {
                 throw new StatusException(Status::unavailable("Could not connect to {$this->host}:{$this->port}"));
@@ -77,25 +104,59 @@ final class Channel
         return $this->clients[$cid];
     }
 
-    /**
-     * @param array<string, string>|null $trailers
-     */
-    private function checkStatus(?array $trailers): void
+    private function send(Http2Client $client, string $method, string $payload, array $metadata, bool $pipeline): int
     {
-        if ($trailers === null) {
-            return;
+        $request = new Request();
+        $request->path = $method;
+        $request->method = 'POST';
+        $request->headers = $this->buildHeaders($metadata);
+        $request->data = $payload;
+        $request->pipeline = $pipeline;
+
+        $streamId = $client->send($request);
+
+        if ($streamId === false || $streamId <= 0) {
+            throw new StatusException(Status::unavailable('Failed to send gRPC request'));
         }
 
-        $status = (int) ($trailers['grpc-status'] ?? '0');
+        return $streamId;
+    }
 
-        if ($status !== 0) {
-            throw new StatusException(new Status($status, $trailers['grpc-message'] ?? ''));
+    /** @return array<string, string> */
+    private function buildHeaders(array $metadata): array
+    {
+        $headers = array_merge(
+            [
+                'user-agent' => 'tondbad-grpc/1.0',
+                'content-type' => 'application/grpc',
+                'te' => 'trailers',
+            ],
+            $metadata,
+        );
+
+        return array_map(static fn ($value) => (string) $value, $headers);
+    }
+
+    private function contentType(array $metadata): string
+    {
+        foreach ($metadata as $key => $value) {
+            if (strtolower((string) $key) === 'content-type') {
+                $value = (string) $value;
+
+                return in_array($value, ['application/grpc', 'application/grpc+proto', 'application/grpc+json'], true)
+                    ? $value
+                    : 'application/grpc';
+            }
         }
+
+        return 'application/grpc';
     }
 
     /**
      * @template T of Message
+     *
      * @param class-string<T> $class
+     *
      * @return T
      */
     private function deserialize(?string $data, string $class): object
@@ -108,5 +169,22 @@ final class Channel
         }
 
         return $message;
+    }
+
+    /**
+     * @param array<string, mixed> $trailers
+     */
+    private function checkStatus(array $trailers): void
+    {
+        $status = (int) ($trailers['grpc-status'] ?? '0');
+
+        if ($status !== 0) {
+            throw new StatusException(new Status($status, (string) ($trailers['grpc-message'] ?? '')));
+        }
+    }
+
+    private function timeout(): float
+    {
+        return (float) ($this->options['timeout'] ?? self::DEFAULT_TIMEOUT);
     }
 }

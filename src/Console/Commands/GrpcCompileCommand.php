@@ -135,6 +135,32 @@ class GrpcCompileCommand extends Command
             return null;
         }
 
+        $this->ensureStrictTypesInDirectory($out);
+
         return $tmp;
+    }
+
+    private function ensureStrictTypesInDirectory(string $directory): void
+    {
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::SELF_FIRST,
+        );
+
+        foreach ($iterator as $file) {
+            if (!$file->isFile() || $file->getExtension() !== 'php') {
+                continue;
+            }
+
+            $path = $file->getPathname();
+            $contents = file_get_contents($path);
+
+            if ($contents === false || str_contains($contents, 'declare(strict_types=1)')) {
+                continue;
+            }
+
+            $contents = preg_replace('/^<\?php\n/', "<?php\n\ndeclare(strict_types=1);\n", $contents, 1);
+            file_put_contents($path, $contents);
+        }
     }
 }

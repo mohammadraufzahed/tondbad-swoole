@@ -19,7 +19,7 @@ final class ServerBuilder
     /** @var class-string<BindableService>[] */
     private array $services = [];
 
-    /** @var class-string<UnaryServerInterceptor>[] */
+    /** @var class-string<ServerInterceptor>[] */
     private array $interceptors = [];
 
     private array $settings = [
@@ -103,7 +103,7 @@ final class ServerBuilder
         return $this;
     }
 
-    /** @param class-string<UnaryServerInterceptor> $interceptorClass */
+    /** @param class-string<ServerInterceptor> $interceptorClass */
     public function addInterceptor(string $interceptorClass): self
     {
         $this->interceptors[] = $interceptorClass;
@@ -127,21 +127,20 @@ final class ServerBuilder
 
     public function build(): GrpcServer
     {
-        $registry = new ServiceRegistry($this->container);
+        $services = $this->services;
 
-        foreach ($this->services as $serviceClass) {
-            $registry->add($serviceClass);
+        if ($this->reflection) {
+            $services[] = \TondbadSwoole\Grpc\Reflection\V1alpha\ReflectionService::class;
         }
 
-        $interceptorInstances = [];
-        foreach ($this->interceptors as $interceptorClass) {
-            $interceptorInstances[] = $this->container->make($interceptorClass);
+        if ($this->health) {
+            $services[] = \TondbadSwoole\Grpc\Health\V1\HealthService::class;
         }
 
         return new GrpcServer(
             $this->container,
-            $registry,
-            $interceptorInstances,
+            $services,
+            $this->interceptors,
             $this->host,
             $this->port,
             $this->mode,

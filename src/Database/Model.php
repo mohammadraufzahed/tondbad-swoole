@@ -18,6 +18,7 @@ use TondbadSwoole\Database\Casts\CastsAttributes;
 use TondbadSwoole\Database\Relations\BelongsTo;
 use TondbadSwoole\Database\Relations\HasMany;
 use TondbadSwoole\Database\Relations\HasOne;
+use TondbadSwoole\Database\Relations\MorphTo;
 use TondbadSwoole\Database\Relations\Relation;
 use UnitEnum;
 
@@ -1148,6 +1149,15 @@ abstract class Model
         $ownerKey ??= $instance->getKeyName();
 
         return new BelongsTo($this, $related, $foreignKey, $ownerKey, $this->getRelationCaller());
+    }
+
+    public function morphTo(?string $typeColumn = null, ?string $idColumn = null, ?string $relationName = null): MorphTo
+    {
+        $relationName ??= $this->getRelationCaller();
+        $typeColumn ??= $this->snake($relationName) . '_type';
+        $idColumn ??= $this->snake($relationName) . '_id';
+
+        return new MorphTo($this, $typeColumn, $idColumn, $relationName);
     }
 
     protected function getRelationCaller(): string

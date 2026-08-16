@@ -13,6 +13,8 @@ final class Request
         public readonly Metadata $metadata,
         public readonly Context $context,
         public readonly ?\DateTimeImmutable $deadline = null,
+        public readonly ?StreamReader $stream = null,
+        public readonly ?StreamWriter $writer = null,
     ) {
     }
 }
