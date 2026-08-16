@@ -97,10 +97,15 @@ final class ViewManager
     private function renderWithContext(string $view, array $data, ViewContext $ctx): string
     {
         $view = $this->normalize($view);
+        $data = array_merge($this->shared, $data);
+
+        $viewObj = $this->makeViewValueObject($view, $data);
 
         foreach ($this->composers[$view] ?? [] as $composer) {
-            $composer($this->makeViewValueObject($view, $data));
+            $composer($viewObj);
         }
+
+        $data = $viewObj->data();
 
         $compiled = $this->getCompiled($view);
 
@@ -119,13 +124,15 @@ final class ViewManager
         $className = $this->className($source);
         $compiledFile = $this->compiledPath . '/' . $className . '.php';
 
-        if ($this->needsCompile($source, $compiledFile)) {
+        if ($this->needsCompile($source, $compiledFile, $className)) {
             $this->compile($source, $compiledFile);
         }
 
-        require_once $compiledFile;
-
         $fqcn = 'TondbadSwoole\\View\\Compiled\\' . $className;
+
+        if (!class_exists($fqcn)) {
+            require_once $compiledFile;
+        }
 
         return new $fqcn();
     }
@@ -170,7 +177,7 @@ final class ViewManager
 
     public function clearCompiled(): void
     {
-        foreach (glob($this->compiledPath . '/*.php') as $file) {
+        foreach (glob($this->compiledPath . '/*.php') ?: [] as $file) {
             @unlink((string) $file);
         }
     }
@@ -197,6 +204,17 @@ final class ViewManager
         throw new ViewNotFoundException("View [{$view}] not found.");
     }
 
+    private function viewExists(string $view): bool
+    {
+        try {
+            $this->find($view);
+
+            return true;
+        } catch (ViewNotFoundException) {
+            return false;
+        }
+    }
+
     /**
      * @param array<string, mixed> $data
      * @param array<string, \Closure> $slots
@@ -214,18 +232,19 @@ final class ViewManager
 
         $view = 'components.' . $name;
 
-        try {
-            $ctx = new ViewContext($this, $this->shared);
+        if ($this->viewExists($view)) {
             $data = array_merge(['slot' => $slots['default'] ?? fn () => ''], $data);
 
             foreach ($slots as $slotName => $closure) {
                 $data[$slotName] = $closure;
             }
 
-            return $this->renderWithContext($view, $data, $ctx);
-        } catch (ViewNotFoundException) {
-            throw new ViewNotFoundException("Component [{$name}] not found.");
+            $component = new AnonymousComponent($view, array_merge($data, ['__manager' => $this]));
+
+            return $component->render()->render();
         }
+
+        throw new ViewNotFoundException("Component [{$name}] not found.");
     }
 
     public function renderLiveComponent(string $name, array $data = []): string
@@ -250,13 +269,17 @@ final class ViewManager
 
     private function className(string $path): string
     {
-        return '__View_' . md5($path);
+        $mtime = is_file($path) ? filemtime($path) : false;
+
+        return '__View_' . md5($path . ':' . ($mtime !== false ? $mtime : '0'));
     }
 
-    private function needsCompile(string $source, string $compiled): bool
+    private function needsCompile(string $source, string $compiled, string $className): bool
     {
         if (!$this->cacheEnabled) {
-            return true;
+            $fqcn = 'TondbadSwoole\\View\\Compiled\\' . $className;
+
+            return !class_exists($fqcn) || !is_file($compiled) || filemtime($source) > filemtime($compiled);
         }
 
         if (!is_file($compiled)) {

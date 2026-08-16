@@ -10,6 +10,8 @@ use TondbadSwoole\Core\Cache\InMemoryCache;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Core\Route\Route;
+use TondbadSwoole\Http\Middleware\Authenticate;
+use TondbadSwoole\Http\Middleware\VerifyCsrfToken;
 use TondbadSwoole\Providers\Contracts\ServiceProvider;
 use TondbadSwoole\View\ComponentRegistry;
 use TondbadSwoole\View\Live\LiveComponentController;
@@ -56,7 +58,7 @@ final class ViewServiceProvider extends ServiceProvider
         $route = $container->make(Route::class);
 
         if ((bool) $container->make(Config::class)->get('view.live.enabled', false)) {
-            $route->post('/_live/{component}', [LiveComponentController::class, 'handle']);
+            $route->post('/_live/{component}', [LiveComponentController::class, 'handle'], [Authenticate::class, VerifyCsrfToken::class]);
         }
     }
 }

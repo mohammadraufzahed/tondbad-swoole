@@ -31,6 +31,14 @@ final class View
         $this->data[$key] = $value;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    public function data(): array
+    {
+        return $this->data;
+    }
+
     public function render(): string
     {
         return $this->manager->render($this->name, $this->data);

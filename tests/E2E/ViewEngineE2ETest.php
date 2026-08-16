@@ -14,6 +14,14 @@ it('renders compiled views with layouts, components, and live fragments over HTT
     $routeBackup = $basePath . '/routes/http.php.e2e-backup';
     $viewsPath = $basePath . '/resources/views';
     $port = (int) getenv('APP_HTTP_PORT') ?: random_int(18000, 19999);
+    $dbPath = $basePath . '/storage/testing/view-engine-e2e.sqlite';
+
+    if (!is_dir(dirname($dbPath))) {
+        mkdir(dirname($dbPath), 0755, true);
+    }
+
+    @unlink($dbPath);
+    touch($dbPath);
 
     $originalRoute = file_exists($routePath) ? file_get_contents($routePath) : null;
 
@@ -45,6 +53,27 @@ return function (\TondbadSwoole\Core\Route\Route $route) {
     $route->view('/welcome', 'e2e-welcome', ['name' => 'Tond']);
 
     $route->get('/live', function (\TondbadSwoole\Http\Request $request, \TondbadSwoole\Http\Response $response) {
+        if (!schema()->hasTable('users')) {
+            schema()->create('users', function ($table): void {
+                $table->id();
+                $table->string('email');
+                $table->string('password');
+                $table->string('name');
+            });
+        }
+
+        $manager = app()?->container->make(\TondbadSwoole\Auth\AuthUserManager::class);
+        $db = app()?->container->make(\TondbadSwoole\Database\DatabaseManager::class);
+        $row = $db->table('users')->where('email', '=', 'e2e@example.com')->first();
+
+        if ($row === null) {
+            $user = $manager->create(['email' => 'e2e@example.com', 'password' => 'secret', 'name' => 'E2E']);
+        } else {
+            $user = new \TondbadSwoole\Auth\GenericUser('users', $row, 'id', 'password');
+        }
+
+        $session = auth('session')->login($user);
+
         $store = app()?->container->make(\TondbadSwoole\View\Live\StateStore::class);
         $counter = new E2ECounter();
         $counter->mount();
@@ -52,6 +81,8 @@ return function (\TondbadSwoole\Core\Route\Route $route) {
         $html = $counter->renderView();
         $html = str_replace('<data-t-state></data-t-state>', '<input type="hidden" name="t:state" value="' . $token . '">', $html);
 
+        $response->header('X-E2E-Session-Id', $session->accessToken->value);
+        $response->header('X-E2E-Csrf-Token', (string) $session->session->antiCsrf);
         $response->html($html);
     });
 };
@@ -90,18 +121,26 @@ VIEW
 VIEW
 );
 
-    $cacheEnv = array_merge($_ENV, [
+    $migrateEnv = array_merge($_ENV, [
         'APP_TYPE' => 'http',
         'APP_ENV' => 'testing',
-        'VIEW_LIVE_ENABLED' => '1',
-        'VIEW_LIVE_TRANSPORT' => 'http',
+        'DB_CONNECTION' => 'sqlite',
+        'DB_SQLITE_DATABASE' => $dbPath,
+        'AUTH_GUARD' => 'session',
     ]);
+
+    $migrate = proc_open(['php', 'bin/tondbad', 'migrate'], [
+        0 => ['pipe', 'r'],
+        1 => ['pipe', 'w'],
+        2 => ['pipe', 'w'],
+    ], $migratePipes, $basePath, $migrateEnv);
+    proc_close($migrate);
 
     $cacheClear = proc_open(['php', 'bin/tondbad', 'cache:clear'], [
         0 => ['pipe', 'r'],
         1 => ['pipe', 'w'],
         2 => ['pipe', 'w'],
-    ], $cachePipes, $basePath, $cacheEnv);
+    ], $cachePipes, $basePath, $migrateEnv);
     proc_close($cacheClear);
 
     $serverEnv = array_merge($_ENV, [
@@ -111,6 +150,9 @@ VIEW
         'APP_HTTP_HOST' => '127.0.0.1',
         'VIEW_LIVE_ENABLED' => '1',
         'VIEW_LIVE_TRANSPORT' => 'http',
+        'DB_CONNECTION' => 'sqlite',
+        'DB_SQLITE_DATABASE' => $dbPath,
+        'AUTH_GUARD' => 'session',
     ]);
 
     $server = proc_open(['php', 'bin/tondbad', 'serve'], [
@@ -150,20 +192,35 @@ VIEW
             ->and($welcome)->toContain('alert-success')
             ->and($welcome)->toContain('Welcome E2E');
 
-        $live = fetchE2EUrl("http://127.0.0.1:{$port}/live");
-        expect($live)->toContain('data-t-live="e2e-counter"')
-            ->and($live)->toContain('<span id="count">0</span>');
+        $live = fetchE2EUrlWithHeaders("http://127.0.0.1:{$port}/live");
+        expect($live['body'])->toContain('data-t-live="e2e-counter"')
+            ->and($live['body'])->toContain('<span id="count">0</span>');
 
-        preg_match('/name="t:state" value="([^"]+)"/', $live, $matches);
+        $liveHeaders = array_change_key_case($live['headers']);
+        if (!isset($liveHeaders['x-e2e-session-id']) || !isset($liveHeaders['x-e2e-csrf-token'])) {
+            fwrite(STDERR, "Live response headers:\n" . print_r($live['headers'], true));
+        }
+        expect($liveHeaders)->toHaveKey('x-e2e-session-id')
+            ->and($liveHeaders)->toHaveKey('x-e2e-csrf-token');
+
+        $sessionId = $liveHeaders['x-e2e-session-id'];
+        $csrfToken = $liveHeaders['x-e2e-csrf-token'];
+
+        preg_match('/name="t:state" value="([^"]+)"/', $live['body'], $matches);
         expect($matches)->toHaveCount(2, 'State token not found in live component HTML');
         $token = $matches[1];
 
         $updated = fetchE2EUrl("http://127.0.0.1:{$port}/_live/e2e-counter", [
             'http' => [
                 'method' => 'POST',
-                'header' => 'Content-Type: application/x-www-form-urlencoded',
+                'header' => [
+                    'Content-Type: application/x-www-form-urlencoded',
+                    "Cookie: session_id={$sessionId}",
+                    "X-CSRF-Token: {$csrfToken}",
+                ],
                 'content' => http_build_query(['t:state' => $token, 't:action' => 'increment']),
                 'timeout' => 5,
+                'ignore_errors' => true,
             ],
         ]);
         expect($updated)->toContain('<span id="count">1</span>')
@@ -229,4 +286,48 @@ function fetchE2EUrl(string $url, ?array $contextOptions = null): string
     expect($body)->not->toBeFalse('HTTP request failed: ' . $url);
 
     return (string) $body;
+}
+
+/**
+ * @return array{body: string, headers: array<string, string>}
+ */
+function fetchE2EUrlWithHeaders(string $url, ?array $contextOptions = null): array
+{
+    $context = stream_context_create($contextOptions ?? [
+        'http' => [
+            'method' => 'GET',
+            'timeout' => 5,
+        ],
+    ]);
+
+    $stream = @fopen($url, 'r', false, $context);
+    expect($stream)->not->toBeFalse('HTTP request failed: ' . $url);
+
+    $meta = stream_get_meta_data($stream);
+    $body = (string) stream_get_contents($stream);
+    fclose($stream);
+
+    return [
+        'body' => $body,
+        'headers' => parseE2EResponseHeaders($meta['wrapper_data'] ?? []),
+    ];
+}
+
+/**
+ * @param list<string> $headers
+ * @return array<string, string>
+ */
+function parseE2EResponseHeaders(array $headers): array
+{
+    $parsed = [];
+
+    foreach ($headers as $header) {
+        $parts = explode(':', $header, 2);
+
+        if (count($parts) === 2) {
+            $parsed[trim($parts[0])] = trim($parts[1]);
+        }
+    }
+
+    return $parsed;
 }

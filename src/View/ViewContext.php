@@ -132,11 +132,13 @@ final class ViewContext
 
     public function slot(string $name, Closure $content): void
     {
-        $frame = &$this->componentStack[count($this->componentStack) - 1] ?? null;
+        $lastIndex = count($this->componentStack) - 1;
 
-        if ($frame !== null) {
-            $frame['slots'][$name] = $content;
+        if ($lastIndex < 0) {
+            return;
         }
+
+        $this->componentStack[$lastIndex]['slots'][$name] = $content;
     }
 
     public function endComponent(): void

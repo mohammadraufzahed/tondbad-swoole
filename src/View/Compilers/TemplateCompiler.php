@@ -298,7 +298,7 @@ class ' . $className . ' extends \TondbadSwoole\View\AbstractCompiledView
             'case' => '<?php case ' . $this->compileExpression($parts[0] ?? '', false) . ': ?>',
             'default' => '<?php default: ?>',
             'php' => '<?php ' . $args . ' ?>',
-            'live' => '<?php echo $this->manager->renderLiveComponent(' . $this->valueArg($parts[0] ?? '') . ', ' . ($parts[1] ?? '[]') . '); ?>',
+            'live' => '<?php echo $__ctx->getManager()->renderLiveComponent(' . $this->valueArg($parts[0] ?? '') . ', ' . $this->compileExpression($parts[1] ?? '[]', false) . '); ?>',
             default => '<?php /* @' . $name . ' */ ?>',
         };
     }
@@ -324,15 +324,123 @@ class ' . $className . ' extends \TondbadSwoole\View\AbstractCompiledView
 
         $index = $closingIndex;
 
-        $innerCompiled = $this->compileTokens($innerTokens);
-
         if ($name === 'slot') {
             $slotName = $attrs['name']['value'] ?? 'default';
+            $innerCompiled = $this->compileTokens($innerTokens);
 
             return '<?php $__ctx->slot(' . var_export((string) $slotName, true) . ', function() use ($__data, $__ctx) { extract($__data, EXTR_SKIP); ob_start(); ?>' . $innerCompiled . '<?php return ob_get_clean(); }); ?>';
         }
 
-        return '<?php $__ctx->startComponent(' . var_export($name, true) . ', ' . $dataArray . '); $__ctx->slot("default", function() use ($__data, $__ctx) { extract($__data, EXTR_SKIP); ob_start(); ?>' . $innerCompiled . '<?php return ob_get_clean(); }); $__ctx->endComponent(); ?>';
+        [$defaultCompiled, $slotOutputs] = $this->compileComponentChildren($innerTokens);
+
+        $result = '<?php $__ctx->startComponent(' . var_export($name, true) . ', ' . $dataArray . ');';
+        foreach ($slotOutputs as $slotOutput) {
+            $result .= $slotOutput;
+        }
+        $result .= '$__ctx->slot("default", function() use ($__data, $__ctx) { extract($__data, EXTR_SKIP); ob_start(); ?>' . $defaultCompiled . '<?php return ob_get_clean(); }); $__ctx->endComponent(); ?>';
+
+        return $result;
+    }
+
+    /**
+     * @param list<Token> $tokens
+     * @return array{0: string, 1: list<string>}
+     */
+    private function compileComponentChildren(array $tokens): array
+    {
+        $slotOutputs = [];
+        $directiveStack = [];
+        $count = count($tokens);
+
+        for ($i = 0; $i < $count; ++$i) {
+            $t = $tokens[$i];
+
+            if ($t->type === 'component') {
+                $cName = (string) ($t->data['name'] ?? '');
+                $cClosing = (bool) ($t->data['closing'] ?? false);
+                $cSelf = (bool) ($t->data['self_closing'] ?? false);
+
+                if ($cClosing || $cSelf) {
+                    continue;
+                }
+
+                if ($cName === 'slot' && $directiveStack === []) {
+                    $slotName = $t->data['attributes']['name']['value'] ?? 'default';
+                    $slotClosingIndex = $this->componentClosingIndex($tokens, $i);
+                    $slotInner = [];
+                    for ($j = $i + 1; $j < $slotClosingIndex; ++$j) {
+                        $slotInner[] = $tokens[$j];
+                    }
+                    $slotInnerCompiled = $this->compileTokens($slotInner);
+                    $slotOutputs[] = '<?php $__ctx->slot(' . var_export((string) $slotName, true) . ', function() use ($__data, $__ctx) { extract($__data, EXTR_SKIP); ob_start(); ?>' . $slotInnerCompiled . '<?php return ob_get_clean(); }); ?>';
+
+                    for ($k = $i; $k <= $slotClosingIndex; ++$k) {
+                        $tokens[$k]->data['consumed'] = true;
+                    }
+
+                    $i = $slotClosingIndex;
+                    continue;
+                }
+
+                $i = $this->componentClosingIndex($tokens, $i);
+                continue;
+            }
+
+            if ($t->type === 'directive') {
+                $dName = (string) ($t->data['name'] ?? '');
+
+                if ($this->isBlockOpener($dName)) {
+                    $directiveStack[] = $dName;
+                } else {
+                    $current = $directiveStack === [] ? '' : $directiveStack[count($directiveStack) - 1];
+
+                    if ($this->isBlockCloser($dName, $current)) {
+                        array_pop($directiveStack);
+                    }
+                }
+            }
+        }
+
+        return [$this->compileTokens($tokens), $slotOutputs];
+    }
+
+    /**
+     * @param list<Token> $tokens
+     */
+    private function componentClosingIndex(array $tokens, int $startIndex): int
+    {
+        $name = (string) ($tokens[$startIndex]->data['name'] ?? '');
+        $depth = 1;
+        $count = count($tokens);
+
+        for ($i = $startIndex + 1; $i < $count; ++$i) {
+            $t = $tokens[$i];
+
+            if ($t->type !== 'component') {
+                continue;
+            }
+
+            $tName = (string) ($t->data['name'] ?? '');
+
+            if ($tName !== $name) {
+                continue;
+            }
+
+            $tClosing = (bool) ($t->data['closing'] ?? false);
+            $tSelfClosing = (bool) ($t->data['self_closing'] ?? false);
+
+            if ($tClosing) {
+                --$depth;
+
+                if ($depth === 0) {
+                    return $i;
+                }
+            } elseif (!$tSelfClosing) {
+                ++$depth;
+            }
+        }
+
+        return $count - 1;
     }
 
     private function compileSelfClosingComponent(string $name, string $dataArray): string
@@ -372,40 +480,16 @@ class ' . $className . ' extends \TondbadSwoole\View\AbstractCompiledView
      */
     private function findComponentRange(array $tokens, int $startIndex): array
     {
-        $name = (string) ($tokens[$startIndex]->data['name'] ?? '');
-        $depth = 1;
+        $closingIndex = $this->componentClosingIndex($tokens, $startIndex);
         $inner = [];
-        $count = count($tokens);
 
-        for ($i = $startIndex + 1; $i < $count; ++$i) {
-            $t = $tokens[$i];
-
-            if ($t->type === 'component') {
-                $tName = (string) ($t->data['name'] ?? '');
-                $tClosing = (bool) ($t->data['closing'] ?? false);
-                $tSelfClosing = (bool) ($t->data['self_closing'] ?? false);
-
-                if ($tName === $name && $tClosing) {
-                    --$depth;
-
-                    if ($depth === 0) {
-                        $t->data['consumed'] = true;
-
-                        return [$inner, $i];
-                    }
-                }
-
-                if ($tName === $name && !$tClosing && !$tSelfClosing) {
-                    ++$depth;
-                }
-            }
-
-            if ($depth === 1) {
-                $inner[] = $t;
-            }
+        for ($i = $startIndex + 1; $i < $closingIndex; ++$i) {
+            $inner[] = $tokens[$i];
         }
 
-        return [$inner, $startIndex];
+        $tokens[$closingIndex]->data['consumed'] = true;
+
+        return [$inner, $closingIndex];
     }
 
     private function arrayToExpression(array $data): string

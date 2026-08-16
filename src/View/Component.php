@@ -18,7 +18,7 @@ abstract class Component
         $this->attributes = new ComponentAttributeBag();
 
         foreach ($data as $key => $value) {
-            if (property_exists($this, $key) && $key !== 'attributes' && $key !== 'slots') {
+            if (property_exists($this, $key) && $key !== 'attributes' && $key !== 'slots' && $key !== 'view') {
                 $this->$key = $value;
             } elseif ($key === 'attributes' && is_array($value)) {
                 $this->attributes = new ComponentAttributeBag($value);

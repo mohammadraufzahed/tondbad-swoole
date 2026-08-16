@@ -34,17 +34,14 @@ final class LiveComponentController
 
         $instance = $resolved::create($state);
 
-        if ($instance instanceof LiveComponent) {
+        if ($token === '') {
+            $instance->mount();
+        } else {
             $instance->hydrate($state);
-        }
-
-        $instance->mount();
-
-        if ($token !== '') {
             $instance->setStateToken($token, $this->store);
         }
 
-        $this->applyModels($instance, $data);
+        $instance->syncInputs($data);
 
         $action = (string) ($data['t:action'] ?? '');
 
@@ -60,24 +57,6 @@ final class LiveComponentController
         $output = $this->wrapState($output, $token);
 
         $response->html($output);
-    }
-
-    /**
-     * @param array<string, mixed> $data
-     */
-    private function applyModels(LiveComponent $instance, array $data): void
-    {
-        foreach ($data as $key => $value) {
-            if (!str_starts_with($key, 't:model:')) {
-                continue;
-            }
-
-            $property = substr($key, strlen('t:model:'));
-
-            if (property_exists($instance, $property)) {
-                $instance->$property = $value;
-            }
-        }
     }
 
     private function wrapState(string $html, string $token): string
