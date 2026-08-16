@@ -40,6 +40,12 @@ it('does not leak managed entities across repeated find/flush/clear cycles', fun
     $em = em();
     $em->clear();
 
+    // Warm up one cycle so PHP's memory allocator stabilises before measuring.
+    $user = $em->find(User::class, 1);
+    $user->name = 'Warm up';
+    $em->flush();
+    $em->clear();
+
     $baseline = memory_get_usage(true);
 
     for ($i = 0; $i < 50; $i++) {
