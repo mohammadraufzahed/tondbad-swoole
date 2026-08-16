@@ -238,6 +238,11 @@ final class ViewManager
         $this->registry->register($name, $classOrView);
     }
 
+    public function registry(): ComponentRegistry
+    {
+        return $this->registry;
+    }
+
     public function normalize(string $view): string
     {
         return str_replace('/', '.', $view);
