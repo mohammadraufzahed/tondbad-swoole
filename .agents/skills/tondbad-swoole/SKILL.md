@@ -149,6 +149,22 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - Run integration Redis tests with `RUN_INTEGRATION_TESTS=1 php vendor/bin/pest tests/Integration/CacheRedisTest.php`; they rely on `tests/Support/CacheConcurrencyScript.php` and `CacheRedisTagsScript.php`.
 - `cache:forget-tags` and `cache:clear` from the CLI update Redis tag versions / flush Redis, but they cannot clear the `InMemoryCache` L1 tables held by already-running HTTP worker processes; restart the server or wait for L1 TTL expiry to guarantee those workers observe the invalidation.
 
+# View engine / TondView (`devin/template-engine-core`)
+- `.tond.php` templates live in `resources/views` and `app/View/Components` and compile on demand to `storage/cache/views`.
+- `php bin/tondbad view:cache` pre-compiles every `.tond.php`; `php bin/tondbad view:clear` removes compiled files.
+- `config/view.php` reads `VIEW_LIVE_ENABLED` and `VIEW_LIVE_TRANSPORT` from the environment; `HttpServiceProvider` starts a `WebSocketServer` when `VIEW_LIVE_TRANSPORT=websocket`.
+- `ViewServiceProvider` registers `GET /tondview.js`, `POST /_live/{component}` (with `Authenticate` and `VerifyCsrfToken`), and `GET /_live/sse` when live is enabled.
+- `LiveComponentManager` handles component state through `StateStore`; `LiveComponent` public properties are serialized, hydrated, and exposed as `t:state`. Public methods (except `mount`/`render`) are callable actions.
+- `tondview.js` reads the transport from `<meta name="t-transport">` or `data-t-transport`, submits `t:action` via `POST /_live/{component}`, and applies returned HTML as a replacement patch for `id=0`.
+- For a manual live counter test, create a temporary `routes/http.php` (or override with `ROUTES_HTTP`) plus `.tond.php` view files:
+  - component view example: `resources/views/components/counter.tond.php` with `<div data-t-live="counter"><span id="count">{{ $count }}</span><button data-t-action="increment">+</button><data-t-state></data-t-state></div>`.
+  - route logs in a session user (`auth('session')->login($user)`), renders the component with `LiveComponentManager->render('counter')->html`, and emits a `<meta name="t-csrf" content="...">` plus `<script src="/tondview.js"></script>`.
+  - `POST /_live/counter` requires `X-CSRF-Token` and the `session_id` cookie; a browser click should update `<span id="count">` from `0` to `1`.
+- WebSocket endpoint: `ws://host:<port>/_live/ws`; send `{"t:component":"counter"}` to receive the initial patch, then `{"t:component":"counter","t:state":"...","t:action":"increment"}` to receive the updated patch.
+- SSE endpoint: `GET /_live/sse?component=counter` (returns `text/event-stream`); after a `POST /_live/counter` action the stream receives `data: {"patches":[{"type":"replace","id":0,"html":"..."}]}`.
+- Use `AUTH_COOKIE_SECURE=false` for HTTP localhost tests so browsers/curl send the `session_id` cookie.
+- `php bin/tondbad benchmark benchmarks/ViewEngineBenchmark.php` exercises `benchRender`, `benchUpdate`, and `benchDiff`.
+
 # Auth end-to-end verification (`devin/auth-unified`)
 - Create a fresh consumer project at `/tmp/tondbad_consumer_auth` with a path repository to the framework, `"App\\": "app/"` in `autoload.psr-4`, and `config/auth.php` overriding `defaults.guard` to `session`.
 - Set `AUTH_SESSION_STORE=database`, `DB_CONNECTION=sqlite`, and `DB_SQLITE_DATABASE=/tmp/tondbad_consumer_auth/storage/database.sqlite`; ensure the `storage/` directory is writable.
