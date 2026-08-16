@@ -329,7 +329,7 @@ class ' . $className . ' extends \TondbadSwoole\View\AbstractCompiledView
         if ($name === 'slot') {
             $slotName = $attrs['name']['value'] ?? 'default';
 
-            return '<?php $__ctx->slot(' . $this->valueArg($slotName) . ', function() use ($__data, $__ctx) { extract($__data, EXTR_SKIP); ob_start(); ?>' . $innerCompiled . '<?php return ob_get_clean(); }); ?>';
+            return '<?php $__ctx->slot(' . var_export((string) $slotName, true) . ', function() use ($__data, $__ctx) { extract($__data, EXTR_SKIP); ob_start(); ?>' . $innerCompiled . '<?php return ob_get_clean(); }); ?>';
         }
 
         return '<?php $__ctx->startComponent(' . var_export($name, true) . ', ' . $dataArray . '); $__ctx->slot("default", function() use ($__data, $__ctx) { extract($__data, EXTR_SKIP); ob_start(); ?>' . $innerCompiled . '<?php return ob_get_clean(); }); $__ctx->endComponent(); ?>';
