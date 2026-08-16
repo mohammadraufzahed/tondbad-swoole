@@ -50,6 +50,8 @@ use TondbadSwoole\Console\Commands\ScheduleResumeCommand;
 use TondbadSwoole\Console\Commands\ScheduleRunCommand;
 use TondbadSwoole\Console\Commands\ScheduleWorkCommand;
 use TondbadSwoole\Console\Commands\ServeCommand;
+use TondbadSwoole\Console\Commands\ViewCacheCommand;
+use TondbadSwoole\Console\Commands\ViewClearCommand;
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\Core\Container;
 use TondbadSwoole\Events\Contracts\EventDispatcher;
@@ -118,6 +120,8 @@ class ConsoleServiceProvider extends ServiceProvider
             ScheduleDeleteCommand::class,
             ScheduleRunCommand::class,
             ClearSessionsCommand::class,
+            ViewCacheCommand::class,
+            ViewClearCommand::class,
         ];
 
         foreach ($commands as $class) {

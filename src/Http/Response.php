@@ -63,6 +63,13 @@ class Response
             ->end($html);
     }
 
+    public function view(string $view, array $data = [], int $status = 200): void
+    {
+        $manager = \app()?->container->make(\TondbadSwoole\View\ViewManager::class);
+
+        $this->html($manager ? $manager->render($view, $data) : '', $status);
+    }
+
     public function text(string $text, int $status = 200): void
     {
         $this->status($status)
