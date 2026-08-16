@@ -18,7 +18,8 @@
   ],
   "autoload": {
     "psr-4": {
-      "TondbadSwoole\\": "src/"
+      "TondbadSwoole\\": "src/",
+      "GPBMetadata\\": "src/GPBMetadata/"
     },
     "files": [
       "src/Support/helpers.php"

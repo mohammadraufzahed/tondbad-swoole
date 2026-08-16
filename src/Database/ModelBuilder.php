@@ -309,6 +309,10 @@ class ModelBuilder extends Builder
     {
         $relationObj = $this->getRelationObject($relation);
 
+        if ($relationObj->addHasExistenceQuery($this, $this->from, $operator, $count, $boolean, false, $callback)) {
+            return $this;
+        }
+
         if ($operator !== '>=' || $count !== 1) {
             $sub = $relationObj->getRelationExistenceQueryForParent($this, $this->from)
                 ?? $this->getRelationHasQuery($relationObj);
@@ -337,6 +341,11 @@ class ModelBuilder extends Builder
     public function doesntHave(string $relation, string $boolean = 'and', ?Closure $callback = null): self
     {
         $relationObj = $this->getRelationObject($relation);
+
+        if ($relationObj->addHasExistenceQuery($this, $this->from, '>=', 1, $boolean, true, $callback)) {
+            return $this;
+        }
+
         $sub = $this->getRelationHasQuery($relationObj);
 
         if ($callback !== null) {

@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package grpc.reflection.v1alpha;
+
+option php_namespace = "TondbadSwoole\\Grpc\\Reflection\\V1alpha";
+
+message ServerReflectionRequest {
+  string host = 1;
+  string original_request = 2 [deprecated = true];
+
+  oneof message_request {
+    string list_services = 3;
+    FileRequest file_by_filename = 4;
+    string file_containing_symbol = 5;
+    ExtensionRequest file_containing_extension = 6;
+    string all_extension_numbers_of_type = 7;
+  }
+}
+
+message ExtensionRequest {
+  string containing_type = 1;
+  int32 extension_number = 2;
+}
+
+message ServerReflectionResponse {
+  string original_request = 1 [deprecated = true];
+  string host = 2;
+
+  oneof message_response {
+    ListServiceResponse list_services_response = 3;
+    FileDescriptorResponse file_descriptor_response = 4;
+    ExtensionNumberResponse all_extension_numbers_response = 5;
+    ErrorResponse error_response = 6;
+  }
+}
+
+message ListServiceResponse {
+  repeated ServiceResponse service = 1;
+}
+
+message ServiceResponse {
+  string name = 1;
+}
+
+message FileDescriptorResponse {
+  repeated bytes file_descriptor_proto = 1;
+}
+
+message ExtensionNumberResponse {
+  string base_type_name = 1;
+  repeated int32 extension_number = 2;
+}
+
+message ErrorResponse {
+  int32 error_code = 1;
+  string error_message = 2;
+}
+
+message FileRequest {
+  string file_name = 1;
+}
+
+service ServerReflection {
+  rpc ServerReflectionInfo(stream ServerReflectionRequest) returns (stream ServerReflectionResponse);
+}

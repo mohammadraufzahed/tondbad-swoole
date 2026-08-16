@@ -110,6 +110,18 @@ description: Set up and run end-to-end tests for the Tondbād Swoole HTTP/gRPC s
 - ORM/DB stress: use a route that runs `find/flush/clear` or insert cycles in a loop; 200 find/flush/clear cycles against SQLite completed in ~40 ms with zero memory growth.
 - gRPC stress: only possible if gRPC services are registered; the current server boots but has no services, so stress can only confirm the listener stays up under connection attempts.
 
+# gRPC streaming / health / reflection and MorphTo has/whereHas (`devin/grpc-morph-followup`)
+- `config/grpc.php` registers fixture test services only when `APP_ENV=testing`; set `APP_ENV=testing` when starting `serve:grpc` manually.
+- `GRPC_HEALTH=1` enables `grpc.health.v1.Health` and `GRPC_REFLECTION=1` enables `grpc.reflection.v1alpha.ServerReflection`.
+- Start the gRPC server with `APP_TYPE=grpc APP_ENV=testing APP_GRPC_HOST=0.0.0.0 APP_GRPC_PORT=<port> GRPC_HEALTH=1 GRPC_REFLECTION=1 php bin/tondbad serve:grpc`.
+- Run the streaming client: `php tests/E2E/grpc_streaming_client.php <port>` — it tests server streaming (`CountDown`), client streaming (`SumNames`), and bidirectional streaming (`Echo`) and should print `OK`.
+- Run the health/reflection client: `php tests/E2E/grpc_health_reflection_client.php <port>` — it checks `Health/Check` and `ServerReflectionInfo` for `list_services` and `file_containing_symbol` and should print `OK`.
+- For a manual unary call use `TondbadSwoole\Grpc\Channel` with `->invoke('/tondbad.test.helloworld.Greeter/SayHello', $request, HelloReply::class)`; the fixture reply is `Hello, <name>`.
+- Benchmark the gRPC frame codec: `php bin/tondbad benchmark benchmarks/GrpcStreamingBenchmark.php`.
+- For `MorphTo` HTTP E2E, clear the route cache first (`php bin/tondbad cache:clear` and `rm -f storage/cache/routes.cache.php`), then start `serve` with `ROUTES_HTTP=tests/E2E/morph_routes.php`, `DB_CONNECTION=sqlite`, and `DB_SQLITE_DATABASE=/tmp/tondbad_morph.sqlite`.
+- The `morph_routes.php` endpoints are `/setup`, `/morph-has` (returns `["First","Second"]`), `/morph-where-has` (returns `["First"]`), and `/morph-doesnt-have` (returns `["Third"]`).
+- `MorphTo::morphMap(['post' => Post::class, ...])` must be called before querying because the relation uses the static morph map to resolve polymorphic types.
+
 # Generator notes
 - `make:controller`, `make:middleware`, `make:provider`, `make:guard`, and `make:policy` strip redundant suffixes and `ucfirst` the base name, so `TestController`, `JwtGuard`, or `BillingProvider` produce `TestController.php`, `JwtGuardFactory.php`, and `BillingServiceProvider.php` respectively.
 - For `make:*` commands to resolve at runtime, add `"App\\": "app/"` to `composer.json` `autoload.psr-4` and run `composer dump-autoload`; remove the mapping before committing.

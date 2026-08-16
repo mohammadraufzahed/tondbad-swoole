@@ -50,14 +50,18 @@ final class ServiceInvoker
                 $args[] = $request->context;
             } elseif ($type instanceof \ReflectionNamedType && $type->getName() === Request::class) {
                 $args[] = $request;
-            } elseif ($type instanceof \ReflectionNamedType && $type->getName() === $messageClass) {
-                $args[] = $request->message;
-            } elseif ($type instanceof \ReflectionNamedType && is_subclass_of($request->message, $type->getName())) {
-                $args[] = $request->message;
             } elseif ($type instanceof \ReflectionNamedType && $type->getName() === Metadata::class) {
                 $args[] = $request->metadata;
             } elseif ($type instanceof \ReflectionNamedType && $type->getName() === ServerCallInfo::class) {
                 $args[] = new ServerCallInfo($request->service, $request->method, $request->metadata, $request->deadline);
+            } elseif ($type instanceof \ReflectionNamedType && $type->getName() === StreamReader::class) {
+                $args[] = $request->stream;
+            } elseif ($type instanceof \ReflectionNamedType && $type->getName() === StreamWriter::class) {
+                $args[] = $request->writer;
+            } elseif ($type instanceof \ReflectionNamedType && $type->getName() === $messageClass) {
+                $args[] = $request->message;
+            } elseif ($type instanceof \ReflectionNamedType && is_subclass_of($request->message, $type->getName())) {
+                $args[] = $request->message;
             } elseif ($param->isDefaultValueAvailable()) {
                 $args[] = $param->getDefaultValue();
             } else {

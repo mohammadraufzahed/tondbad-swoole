@@ -7,7 +7,7 @@ namespace TondbadSwoole\Grpc;
 final class Response
 {
     public function __construct(
-        public readonly object $message,
+        public readonly ?object $message,
         public readonly Status $status,
         public readonly ?Metadata $metadata = null,
     ) {

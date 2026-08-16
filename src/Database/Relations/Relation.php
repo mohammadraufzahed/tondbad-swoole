@@ -71,6 +71,23 @@ abstract class Relation
 
     abstract public function match(array $models, array $results): void;
 
+    /**
+     * Optional override for relations that cannot be expressed by the generic
+     * existence query (e.g. morphTo, which needs an OR group per type).
+     * Return true when the parent query has been modified directly.
+     */
+    public function addHasExistenceQuery(
+        ModelBuilder $parent,
+        string $parentTable,
+        string $operator,
+        int $count,
+        string $boolean,
+        bool $not,
+        ?\Closure $callback = null,
+    ): bool {
+        return false;
+    }
+
     public function getQuery(): ModelBuilder
     {
         return $this->query;

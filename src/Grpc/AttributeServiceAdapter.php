@@ -34,10 +34,20 @@ abstract class AttributeServiceAdapter implements BindableService
             /** @var GrpcMethod $descriptor */
             $descriptor = $methodAttribute->newInstance();
 
-            $handler = function (Request $request) use ($method, $descriptor): object {
+            $handler = function (Request $request) use ($method, $descriptor): Response {
                 $args = $this->buildArguments($method, $request, $descriptor);
 
-                return $method->invokeArgs($this, $args);
+                $result = $method->invokeArgs($this, $args);
+
+                if ($result instanceof Response) {
+                    return $result;
+                }
+
+                if ($result === null) {
+                    $result = new $descriptor->output();
+                }
+
+                return new Response($result, Status::ok());
             };
 
             $methods[] = new MethodDescriptor(
@@ -69,7 +79,17 @@ abstract class AttributeServiceAdapter implements BindableService
                 $args[] = $request->context;
             } elseif ($type instanceof \ReflectionNamedType && $type->getName() === Request::class) {
                 $args[] = $request;
+            } elseif ($type instanceof \ReflectionNamedType && $type->getName() === Metadata::class) {
+                $args[] = $request->metadata;
+            } elseif ($type instanceof \ReflectionNamedType && $type->getName() === ServerCallInfo::class) {
+                $args[] = new ServerCallInfo($request->service, $request->method, $request->metadata, $request->deadline);
+            } elseif ($type instanceof \ReflectionNamedType && $type->getName() === StreamReader::class) {
+                $args[] = $request->stream;
+            } elseif ($type instanceof \ReflectionNamedType && $type->getName() === StreamWriter::class) {
+                $args[] = $request->writer;
             } elseif ($type instanceof \ReflectionNamedType && $type->getName() === $descriptor->input) {
+                $args[] = $request->message;
+            } elseif ($type instanceof \ReflectionNamedType && is_subclass_of($request->message, $type->getName())) {
                 $args[] = $request->message;
             } else {
                 $args[] = $param->isOptional() ? $param->getDefaultValue() : null;
