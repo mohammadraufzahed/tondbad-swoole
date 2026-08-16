@@ -2,26 +2,17 @@
 
 declare(strict_types=1);
 
-beforeAll(function () {
-    if (!extension_loaded('openswoole')) {
-        markTestSkipped('OpenSwoole extension not loaded.');
-    }
-});
-
-it('renders compiled views with layouts, components, and live fragments over HTTP', function () {
+it('pushes live component patches over Server-Sent Events', function () {
     $basePath = realpath(__DIR__ . '/../..') ?: getcwd();
     $routePath = $basePath . '/routes/http.php';
     $routeBackup = $basePath . '/routes/http.php.e2e-backup';
     $viewsPath = $basePath . '/resources/views';
     $port = (int) getenv('APP_HTTP_PORT') ?: random_int(18000, 19999);
-    $dbPath = $basePath . '/storage/testing/view-engine-e2e.sqlite';
+    $dbPath = $basePath . '/storage/e2e-sse.sqlite';
 
-    if (!is_dir(dirname($dbPath))) {
-        mkdir(dirname($dbPath), 0755, true);
+    if (file_exists($dbPath)) {
+        @unlink($dbPath);
     }
-
-    @unlink($dbPath);
-    touch($dbPath);
 
     $originalRoute = file_exists($routePath) ? file_get_contents($routePath) : null;
 
@@ -49,8 +40,6 @@ return function (\TondbadSwoole\Core\Route\Route $route) {
     }
 
     app()?->container->make(\TondbadSwoole\View\ViewManager::class)->registerComponent('e2e-counter', E2ECounter::class);
-
-    $route->view('/welcome', 'e2e-welcome', ['name' => 'Tond']);
 
     $route->get('/live', function (\TondbadSwoole\Http\Request $request, \TondbadSwoole\Http\Response $response) {
         if (!schema()->hasTable('users')) {
@@ -89,30 +78,6 @@ return function (\TondbadSwoole\Core\Route\Route $route) {
 PHP
 );
 
-    ensureE2EView($viewsPath . '/e2e-layout.tond.php', <<<'VIEW'
-<!doctype html>
-<html>
-<head><title>@yield('title', 'E2E')</title></head>
-<body>@yield('content')</body>
-</html>
-VIEW
-);
-
-    ensureE2EView($viewsPath . '/e2e-welcome.tond.php', <<<'VIEW'
-@extends('e2e-layout')
-@section('title', 'Welcome E2E')
-@section('content')
-<x-e2e-alert type="success">Hello, {{ $name }}</x-e2e-alert>
-@endsection
-VIEW
-);
-
-    ensureE2EView($viewsPath . '/components/e2e-alert.tond.php', <<<'VIEW'
-@props(['type' => 'info'])
-<div class="alert alert-{{ $type }}">{{ $slot() }}</div>
-VIEW
-);
-
     ensureE2EView($viewsPath . '/components/e2e-counter.tond.php', <<<'VIEW'
 <div data-t-live="e2e-counter">
     <span id="count">{{ $count }}</span>
@@ -120,6 +85,8 @@ VIEW
 </div>
 VIEW
 );
+
+    @unlink($basePath . '/storage/cache/routes.cache.php');
 
     $migrateEnv = array_merge($_ENV, [
         'APP_TYPE' => 'http',
@@ -149,7 +116,6 @@ VIEW
         'APP_HTTP_PORT' => (string) $port,
         'APP_HTTP_HOST' => '127.0.0.1',
         'VIEW_LIVE_ENABLED' => '1',
-        'VIEW_LIVE_TRANSPORT' => 'http',
         'DB_CONNECTION' => 'sqlite',
         'DB_SQLITE_DATABASE' => $dbPath,
         'AUTH_GUARD' => 'session',
@@ -160,16 +126,13 @@ VIEW
         1 => ['pipe', 'w'],
         2 => ['pipe', 'w'],
     ], $serverPipes, $basePath, $serverEnv);
+
     stream_set_blocking($serverPipes[1], false);
     stream_set_blocking($serverPipes[2], false);
 
-    $serverOut = '';
-    $serverErr = '';
     $ready = false;
     for ($i = 0; $i < 30; ++$i) {
         usleep(200000);
-        $serverOut .= (string) stream_get_contents($serverPipes[1]);
-        $serverErr .= (string) stream_get_contents($serverPipes[2]);
         $fp = @fsockopen('127.0.0.1', $port, $errno, $errstr, 0.5);
         if ($fp) {
             fclose($fp);
@@ -179,52 +142,84 @@ VIEW
         }
     }
 
-    if (!$ready) {
-        fwrite(STDERR, "Server stdout:\n{$serverOut}\n");
-        fwrite(STDERR, "Server stderr:\n{$serverErr}\n");
-    }
-
-    expect($ready)->toBeTrue('HTTP server did not become ready in time.');
-
     try {
-        $welcome = fetchE2EUrl("http://127.0.0.1:{$port}/welcome");
-        expect($welcome)->toContain('Hello, Tond')
-            ->and($welcome)->toContain('alert-success')
-            ->and($welcome)->toContain('Welcome E2E');
+        expect($ready)->toBeTrue('HTTP server did not become ready in time.');
 
-        $live = fetchE2EUrlWithHeaders("http://127.0.0.1:{$port}/live");
-        expect($live['body'])->toContain('data-t-live="e2e-counter"')
-            ->and($live['body'])->toContain('<span id="count">0</span>');
+        $sseBuffer = '';
+        $sseDone = false;
 
-        $liveHeaders = array_change_key_case($live['headers']);
-        if (!isset($liveHeaders['x-e2e-session-id']) || !isset($liveHeaders['x-e2e-csrf-token'])) {
-            fwrite(STDERR, "Live response headers:\n" . print_r($live['headers'], true));
-        }
-        expect($liveHeaders)->toHaveKey('x-e2e-session-id')
-            ->and($liveHeaders)->toHaveKey('x-e2e-csrf-token');
+        go(function () use ($port, &$sseBuffer, &$sseDone): void {
+            $client = new \OpenSwoole\Coroutine\Client(SWOOLE_SOCK_TCP);
+            $client->set(['timeout' => 10]);
 
-        $sessionId = $liveHeaders['x-e2e-session-id'];
-        $csrfToken = $liveHeaders['x-e2e-csrf-token'];
+            if (!$client->connect('127.0.0.1', $port)) {
+                $sseDone = true;
 
-        preg_match('/name="t:state" value="([^"]+)"/', $live['body'], $matches);
-        expect($matches)->toHaveCount(2, 'State token not found in live component HTML');
-        $token = $matches[1];
+                return;
+            }
 
-        $updated = fetchE2EUrl("http://127.0.0.1:{$port}/_live/e2e-counter", [
-            'http' => [
-                'method' => 'POST',
-                'header' => [
-                    'Content-Type: application/x-www-form-urlencoded',
-                    "Cookie: session_id={$sessionId}",
-                    "X-CSRF-Token: {$csrfToken}",
-                ],
-                'content' => http_build_query(['t:state' => $token, 't:action' => 'increment']),
-                'timeout' => 5,
-                'ignore_errors' => true,
-            ],
-        ]);
-        expect($updated)->toContain('<span id="count">1</span>')
-            ->and($updated)->toContain('name="t:state"');
+            $client->send("GET /_live/sse?component=e2e-counter HTTP/1.1\r\nHost: 127.0.0.1:{$port}\r\nAccept: text/event-stream\r\n\r\n");
+
+            while (!$sseDone) {
+                $data = $client->recv();
+
+                if ($data === false || $data === '') {
+                    break;
+                }
+
+                $sseBuffer .= $data;
+
+                if (str_contains($sseBuffer, '"patches"')) {
+                    break;
+                }
+            }
+
+            $client->close();
+            $sseDone = true;
+        });
+
+        go(function () use ($port, &$sseDone): void {
+            usleep(300000);
+
+            $c = new \OpenSwoole\Coroutine\Http\Client('127.0.0.1', $port);
+            $c->set(['timeout' => 10]);
+            $c->setHeaders(['Accept' => '*/*']);
+            $c->get('/live');
+
+            $headers = array_change_key_case($c->getHeaders() ?: []);
+            $session = $headers['x-e2e-session-id'] ?? '';
+            $csrf = $headers['x-e2e-csrf-token'] ?? '';
+
+            expect($session)->not->toBeEmpty('Session ID not returned');
+            expect($csrf)->not->toBeEmpty('CSRF token not returned');
+
+            $body = $c->getBody();
+            preg_match('/name="t:state" value="([^"]+)"/', $body, $matches);
+            expect($matches)->toHaveCount(2, 'State token not found in live component HTML');
+            $token = $matches[1];
+
+            $c2 = new \OpenSwoole\Coroutine\Http\Client('127.0.0.1', $port);
+            $c2->set(['timeout' => 10]);
+            $c2->setHeaders([
+                'Content-Type' => 'application/x-www-form-urlencoded',
+                'X-CSRF-Token' => $csrf,
+                'Cookie' => 'session_id=' . $session,
+            ]);
+            $c2->post('/_live/e2e-counter', 't:state=' . urlencode($token) . '&t:action=increment');
+
+            expect($c2->getStatusCode())->toBe(200);
+            expect($c2->getBody())->toContain('<span id="count">1</span>');
+
+            usleep(300000);
+            $sseDone = true;
+        });
+
+        \OpenSwoole\Event::wait();
+
+        expect($sseBuffer)->toContain('text/event-stream');
+        expect($sseBuffer)->toContain('data: ');
+        expect($sseBuffer)->toContain('"patches"');
+        expect($sseBuffer)->toContain('<span id=\\"count\\">1<\\/span>');
     } finally {
         @proc_terminate($server, SIGTERM);
 
@@ -250,10 +245,8 @@ VIEW
             @unlink($routePath);
         }
 
-        @unlink($viewsPath . '/e2e-layout.tond.php');
-        @unlink($viewsPath . '/e2e-welcome.tond.php');
-        @unlink($viewsPath . '/components/e2e-alert.tond.php');
         @unlink($viewsPath . '/components/e2e-counter.tond.php');
+        @unlink($dbPath);
 
         $compiled = $basePath . '/storage/cache/views';
         foreach (glob($compiled . '/*.php') ?: [] as $file) {
@@ -273,63 +266,4 @@ if (!function_exists('ensureE2EView')) {
 
     file_put_contents($path, $content);
     }
-}
-
-function fetchE2EUrl(string $url, ?array $contextOptions = null): string
-{
-    $context = stream_context_create($contextOptions ?? [
-        'http' => [
-            'method' => 'GET',
-            'timeout' => 5,
-        ],
-    ]);
-
-    $body = @file_get_contents($url, false, $context);
-    expect($body)->not->toBeFalse('HTTP request failed: ' . $url);
-
-    return (string) $body;
-}
-
-/**
- * @return array{body: string, headers: array<string, string>}
- */
-function fetchE2EUrlWithHeaders(string $url, ?array $contextOptions = null): array
-{
-    $context = stream_context_create($contextOptions ?? [
-        'http' => [
-            'method' => 'GET',
-            'timeout' => 5,
-        ],
-    ]);
-
-    $stream = @fopen($url, 'r', false, $context);
-    expect($stream)->not->toBeFalse('HTTP request failed: ' . $url);
-
-    $meta = stream_get_meta_data($stream);
-    $body = (string) stream_get_contents($stream);
-    fclose($stream);
-
-    return [
-        'body' => $body,
-        'headers' => parseE2EResponseHeaders($meta['wrapper_data'] ?? []),
-    ];
-}
-
-/**
- * @param list<string> $headers
- * @return array<string, string>
- */
-function parseE2EResponseHeaders(array $headers): array
-{
-    $parsed = [];
-
-    foreach ($headers as $header) {
-        $parts = explode(':', $header, 2);
-
-        if (count($parts) === 2) {
-            $parsed[trim($parts[0])] = trim($parts[1]);
-        }
-    }
-
-    return $parsed;
 }

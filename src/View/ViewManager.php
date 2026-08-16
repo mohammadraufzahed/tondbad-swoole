@@ -6,6 +6,7 @@ namespace TondbadSwoole\View;
 
 use TondbadSwoole\Core\Config;
 use TondbadSwoole\View\Compilers\TemplateCompiler;
+use TondbadSwoole\View\Live\LiveComponentManager;
 
 final class ViewManager
 {
@@ -27,6 +28,8 @@ final class ViewManager
 
     private ComponentRegistry $registry;
 
+    private ?LiveComponentManager $liveManager = null;
+
     private TemplateCompiler $compiler;
 
     public function __construct(
@@ -34,12 +37,13 @@ final class ViewManager
         array $paths = [],
         string $compiledPath = '',
         array $componentPaths = [],
+        ?ComponentRegistry $registry = null,
     ) {
         $this->paths = $paths ?: [base_path() . '/resources/views'];
         $this->componentPaths = $componentPaths ?: [base_path() . '/app/View/Components'];
         $this->compiledPath = $compiledPath ?: base_path() . '/storage/cache/views';
         $this->cacheEnabled = (bool) ($config?->get('view.cache_enabled', true));
-        $this->registry = new ComponentRegistry();
+        $this->registry = $registry ?? new ComponentRegistry();
         $this->registry->discover($this->componentPaths);
 
         $this->compiler = new TemplateCompiler($this);
@@ -249,7 +253,16 @@ final class ViewManager
 
     public function renderLiveComponent(string $name, array $data = []): string
     {
-        return 'Live:' . $name;
+        if ($this->liveManager === null) {
+            return 'Live:' . $name;
+        }
+
+        return $this->liveManager->render($name, $data)->html;
+    }
+
+    public function setLiveComponentManager(LiveComponentManager $manager): void
+    {
+        $this->liveManager = $manager;
     }
 
     public function registerComponent(string $name, string $classOrView): void

@@ -6,67 +6,31 @@ namespace TondbadSwoole\View\Live;
 
 use TondbadSwoole\Http\Request;
 use TondbadSwoole\Http\Response;
-use TondbadSwoole\View\ComponentRegistry;
-use TondbadSwoole\View\ViewManager;
 
 final class LiveComponentController
 {
     public function __construct(
-        private readonly ViewManager $views,
-        private readonly StateStore $store,
-        private readonly ComponentRegistry $registry,
+        private readonly LiveComponentManager $manager,
+        private readonly ?SseConnectionManager $sse = null,
     ) {
     }
 
     public function handle(Request $request, Response $response, string $component): void
     {
-        $data = $request->all();
-        $token = (string) ($data['t:state'] ?? '');
-        $state = $token !== '' ? ($this->store->get($token) ?? []) : [];
-
-        $resolved = $this->registry->resolve($component);
-
-        if ($resolved === null || !class_exists($resolved) || !is_subclass_of($resolved, LiveComponent::class)) {
+        try {
+            $output = $this->manager->update($component, $request->all());
+        } catch (\InvalidArgumentException $e) {
             $response->status(404)->end('Live component not found');
+
+            return;
+        } catch (\Throwable $e) {
+            $response->status(500)->end('Live update failed');
 
             return;
         }
 
-        $instance = $resolved::create($state);
+        $this->sse?->broadcast($component, $output->html);
 
-        if ($token === '') {
-            $instance->mount();
-        } else {
-            $instance->hydrate($state);
-            $instance->setStateToken($token, $this->store);
-        }
-
-        $instance->syncInputs($data);
-
-        $action = (string) ($data['t:action'] ?? '');
-
-        if ($action !== '') {
-            $params = (array) ($data['t:params'] ?? []);
-            $instance->runAction($action, $params);
-        }
-
-        $token = $this->store->save($instance->state());
-        $instance->setStateToken($token, $this->store);
-
-        $output = $instance->renderView();
-        $output = $this->wrapState($output, $token);
-
-        $response->html($output);
-    }
-
-    private function wrapState(string $html, string $token): string
-    {
-        $search = '<data-t-state></data-t-state>';
-
-        if (str_contains($html, $search)) {
-            return str_replace($search, '<input type="hidden" name="t:state" value="' . e($token) . '">', $html);
-        }
-
-        return $html;
+        $response->html($output->html);
     }
 }

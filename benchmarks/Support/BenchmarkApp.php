@@ -63,6 +63,7 @@ final class BenchmarkApp
             'APP_DEBUG' => 'false',
             'DB_CONNECTION' => $useMysql ? 'mysql' : 'sqlite',
             'CACHE_DEFAULT' => 'in-memory',
+            'CACHE_IN_MEMORY_CLEAN_INTERVAL' => '0',
             'QUEUE_DEFAULT' => 'database',
             'AUTH_GUARD' => 'access_token',
             'AUTH_SESSION_STORE' => 'database',

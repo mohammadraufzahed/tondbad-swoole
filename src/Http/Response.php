@@ -84,6 +84,19 @@ class Response
             ->end(json_encode(['error' => $message], JSON_THROW_ON_ERROR));
     }
 
+    public function file(string $path, string $contentType = 'application/octet-stream'): void
+    {
+        if (!is_file($path)) {
+            $this->status(404)->end('Not found');
+
+            return;
+        }
+
+        $this->status(200)
+            ->header('Content-Type', $contentType)
+            ->end((string) file_get_contents($path));
+    }
+
     public function cookie(
         string $name,
         string $value,
