@@ -265,9 +265,35 @@ class Grammar
 
     protected function compileColumns(Builder $query): string
     {
-        $columns = array_map(fn ($column) => $this->wrap($column), $query->columns);
+        $columns = [];
+
+        foreach ($query->columns as $key => $column) {
+            $alias = is_string($key) ? $key : null;
+            $columns[] = $this->compileColumn($column, $alias);
+        }
 
         return 'select ' . ($query->distinct ? 'distinct ' : '') . ($columns === [] ? '*' : implode(', ', $columns));
+    }
+
+    protected function compileColumn(mixed $column, ?string $alias = null): string
+    {
+        if ($column instanceof Builder) {
+            $sql = '(' . $this->compileSelect($column) . ')';
+
+            return $alias !== null ? $sql . ' as ' . $this->wrapValue($alias) : $sql;
+        }
+
+        if ($column instanceof Expression) {
+            $sql = $this->wrap($column);
+
+            return $alias !== null ? $sql . ' as ' . $this->wrapValue($alias) : $sql;
+        }
+
+        if ($alias !== null) {
+            return $this->wrap($column) . ' as ' . $this->wrapValue($alias);
+        }
+
+        return $this->wrap($column);
     }
 
     protected function compileFrom(Builder $query): string
@@ -361,24 +387,63 @@ class Grammar
         return '(' . $sql . ')';
     }
 
+    protected function whereSub(array $where): string
+    {
+        return $this->wrap($where['column']) . ' ' . $where['operator'] . ' (' . $this->compileSelect($where['query']) . ')';
+    }
+
     protected function whereExists(array $where): string
     {
-        $query = $where['query'];
-        $not = ($where['not'] ?? false) ? 'not ' : '';
-
-        $columns = $query->columns;
-        $query->columns = [new Expression('1')];
-
-        $sql = $this->compileSelect($query);
-
-        $query->columns = $columns;
-
-        return '(' . $not . 'exists (' . ltrim($sql) . '))';
+        return ($where['not'] ? 'not ' : '') . 'exists (' . $this->compileSelect($where['query']) . ')';
     }
 
     protected function whereColumn(array $where): string
     {
         return $this->wrap($where['first']) . ' ' . $where['operator'] . ' ' . $this->wrap($where['second']);
+    }
+
+    protected function whereAny(array $where): string
+    {
+        $clauses = array_map(
+            fn ($column) => $this->wrap($column) . ' ' . $where['operator'] . ' ' . $this->parameter($where['value']),
+            $where['columns']
+        );
+
+        return '(' . implode(' or ', $clauses) . ')';
+    }
+
+    protected function whereAll(array $where): string
+    {
+        $clauses = array_map(
+            fn ($column) => $this->wrap($column) . ' ' . $where['operator'] . ' ' . $this->parameter($where['value']),
+            $where['columns']
+        );
+
+        return '(' . implode(' and ', $clauses) . ')';
+    }
+
+    public function jsonContainsBindings(string $path, mixed $value): array
+    {
+        return [$path, $value];
+    }
+
+    public function jsonLengthBindings(string $path, mixed $value): array
+    {
+        return [$path, $value];
+    }
+
+    protected function whereJsonContains(array $where): string
+    {
+        $column = $this->wrap($where['column']);
+
+        return ($where['not'] ? 'not ' : '') . 'exists (select 1 from json_each(' . $column . ', ?) where value = ?)';
+    }
+
+    protected function whereJsonLength(array $where): string
+    {
+        $column = $this->wrap($where['column']);
+
+        return 'json_array_length(' . $column . ', ?) ' . $where['operator'] . ' cast(? as integer)';
     }
 
     protected function whereRaw(array $where): string

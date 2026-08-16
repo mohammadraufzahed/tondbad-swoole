@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace TondbadSwoole\Database\Relations;
 
 use TondbadSwoole\Database\Model;
-use TondbadSwoole\Database\ModelBuilder;
 
 class HasMany extends Relation
 {
@@ -53,17 +52,9 @@ class HasMany extends Relation
         return $model->getAttribute($this->foreignKey);
     }
 
-    public function getRelationExistenceQuery(ModelBuilder $parent, string $parentTable): ModelBuilder
+    public function addWhereHasConstraints(string $parentTable): void
     {
-        $table = $this->newRelatedInstance()->getTable();
-
-        return $this->query->newQuery()
-            ->from($table)
-            ->whereColumn($table . '.' . $this->foreignKey, '=', $parentTable . '.' . $this->localKey);
-    }
-
-    public function getHasGroupByColumn(): string
-    {
-        return $this->newRelatedInstance()->getTable() . '.' . $this->foreignKey;
+        [$related, $parent] = $this->getWhereHasColumns($parentTable);
+        $this->query->whereColumn($related, '=', $parent);
     }
 }

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace TondbadSwoole\Database\Relations;
 
 use TondbadSwoole\Database\Model;
-use TondbadSwoole\Database\ModelBuilder;
 
 class BelongsTo extends Relation
 {
@@ -59,16 +58,17 @@ class BelongsTo extends Relation
         }
     }
 
-    public function getRelationExistenceQuery(ModelBuilder $parent, string $parentTable): ModelBuilder
+    public function addWhereHasConstraints(string $parentTable): void
     {
-        $table = $this->newRelatedInstance()->getTable();
-
-        return $this->query->newQuery()
-            ->from($table)
-            ->whereColumn($table . '.' . $this->localKey, '=', $parentTable . '.' . $this->foreignKey);
+        $relatedTable = $this->newRelatedInstance()->getTable();
+        $this->query->whereColumn(
+            $relatedTable . '.' . $this->localKey,
+            '=',
+            $parentTable . '.' . $this->foreignKey
+        );
     }
 
-    public function getHasGroupByColumn(): string
+    public function getWhereHasGroupByColumn(): string
     {
         return $this->newRelatedInstance()->getTable() . '.' . $this->localKey;
     }

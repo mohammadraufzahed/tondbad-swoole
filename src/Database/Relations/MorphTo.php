@@ -13,25 +13,22 @@ class MorphTo extends Relation
     /** @var array<string, class-string<Model>> */
     protected static array $morphMap = [];
 
-    protected string $typeColumn;
+    protected string $morphType;
 
-    protected string $idColumn;
+    /** @var array<string, list<mixed>> */
+    protected array $eagerGroups = [];
 
-    public function __construct(
-        Model $parent,
-        string $typeColumn,
-        string $idColumn,
-        string $relationName,
-    ) {
-        $this->parent = $parent;
-        $this->typeColumn = $typeColumn;
-        $this->idColumn = $idColumn;
-        $this->relationName = $relationName;
-        $this->foreignKey = $idColumn;
-        $this->localKey = '';
-        $this->related = '';
+    protected ?Model $relatedModel = null;
 
-        $this->query = $this->newQuery();
+    public function __construct(Model $parent, string $name, ?string $type = null, ?string $id = null, ?string $ownerKey = null)
+    {
+        $type ??= $name . '_type';
+        $id ??= $name . '_id';
+        $ownerKey ??= (new MorphPlaceholder())->getKeyName();
+
+        $this->morphType = $type;
+
+        parent::__construct($parent, MorphPlaceholder::class, $id, $ownerKey, $name);
     }
 
     /** @param array<string, class-string<Model>> $map */
@@ -48,32 +45,26 @@ class MorphTo extends Relation
 
     public static function getActualClassName(string $type): ?string
     {
-        return self::$morphMap[$type] ?? null;
+        if (isset(self::$morphMap[$type])) {
+            return self::$morphMap[$type];
+        }
+
+        if ($type !== '' && (is_subclass_of($type, Model::class) || $type === Model::class)) {
+            return $type;
+        }
+
+        return null;
     }
 
     public function getResults(): mixed
     {
-        $type = $this->parent->getAttribute($this->typeColumn);
+        $related = $this->relatedModel();
 
-        if ($type === null || $type === '') {
+        if ($related === null) {
             return null;
         }
 
-        $class = self::getActualClassName((string) $type);
-
-        if ($class === null) {
-            return null;
-        }
-
-        return (new $class())
-            ->newQuery()
-            ->where((new $class())->getKeyName(), '=', $this->parent->getAttribute($this->idColumn))
-            ->first();
-    }
-
-    public function getEager(): array
-    {
-        return [];
+        return $related->newQuery()->where($this->localKey, '=', $this->parent->getAttribute($this->foreignKey))->first();
     }
 
     public function addConstraints(): void
@@ -82,13 +73,72 @@ class MorphTo extends Relation
 
     public function addEagerConstraints(array $models): void
     {
+        $this->eagerGroups = [];
+
+        foreach ($models as $model) {
+            $type = $model->getAttribute($this->morphType);
+            $key = $model->getAttribute($this->foreignKey);
+
+            if ($type === null || $key === null) {
+                continue;
+            }
+
+            $this->eagerGroups[(string) $type][] = $key;
+        }
+    }
+
+    public function getEager(): array
+    {
+        $results = [];
+
+        foreach ($this->eagerGroups as $type => $keys) {
+            $class = self::getActualClassName((string) $type);
+
+            if ($class === null) {
+                continue;
+            }
+
+            $related = new $class();
+            $rows = $related->newQuery()->whereIn($this->localKey, $keys)->get();
+
+            foreach ($rows as $row) {
+                $results[] = $row;
+            }
+        }
+
+        return $results;
     }
 
     public function match(array $models, array $results): void
     {
         foreach ($models as $model) {
-            $model->setRelation($this->relationName, null);
+            $type = $model->getAttribute($this->morphType);
+            $key = $model->getAttribute($this->foreignKey);
+            $class = $type !== null ? self::getActualClassName((string) $type) : null;
+            $match = null;
+
+            if ($class !== null) {
+                foreach ($results as $result) {
+                    if ($result instanceof $class && $result->getAttribute($this->localKey) == $key) {
+                        $match = $result;
+
+                        break;
+                    }
+                }
+            }
+
+            $model->setRelation($this->relationName, $match);
         }
+    }
+
+    public function addWhereHasConstraints(string $parentTable): void
+    {
+        throw new \LogicException('has()/whereHas()/doesntHave() on morphTo relations are handled by addHasExistenceQuery.');
+    }
+
+    public function getWhereHasGroupByColumn(): string
+    {
+        throw new \LogicException('has()/whereHas()/doesntHave() on morphTo relations are handled by addHasExistenceQuery.');
     }
 
     public function addHasExistenceQuery(
@@ -103,11 +153,7 @@ class MorphTo extends Relation
         $morphMap = self::getMorphMap();
 
         if ($morphMap === []) {
-            throw new \LogicException('morphTo has()/whereHas() requires a morphMap to be registered.');
-        }
-
-        if ($count < 1 && $operator === '<=') {
-            // `<= 0` is equivalent to `doesntHave` and is handled by the caller.
+            throw new \LogicException('morphTo has()/whereHas()/doesntHave() requires a morphMap to be registered.');
         }
 
         if ($count > 1 && ($operator === '>=' || $operator === '>' || $operator === '=')) {
@@ -135,8 +181,8 @@ class MorphTo extends Relation
 
                 $sub = $instance->newQuery()
                     ->from($relatedTable)
-                    ->whereColumn($relatedTable . '.' . $relatedKey, '=', $parentTable . '.' . $this->idColumn)
-                    ->where($parentTable . '.' . $this->typeColumn, '=', $type);
+                    ->whereColumn($relatedTable . '.' . $relatedKey, '=', $parentTable . '.' . $this->foreignKey)
+                    ->where($parentTable . '.' . $this->morphType, '=', $type);
 
                 if ($callback !== null) {
                     $callback($sub);
@@ -151,21 +197,26 @@ class MorphTo extends Relation
         return true;
     }
 
-    public function getRelationExistenceQuery(ModelBuilder $parent, string $parentTable): ModelBuilder
+    protected function relatedModel(): ?Model
     {
-        throw new \LogicException('morphTo existence queries are handled by addHasExistenceQuery.');
-    }
+        if ($this->relatedModel !== null) {
+            return $this->relatedModel;
+        }
 
-    public function getHasGroupByColumn(): string
-    {
-        return $this->parent->getTable() . '.' . $this->idColumn;
-    }
+        $type = $this->parent->getAttribute($this->morphType);
 
-    protected function newQuery(): ModelBuilder
-    {
-        /** @var ModelBuilder $query */
-        $query = $this->parent->newQuery();
+        if ($type === null) {
+            return null;
+        }
 
-        return $query;
+        $class = self::getActualClassName((string) $type);
+
+        if ($class === null) {
+            return null;
+        }
+
+        $this->relatedModel = new $class();
+
+        return $this->relatedModel;
     }
 }

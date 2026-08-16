@@ -6,6 +6,7 @@ namespace TondbadSwoole\Database\Relations;
 
 use TondbadSwoole\Database\Model;
 use TondbadSwoole\Database\ModelBuilder;
+use TondbadSwoole\Database\Query\Builder;
 
 abstract class Relation
 {
@@ -35,6 +36,31 @@ abstract class Relation
         return $this;
     }
 
+    public function getRelated(): Model
+    {
+        return $this->newRelatedInstance();
+    }
+
+    public function getParent(): Model
+    {
+        return $this->parent;
+    }
+
+    public function getForeignKey(): string
+    {
+        return $this->foreignKey;
+    }
+
+    public function getLocalKey(): string
+    {
+        return $this->localKey;
+    }
+
+    public function getRelationName(): string
+    {
+        return $this->relationName;
+    }
+
     abstract public function getResults(): mixed;
 
     abstract public function getEager(): array;
@@ -45,10 +71,11 @@ abstract class Relation
 
     abstract public function match(array $models, array $results): void;
 
-    abstract public function getRelationExistenceQuery(ModelBuilder $parent, string $parentTable): ModelBuilder;
-
-    abstract public function getHasGroupByColumn(): string;
-
+    /**
+     * Optional override for relations that cannot be expressed by the generic
+     * existence query (e.g. morphTo, which needs an OR group per type).
+     * Return true when the parent query has been modified directly.
+     */
     public function addHasExistenceQuery(
         ModelBuilder $parent,
         string $parentTable,
@@ -64,6 +91,30 @@ abstract class Relation
     public function getQuery(): ModelBuilder
     {
         return $this->query;
+    }
+
+    abstract public function addWhereHasConstraints(string $parentTable): void;
+
+    public function getWhereHasGroupByColumn(): string
+    {
+        return $this->newRelatedInstance()->getTable() . '.' . $this->foreignKey;
+    }
+
+    /**
+     * Optional override for relations that need a different existence query
+     * (e.g. many-to-many counts pivot rows instead of related rows).
+     */
+    public function getRelationExistenceQueryForParent(ModelBuilder $parent, string $parentTable): ?Builder
+    {
+        return null;
+    }
+
+    protected function getWhereHasColumns(string $parentTable): array
+    {
+        return [
+            $this->newRelatedInstance()->getTable() . '.' . $this->foreignKey,
+            $parentTable . '.' . $this->localKey,
+        ];
     }
 
     protected function newRelatedInstance(): Model

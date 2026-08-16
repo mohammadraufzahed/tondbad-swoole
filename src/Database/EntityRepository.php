@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace TondbadSwoole\Database;
 
+use TondbadSwoole\Database\Criteria\Criteria;
+
 class EntityRepository
 {
     public function __construct(
@@ -64,6 +66,11 @@ class EntityRepository
         $result = $this->findBy($criteria, [], 1);
 
         return $result[0] ?? null;
+    }
+
+    public function matching(Criteria $criteria): array
+    {
+        return $this->createQueryBuilder()->applyCriteria($criteria)->get();
     }
 
     public function createQueryBuilder(): ModelBuilder

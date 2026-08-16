@@ -363,3 +363,199 @@ protected array $casts = [
     'price' => MoneyCast::class,
 ];
 ```
+
+## Advanced query layer
+
+### Relation filtering and aggregate eager loading
+
+```php
+$users = User::whereHas('posts')->get();
+
+$users = User::whereHas('posts', fn ($q) => $q->where('published', true))->get();
+
+$users = User::has('posts', '>=', 3)->get();
+
+$users = User::doesntHave('posts')->get();
+
+$users = User::withCount('posts')->get();
+// each $user->posts_count
+
+$users = User::withSum('posts', 'views')
+    ->withAvg('posts', 'views')
+    ->withMax('posts', 'views')
+    ->withMin('posts', 'views')
+    ->get();
+```
+
+### Conditional eager loading
+
+```php
+$users = User::with(['posts' => fn ($q) => $q->where('published', true)])->get();
+
+$user = User::find(1);
+$user->loadMissing(['posts.comments']);
+$user->loadCount('posts');
+```
+
+### JSON predicates and subqueries
+
+```php
+User::query()->whereJsonContains('settings->tags', 'news')->get();
+User::query()->whereJsonLength('settings->tags', '>=', 2)->get();
+
+User::query()->whereExists(
+    fn ($q) => $q->from('posts')->whereColumn('posts.user_id', 'users.id')
+)->get();
+
+User::query()->whereAny(['name', 'email'], 'like', '%ava%')->get();
+User::query()->whereAll(['name', 'email'], 'like', '%ava%')->get();
+```
+
+### Chunking, cursor and pagination
+
+```php
+foreach (User::cursor(1000) as $user) {
+    // process
+}
+
+User::chunkById(100, function (array $users) {
+    // process batch
+});
+
+$paginator = User::paginate(20, 1);
+$paginator->toArray(); // items, total, per_page, current_page, last_page
+```
+
+### Find helpers and batch deletes
+
+```php
+$users = User::findMany([1, 2, 3]);
+
+$user = User::firstOrNew(['email' => 'ava@example.com'], ['name' => 'Ava']);
+$user = User::firstOrFail();
+
+User::destroy(1);
+User::destroy([1, 2, 3]);
+```
+
+### Scopes and soft deletes
+
+```php
+use TondbadSwoole\Database\Concerns\SoftDeletes;
+
+class Post extends Model
+{
+    use SoftDeletes;
+}
+
+Post::all();               // excludes deleted rows
+Post::withTrashed()->get(); // includes deleted rows
+Post::onlyTrashed()->get(); // only deleted rows
+
+$post->delete();      // soft delete
+$post->trashed();     // true
+$post->restore();     // un-delete
+$post->forceDelete(); // permanently remove
+```
+
+## Many-to-many relationships
+
+### Defining a `BelongsToMany` relation
+
+```php
+use TondbadSwoole\Database\Model;
+
+class User extends Model
+{
+    public function roles()
+    {
+        return $this->belongsToMany(
+            Role::class,
+            'role_user',   // pivot table
+            'user_id',     // foreign pivot key
+            'role_id',     // related pivot key
+            'id',          // parent key
+            'id'           // related key
+        );
+    }
+}
+
+class Role extends Model
+{
+    public function users()
+    {
+        return $this->belongsToMany(User::class, 'role_user', 'role_id', 'user_id');
+    }
+}
+```
+
+### Loading and querying many-to-many relations
+
+```php
+$user->roles;                       // lazy load
+User::with('roles')->get();         // eager load
+User::withCount('roles')->get();    // adds roles_count
+User::has('roles', '>=', 2)->get(); // users with at least two roles
+User::whereHas('roles', fn ($q) => $q->where('name', 'admin'))->get();
+```
+
+### Pivot operations
+
+```php
+$user->roles()->attach([1, 2], ['expires_at' => '2026-12-31']);
+$user->roles()->detach(2);
+$user->roles()->sync([1, 3]);       // detach missing, attach new
+$user->roles()->toggle([2, 3]);     // attach if missing, detach if present
+$user->roles()->withPivot('expires_at')->get();
+```
+
+## Polymorphic relations
+
+```php
+class Comment extends Model
+{
+    public function commentable()
+    {
+        return $this->morphTo('commentable');
+    }
+}
+
+class Post extends Model
+{
+    public function comments()
+    {
+        return $this->morphMany(Comment::class, 'commentable');
+    }
+}
+
+class Video extends Model
+{
+    public function comments()
+    {
+        return $this->morphMany(Comment::class, 'commentable');
+    }
+}
+```
+
+Polymorphic relations are constrained by both the `*_id` and `*_type` columns. `morphOne` is also available for one-to-one morphs.
+
+```php
+$post->comments;                    // Comment[] scoped to Post
+Post::with('comments')->get();
+Post::withCount('comments')->get();
+```
+
+## Query result cache
+
+Model results can be cached through the framework cache store:
+
+```php
+$users = User::query()->remember(60)->get();
+
+// custom key, e.g. for cache tags / invalidation
+$admins = User::query()->where('is_admin', true)->remember(120, 'admins.list')->get();
+
+User::query()->flushCache('admins.list');
+```
+
+`remember()` stores raw result rows and rehydrates models on cache hits, so `first()` and `get()` both respect it. The cache key defaults to a hash of the compiled SQL and bindings.

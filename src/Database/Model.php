@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace TondbadSwoole\Database;
 
 use BackedEnum;
+use Closure;
 use DateTimeImmutable;
 use DateTimeInterface;
 use ReflectionClass;
@@ -16,10 +17,14 @@ use TondbadSwoole\Database\Attributes\Embedded;
 use TondbadSwoole\Database\Attributes\Version;
 use TondbadSwoole\Database\Casts\CastsAttributes;
 use TondbadSwoole\Database\Relations\BelongsTo;
+use TondbadSwoole\Database\Relations\BelongsToMany;
 use TondbadSwoole\Database\Relations\HasMany;
 use TondbadSwoole\Database\Relations\HasOne;
+use TondbadSwoole\Database\Relations\MorphMany;
+use TondbadSwoole\Database\Relations\MorphOne;
 use TondbadSwoole\Database\Relations\MorphTo;
 use TondbadSwoole\Database\Relations\Relation;
+use TondbadSwoole\Database\Scopes\Scope;
 use UnitEnum;
 
 abstract class Model
@@ -60,6 +65,11 @@ abstract class Model
 
     private static array $cascadeMap = [];
 
+    private static array $booted = [];
+
+    /** @var array<class-string, list<Scope>> */
+    private static array $globalScopes = [];
+
     public bool $exists = false;
 
     public function __construct(array $attributes = [], bool $exists = false)
@@ -71,6 +81,7 @@ abstract class Model
             $this->fill($attributes);
         }
         $this->syncOriginal();
+        $this->bootIfNotBooted();
     }
 
     public static function query(): ModelBuilder
@@ -89,6 +100,10 @@ abstract class Model
         $entityManager = $this->getEntityManager();
         if ($entityManager !== null) {
             $builder->setEntityManager($entityManager);
+        }
+
+        foreach (static::getGlobalScopes() as $scope) {
+            $builder->withGlobalScope($scope);
         }
 
         return $builder;
@@ -139,14 +154,79 @@ abstract class Model
         return $query->first();
     }
 
+    public static function findMany(array $ids, array|string $columns = ['*']): array
+    {
+        return static::query()->findMany($ids, $columns);
+    }
+
+    public static function firstOrNew(array $attributes, array $values = []): static
+    {
+        return static::query()->firstOrNew($attributes, $values);
+    }
+
+    public static function firstOrFail(): static
+    {
+        return static::query()->firstOrFail();
+    }
+
+    public static function destroy(mixed $id): int
+    {
+        if ($id instanceof Model) {
+            return $id->delete();
+        }
+
+        if (is_array($id)) {
+            $count = 0;
+            foreach ($id as $single) {
+                $count += static::destroy($single);
+            }
+
+            return $count;
+        }
+
+        $model = static::find($id);
+
+        return $model !== null ? $model->delete() : 0;
+    }
+
     public static function count(string $column = '*'): int
     {
         return static::query()->count($column);
     }
 
+    public static function paginate(int $perPage = 15, ?int $page = null, string $pageName = 'page')
+    {
+        return static::query()->paginate($perPage, $page, $pageName);
+    }
+
+    public static function cursor(int $chunkSize = 1000): \Generator
+    {
+        return static::query()->cursor($chunkSize);
+    }
+
+    public static function chunkById(int $count, Closure $callback, string $column = 'id'): bool
+    {
+        return static::query()->chunkById($count, $callback, $column);
+    }
+
+    public static function withTrashed(): ModelBuilder
+    {
+        return static::query()->withTrashed();
+    }
+
+    public static function onlyTrashed(): ModelBuilder
+    {
+        return static::query()->onlyTrashed();
+    }
+
     public static function with(array|string $relations): ModelBuilder
     {
         return static::query()->with($relations);
+    }
+
+    public static function __callStatic(string $method, array $args): mixed
+    {
+        return static::query()->$method(...$args);
     }
 
     public static function create(array $attributes): static
@@ -405,10 +485,24 @@ abstract class Model
         return $this->fill($attributes)->save();
     }
 
+    public function usesSoftDeletes(): bool
+    {
+        return false;
+    }
+
+    protected function softDelete(): int
+    {
+        return 0;
+    }
+
     public function delete(): int
     {
         if (!$this->exists) {
             return 0;
+        }
+
+        if ($this->usesSoftDeletes()) {
+            return $this->softDelete();
         }
 
         $entityManager = $this->getEntityManager();
@@ -502,6 +596,40 @@ abstract class Model
                 $this->setRelation($name, $value);
             }
         }
+
+        return $this;
+    }
+
+    public function loadMissing(array|string $relations): self
+    {
+        $relations = is_string($relations) ? func_get_args() : $relations;
+
+        $missing = [];
+        foreach ($relations as $relation) {
+            if (!array_key_exists($relation, $this->relations)) {
+                $missing[] = $relation;
+            }
+        }
+
+        if ($missing !== []) {
+            $this->load($missing);
+        }
+
+        return $this;
+    }
+
+    public function loadCount(array|string $relations): self
+    {
+        $relations = is_string($relations) ? func_get_args() : $relations;
+
+        $this->newQuery()->loadCount($this, $relations);
+
+        return $this;
+    }
+
+    public function loadAggregate(string $relation, string $column, string $function): self
+    {
+        $this->newQuery()->loadAggregate($this, $relation, $column, $function);
 
         return $this;
     }
@@ -1108,6 +1236,11 @@ abstract class Model
         return (new \ReflectionClass($this))->getShortName();
     }
 
+    public function getMorphClass(): string
+    {
+        return static::class;
+    }
+
     protected function pluralize(string $word): string
     {
         if (str_ends_with($word, 'ss') || str_ends_with($word, 'x') || str_ends_with($word, 'ch') || str_ends_with($word, 'sh') || str_ends_with($word, 'z')) {
@@ -1151,13 +1284,30 @@ abstract class Model
         return new BelongsTo($this, $related, $foreignKey, $ownerKey, $this->getRelationCaller());
     }
 
-    public function morphTo(?string $typeColumn = null, ?string $idColumn = null, ?string $relationName = null): MorphTo
-    {
-        $relationName ??= $this->getRelationCaller();
-        $typeColumn ??= $this->snake($relationName) . '_type';
-        $idColumn ??= $this->snake($relationName) . '_id';
+    public function belongsToMany(
+        string $related,
+        ?string $table = null,
+        ?string $foreignPivotKey = null,
+        ?string $relatedPivotKey = null,
+        ?string $parentKey = null,
+        ?string $relatedKey = null,
+    ): BelongsToMany {
+        return new BelongsToMany($this, $related, $table, $foreignPivotKey, $relatedPivotKey, $parentKey, $relatedKey, $this->getRelationCaller());
+    }
 
-        return new MorphTo($this, $typeColumn, $idColumn, $relationName);
+    public function morphOne(string $related, string $name, ?string $type = null, ?string $id = null, ?string $localKey = null): MorphOne
+    {
+        return new MorphOne($this, $related, $name, $type, $id, $localKey);
+    }
+
+    public function morphMany(string $related, string $name, ?string $type = null, ?string $id = null, ?string $localKey = null): MorphMany
+    {
+        return new MorphMany($this, $related, $name, $type, $id, $localKey);
+    }
+
+    public function morphTo(string $name, ?string $type = null, ?string $id = null, ?string $ownerKey = null): MorphTo
+    {
+        return new MorphTo($this, $name, $type, $id, $ownerKey);
     }
 
     protected function getRelationCaller(): string
@@ -1165,5 +1315,38 @@ abstract class Model
         $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 3);
 
         return $trace[2]['function'] ?? 'relation';
+    }
+
+    protected static function bootIfNotBooted(): void
+    {
+        if (isset(self::$booted[static::class])) {
+            return;
+        }
+
+        self::$booted[static::class] = true;
+        static::bootTraits();
+    }
+
+    protected static function bootTraits(): void
+    {
+        foreach (class_uses(static::class) as $trait) {
+            $method = 'boot' . (substr((string) strrchr($trait, '\\'), 1) ?: $trait);
+            if (method_exists(static::class, $method)) {
+                static::$method();
+            }
+        }
+    }
+
+    public static function addGlobalScope(Scope $scope): void
+    {
+        self::$globalScopes[static::class][] = $scope;
+    }
+
+    /**
+     * @return list<Scope>
+     */
+    public static function getGlobalScopes(): array
+    {
+        return self::$globalScopes[static::class] ?? [];
     }
 }

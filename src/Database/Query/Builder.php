@@ -77,19 +77,46 @@ class Builder
         return $this->table($table, $as);
     }
 
-    public function select(array|string $columns = ['*']): self
+    public function select(array|string|Expression|self $columns = ['*']): self
     {
-        $this->columns = is_array($columns) ? $columns : func_get_args();
+        $this->columns = [];
+        $this->bindings['select'] = [];
+
+        if (!is_array($columns)) {
+            $columns = func_get_args();
+        }
+
+        foreach ($columns as $key => $column) {
+            $this->addSelectColumn($column, is_string($key) ? $key : null);
+        }
 
         return $this;
     }
 
-    public function addSelect(array|string $column): self
+    public function addSelect(array|string|Expression|self $column): self
     {
         $columns = is_array($column) ? $column : func_get_args();
-        $this->columns = array_merge($this->columns, $columns);
+
+        foreach ($columns as $key => $value) {
+            $this->addSelectColumn($value, is_string($key) ? $key : null);
+        }
 
         return $this;
+    }
+
+    protected function addSelectColumn(mixed $column, ?string $alias = null): void
+    {
+        if ($column instanceof self) {
+            $this->addFullSubQueryBindings($column, 'select');
+        }
+
+        if ($alias !== null) {
+            $this->columns[$alias] = $column;
+
+            return;
+        }
+
+        $this->columns[] = $column;
     }
 
     public function distinct(bool $distinct = true): self
@@ -144,6 +171,10 @@ class Builder
         if (func_num_args() === 2) {
             $value = $operator;
             $operator = '=';
+        }
+
+        if ($value instanceof Closure || $value instanceof self) {
+            return $this->whereSub($column, $operator, $value, $boolean);
         }
 
         $this->wheres[] = [
@@ -258,14 +289,33 @@ class Builder
         return $this->whereNotBetween($column, $values, 'or');
     }
 
-    public function whereExists(self|\Closure $callback, string $boolean = 'and', bool $not = false): self
+    public function whereSub(string $column, string $operator, self|Closure $query, string $boolean = 'and'): self
     {
-        if ($callback instanceof \Closure) {
-            $query = $this->newQuery();
-            $callback($query);
-        } else {
-            $query = $callback;
-        }
+        $query = $this->resolveSubQuery($query);
+
+        $this->addFullSubQueryBindings($query, 'where');
+
+        $this->wheres[] = [
+            'type' => 'Sub',
+            'column' => $column,
+            'operator' => $operator,
+            'query' => $query,
+            'boolean' => $boolean,
+        ];
+
+        return $this;
+    }
+
+    public function orWhereSub(string $column, string $operator, self|Closure $query): self
+    {
+        return $this->whereSub($column, $operator, $query, 'or');
+    }
+
+    public function whereExists(self|Closure $callback, string $boolean = 'and', bool $not = false): self
+    {
+        $query = $this->resolveSubQuery($callback);
+
+        $this->addFullSubQueryBindings($query, 'where');
 
         $this->wheres[] = [
             'type' => 'Exists',
@@ -274,22 +324,20 @@ class Builder
             'not' => $not,
         ];
 
-        $this->addNestedBindings($query, 'where');
-
         return $this;
     }
 
-    public function orWhereExists(self|\Closure $callback): self
+    public function orWhereExists(self|Closure $callback): self
     {
         return $this->whereExists($callback, 'or');
     }
 
-    public function whereNotExists(self|\Closure $callback, string $boolean = 'and'): self
+    public function whereNotExists(self|Closure $callback, string $boolean = 'and'): self
     {
         return $this->whereExists($callback, $boolean, true);
     }
 
-    public function orWhereNotExists(self|\Closure $callback): self
+    public function orWhereNotExists(self|Closure $callback): self
     {
         return $this->whereExists($callback, 'or', true);
     }
@@ -297,25 +345,20 @@ class Builder
     public function whereColumn(string|array $first, ?string $operator = null, ?string $second = null, string $boolean = 'and'): self
     {
         if (is_array($first)) {
-            foreach ($first as $columns) {
-                if (!is_array($columns) || count($columns) < 2) {
-                    throw new \InvalidArgumentException('whereColumn array entries must contain at least two column names.');
-                }
-
-                $op = $columns[2] ?? '=';
-                $this->whereColumn($columns[0], $op, $columns[1], $boolean);
+            foreach ($first as $clause) {
+                $this->whereColumn($clause[0], $clause[1], $clause[2], $boolean);
             }
 
             return $this;
         }
 
-        if (func_num_args() === 2) {
+        if ($operator !== null && $second === null) {
             $second = $operator;
             $operator = '=';
         }
 
-        if ($second === null || $operator === null) {
-            throw new \InvalidArgumentException('whereColumn requires two columns and an operator.');
+        if ($operator === null || $second === null) {
+            throw new InvalidArgumentException('whereColumn requires two operands and an operator.');
         }
 
         $this->wheres[] = [
@@ -329,14 +372,113 @@ class Builder
         return $this;
     }
 
-    public function orWhereColumn(string $first, ?string $operator = null, ?string $second = null): self
+    public function orWhereColumn(string|array $first, ?string $operator = null, ?string $second = null): self
     {
-        if (func_num_args() === 2) {
-            $second = $operator;
+        return $this->whereColumn($first, $operator, $second, 'or');
+    }
+
+    public function whereJsonContains(string $column, mixed $value, string $boolean = 'and', bool $not = false): self
+    {
+        [$col, $path] = $this->parseJsonColumnAndPath($column);
+
+        foreach ($this->grammar->jsonContainsBindings($path, $value) as $binding) {
+            $this->addBinding($binding, 'where');
+        }
+
+        $this->wheres[] = [
+            'type' => 'JsonContains',
+            'column' => $col,
+            'path' => $path,
+            'value' => $value,
+            'boolean' => $boolean,
+            'not' => $not,
+        ];
+
+        return $this;
+    }
+
+    public function orWhereJsonContains(string $column, mixed $value): self
+    {
+        return $this->whereJsonContains($column, $value, 'or');
+    }
+
+    public function whereJsonDoesntContain(string $column, mixed $value, string $boolean = 'and'): self
+    {
+        return $this->whereJsonContains($column, $value, $boolean, true);
+    }
+
+    public function whereJsonLength(string $column, mixed $operator = null, mixed $value = null, string $boolean = 'and'): self
+    {
+        [$col, $path] = $this->parseJsonColumnAndPath($column);
+
+        if ($operator !== null && $value === null && !is_numeric($operator)) {
+            $value = $operator;
             $operator = '=';
         }
 
-        return $this->whereColumn($first, $operator, $second, 'or');
+        foreach ($this->grammar->jsonLengthBindings($path, $value) as $binding) {
+            $this->addBinding($binding, 'where');
+        }
+
+        $this->wheres[] = [
+            'type' => 'JsonLength',
+            'column' => $col,
+            'path' => $path,
+            'operator' => $operator ?? '=',
+            'value' => $value,
+            'boolean' => $boolean,
+        ];
+
+        return $this;
+    }
+
+    public function orWhereJsonLength(string $column, mixed $operator = null, mixed $value = null): self
+    {
+        return $this->whereJsonLength($column, $operator, $value, 'or');
+    }
+
+    public function whereAny(array $columns, string $operator, mixed $value, string $boolean = 'and'): self
+    {
+        $this->wheres[] = [
+            'type' => 'Any',
+            'columns' => $columns,
+            'operator' => $operator,
+            'value' => $value,
+            'boolean' => $boolean,
+        ];
+
+        foreach ($columns as $_) {
+            $this->addBinding($value, 'where');
+        }
+
+        return $this;
+    }
+
+    public function whereAll(array $columns, string $operator, mixed $value, string $boolean = 'and'): self
+    {
+        $this->wheres[] = [
+            'type' => 'All',
+            'columns' => $columns,
+            'operator' => $operator,
+            'value' => $value,
+            'boolean' => $boolean,
+        ];
+
+        foreach ($columns as $_) {
+            $this->addBinding($value, 'where');
+        }
+
+        return $this;
+    }
+
+    public function orWhereAny(array $columns, string $operator, mixed $value): self
+    {
+        return $this->whereAny($columns, $operator, $value, 'or');
+    }
+
+    public function orWhereAll(array $columns, string $operator, mixed $value): self
+    {
+        return $this->whereAll($columns, $operator, $value, 'or');
     }
 
     public function whereRaw(string $sql, array $bindings = [], string $boolean = 'and'): self
@@ -390,7 +532,7 @@ class Builder
         return $this;
     }
 
-    public function having(string $column, mixed $operator, mixed $value = null, string $boolean = 'and'): self
+    public function having(string|Expression $column, mixed $operator, mixed $value = null, string $boolean = 'and'): self
     {
         if (func_num_args() === 2) {
             $value = $operator;
@@ -494,6 +636,8 @@ class Builder
     public function getBindings(): array
     {
         return array_merge(
+            $this->bindings['select'],
+            $this->bindings['from'],
             $this->bindings['join'],
             $this->bindings['where'],
             $this->bindings['having'],
@@ -678,6 +822,36 @@ class Builder
     protected function addNestedBindings(self $query, string $type): void
     {
         $this->bindings[$type] = array_merge($this->bindings[$type], $query->bindings[$type]);
+    }
+
+    protected function addFullSubQueryBindings(self $query, string $type): void
+    {
+        $this->bindings[$type] = array_merge($this->bindings[$type], $query->getBindings());
+    }
+
+    protected function resolveSubQuery(self|Closure $query): self
+    {
+        if ($query instanceof Closure) {
+            $query = $query($this->newQuery());
+        }
+
+        if (!$query instanceof self) {
+            throw new InvalidArgumentException('A subquery must return an instance of ' . self::class . '.');
+        }
+
+        return $query;
+    }
+
+    protected function parseJsonColumnAndPath(string $column): array
+    {
+        if (!str_contains($column, '->')) {
+            return [$column, '$'];
+        }
+
+        $parts = explode('->', $column, 2);
+        $path = '$.' . str_replace('->', '.', $parts[1]);
+
+        return [$parts[0], $path];
     }
 
     protected function prepareInsertForBindings(array $values): array
