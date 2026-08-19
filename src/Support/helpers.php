@@ -197,13 +197,31 @@ if (!function_exists('e')) {
 if (!function_exists('csrf_token')) {
     function csrf_token(): string
     {
-        return session_id() ?: bin2hex(random_bytes(16));
+        try {
+            $session = auth()?->session();
+
+            if ($session?->antiCsrf !== null) {
+                return $session->antiCsrf;
+            }
+        } catch (\Throwable) {
+        }
+
+        return bin2hex(random_bytes(16));
     }
 }
 
 if (!function_exists('old')) {
     function old(string $key, mixed $default = null): mixed
     {
+        try {
+            $request = app()?->container->make(\TondbadSwoole\Contracts\ContextInterface::class)?->get('request');
+
+            if ($request instanceof \TondbadSwoole\Http\Request) {
+                return $request->input($key, $default);
+            }
+        } catch (\Throwable) {
+        }
+
         return $_POST[$key] ?? $_GET[$key] ?? $default;
     }
 }
@@ -238,11 +256,21 @@ if (!function_exists('attributeString')) {
                 if ($value) {
                     $result[] = e($key);
                 }
-            } elseif ($value === null) {
+
                 continue;
-            } else {
-                $result[] = e($key) . '="' . e($value) . '"';
             }
+
+            if ($value === null) {
+                continue;
+            }
+
+            if (is_array($value)) {
+                $value = $key === 'class' || $key === 'style'
+                    ? implode(' ', $value)
+                    : json_encode($value, JSON_THROW_ON_ERROR);
+            }
+
+            $result[] = e($key) . '="' . e($value) . '"';
         }
 
         return $result === [] ? '' : ' ' . implode(' ', $result);

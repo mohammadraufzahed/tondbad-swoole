@@ -22,6 +22,7 @@ final class LiveComponentManager
         $instance = $this->resolve($name, $data);
 
         $instance->mount();
+        $instance->hydrate($data);
 
         return $this->finalize($instance);
     }
@@ -48,8 +49,14 @@ final class LiveComponentManager
         $action = (string) ($request['t:action'] ?? '');
 
         if ($action !== '') {
-            $params = (array) ($request['t:params'] ?? []);
-            $instance->runAction($action, $params);
+            $params = $request['t:params'] ?? [];
+
+            if (is_string($params) && $params !== '') {
+                $decoded = json_decode($params, true);
+                $params = is_array($decoded) ? $decoded : [];
+            }
+
+            $instance->runAction($action, (array) $params);
         }
 
         return $this->finalize($instance);
@@ -74,8 +81,14 @@ final class LiveComponentManager
 
     private function finalize(LiveComponent $instance): LiveUpdate
     {
+        $previousToken = $instance->stateToken();
         $html = $instance->renderView();
         $token = $this->store->save($instance->state());
+
+        if ($previousToken !== null && $previousToken !== $token) {
+            $this->store->delete($previousToken);
+        }
+
         $instance->setStateToken($token, $this->store);
 
         return new LiveUpdate(LiveRender::wrap($html, $token), $token);

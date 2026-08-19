@@ -46,12 +46,28 @@ final class ComponentAttributeBag
 
     public function class(array $classes): string
     {
-        return classNames(array_merge($this->attributes['class'] ?? [], $classes));
+        $class = $this->attributes['class'] ?? [];
+
+        if (is_string($class)) {
+            $class = array_values(array_filter(explode(' ', $class)));
+        }
+
+        if (!is_array($class)) {
+            $class = [];
+        }
+
+        return classNames(array_merge($class, $classes));
     }
 
     public function __toString(): string
     {
-        return attributeString($this->attributes);
+        $attributes = array_filter(
+            $this->attributes,
+            static fn (string $key): bool => !str_starts_with($key, '__'),
+            ARRAY_FILTER_USE_KEY,
+        );
+
+        return attributeString($attributes);
     }
 
     /**

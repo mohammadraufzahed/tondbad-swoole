@@ -146,41 +146,8 @@ VIEW
         expect($ready)->toBeTrue('HTTP server did not become ready in time.');
 
         $sseBuffer = '';
-        $sseDone = false;
 
-        go(function () use ($port, &$sseBuffer, &$sseDone): void {
-            $client = new \OpenSwoole\Coroutine\Client(SWOOLE_SOCK_TCP);
-            $client->set(['timeout' => 10]);
-
-            if (!$client->connect('127.0.0.1', $port)) {
-                $sseDone = true;
-
-                return;
-            }
-
-            $client->send("GET /_live/sse?component=e2e-counter HTTP/1.1\r\nHost: 127.0.0.1:{$port}\r\nAccept: text/event-stream\r\n\r\n");
-
-            while (!$sseDone) {
-                $data = $client->recv();
-
-                if ($data === false || $data === '') {
-                    break;
-                }
-
-                $sseBuffer .= $data;
-
-                if (str_contains($sseBuffer, '"patches"')) {
-                    break;
-                }
-            }
-
-            $client->close();
-            $sseDone = true;
-        });
-
-        go(function () use ($port, &$sseDone): void {
-            usleep(300000);
-
+        \OpenSwoole\Coroutine::run(function () use ($port, &$sseBuffer): void {
             $c = new \OpenSwoole\Coroutine\Http\Client('127.0.0.1', $port);
             $c->set(['timeout' => 10]);
             $c->setHeaders(['Accept' => '*/*']);
@@ -198,23 +165,69 @@ VIEW
             expect($matches)->toHaveCount(2, 'State token not found in live component HTML');
             $token = $matches[1];
 
-            $c2 = new \OpenSwoole\Coroutine\Http\Client('127.0.0.1', $port);
-            $c2->set(['timeout' => 10]);
-            $c2->setHeaders([
-                'Content-Type' => 'application/x-www-form-urlencoded',
-                'X-CSRF-Token' => $csrf,
-                'Cookie' => 'session_id=' . $session,
-            ]);
-            $c2->post('/_live/e2e-counter', 't:state=' . urlencode($token) . '&t:action=increment');
+            $ready = new \OpenSwoole\Coroutine\Channel(1);
+            $done = new \OpenSwoole\Coroutine\Channel(1);
 
-            expect($c2->getStatusCode())->toBe(200);
-            expect($c2->getBody())->toContain('<span id="count">1</span>');
+            go(function () use ($port, $session, &$sseBuffer, $ready, $done): void {
+                $client = new \OpenSwoole\Coroutine\Client(SWOOLE_SOCK_TCP);
+                $client->set(['timeout' => 10]);
 
-            usleep(300000);
-            $sseDone = true;
+                if (!$client->connect('127.0.0.1', $port)) {
+                    $ready->push(false);
+                    $done->push(false);
+
+                    return;
+                }
+
+                $client->send("GET /_live/sse?component=e2e-counter HTTP/1.1\r\nHost: 127.0.0.1:{$port}\r\nAccept: text/event-stream\r\nCookie: session_id={$session}\r\n\r\n");
+
+                $connected = false;
+                $deadline = microtime(true) + 5.0;
+
+                while (microtime(true) < $deadline) {
+                    $data = $client->recv();
+
+                    if ($data === false || $data === '') {
+                        break;
+                    }
+
+                    $sseBuffer .= $data;
+
+                    if (!$connected && str_contains($sseBuffer, 'data: ')) {
+                        $connected = true;
+                        $ready->push(true);
+                    }
+
+                    if (str_contains($sseBuffer, '"patches"')) {
+                        break;
+                    }
+                }
+
+                $client->close();
+                $done->push(true);
+            });
+
+            go(function () use ($port, $session, $csrf, $token, $ready, $done): void {
+                $ok = $ready->pop(5000);
+                expect($ok)->toBeTrue('SSE connection did not become ready');
+
+                usleep(300000);
+
+                $c2 = new \OpenSwoole\Coroutine\Http\Client('127.0.0.1', $port);
+                $c2->set(['timeout' => 10]);
+                $c2->setHeaders([
+                    'Content-Type' => 'application/x-www-form-urlencoded',
+                    'X-CSRF-Token' => $csrf,
+                    'Cookie' => 'session_id=' . $session,
+                ]);
+                $c2->post('/_live/e2e-counter', 't:state=' . urlencode($token) . '&t:action=increment');
+
+                expect($c2->getStatusCode())->toBe(200);
+                expect($c2->getBody())->toContain('<span id="count">1</span>');
+
+                $done->pop(5000);
+            });
         });
-
-        \OpenSwoole\Event::wait();
 
         expect($sseBuffer)->toContain('text/event-stream');
         expect($sseBuffer)->toContain('data: ');

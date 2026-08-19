@@ -100,7 +100,11 @@ class ' . $className . ' extends \TondbadSwoole\View\AbstractCompiledView
                 }
 
                 if ($name === 'elseif' && $current->type === 'if') {
-                    $current->append('<?php elseif (' . $this->compileExpression($token->data['arguments'] ?? '', false) . '): ?>');
+                    $args = (string) ($token->data['arguments'] ?? '');
+                    if (trim($args) === '') {
+                        throw new \InvalidArgumentException('The @elseif directive requires an expression.');
+                    }
+                    $current->append('<?php elseif (' . $this->compileExpression($args, false) . '): ?>');
                     continue;
                 }
 
@@ -194,6 +198,10 @@ class ' . $className . ' extends \TondbadSwoole\View\AbstractCompiledView
         $args = $block->args;
         $content = $block->content;
 
+        if (in_array($block->type, ['if', 'unless', 'foreach', 'forelse', 'for', 'while', 'switch'], true) && trim($args) === '') {
+            throw new \InvalidArgumentException("The @{$block->type} directive requires an expression.");
+        }
+
         return match ($block->type) {
             'if' => '<?php if (' . $this->compileExpression($args, false) . '): ?>' . $content . '<?php endif; ?>',
             'unless' => '<?php if (!(' . $this->compileExpression($args, false) . ')): ?>' . $content . '<?php endif; ?>',
@@ -280,12 +288,12 @@ class ' . $className . ' extends \TondbadSwoole\View\AbstractCompiledView
 
         return match ($name) {
             'extends' => '<?php $__ctx->layout(' . $this->valueArg($parts[0] ?? '') . '); ?>',
-            'yield' => '<?php echo $__ctx->yieldSection(' . $this->valueArg($parts[0] ?? '') . ($parts[1] ?? false ? ', ' . $this->compileExpression($parts[1], false) : '') . '); ?>',
+            'yield' => '<?php echo $__ctx->yieldSection(' . $this->valueArg($parts[0] ?? '') . (isset($parts[1]) ? ', ' . $this->compileExpression($parts[1], false) : '') . '); ?>',
             'parent' => '<?php echo $__ctx->parent(' . $this->valueArg($parts[0] ?? '') . '); ?>',
             'stack' => '<?php echo $__ctx->stack(' . $this->valueArg($parts[0] ?? '') . ($parts[1] ?? false ? ', ' . $this->valueArg($parts[1]) : '') . '); ?>',
             'include' => '<?php $__ctx->include(' . $this->valueArg($parts[0] ?? '') . ($parts[1] ?? false ? ', array_merge($__data, ' . $this->compileExpression($parts[1], false) . ')' : ', $__data') . '); ?>',
-            'includeIf' => '<?php if (' . ($parts[1] ?? 'true') . '): $__ctx->include(' . $this->valueArg($parts[0] ?? '') . ($parts[2] ?? false ? ', ' . $this->compileExpression($parts[2], false) : '') . '); endif; ?>',
-            'includeWhen' => '<?php if (' . ($parts[0] ?? 'true') . '): $__ctx->include(' . $this->valueArg($parts[1] ?? '') . ($parts[2] ?? false ? ', ' . $this->compileExpression($parts[2], false) : '') . '); endif; ?>',
+            'includeIf' => '<?php if (' . $this->compileExpression($parts[1] ?? 'true', false) . '): $__ctx->include(' . $this->valueArg($parts[0] ?? '') . (isset($parts[2]) ? ', ' . $this->compileExpression($parts[2], false) : '') . '); endif; ?>',
+            'includeWhen' => '<?php if (' . $this->compileExpression($parts[0] ?? 'true', false) . '): $__ctx->include(' . $this->valueArg($parts[1] ?? '') . (isset($parts[2]) ? ', ' . $this->compileExpression($parts[2], false) : '') . '); endif; ?>',
             'json' => '<?php echo e(json_encode(' . $this->compileExpression($parts[0] ?? '', false) . ', ' . ($parts[1] ?? 'JSON_THROW_ON_ERROR') . ')); ?>',
             'csrf' => '<input type="hidden" name="csrf_token" value="<?php echo e(csrf_token()); ?>">',
             'method' => '<input type="hidden" name="_method" value="<?php echo e(' . $this->compileExpression($parts[0] ?? '', false) . '); ?>">',

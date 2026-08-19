@@ -95,7 +95,7 @@ final class ViewServiceProvider extends ServiceProvider
 
         if ((bool) $container->make(Config::class)->get('view.live.enabled', false)) {
             $route->post('/_live/{component}', [LiveComponentController::class, 'handle'], [Authenticate::class, VerifyCsrfToken::class]);
-            $route->get('/_live/sse', [LiveSseController::class, 'handle']);
+            $route->get('/_live/sse', [LiveSseController::class, 'handle'], [Authenticate::class]);
         }
     }
 }

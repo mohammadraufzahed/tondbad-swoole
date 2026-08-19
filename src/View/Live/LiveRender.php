@@ -23,13 +23,22 @@ final class LiveRender
     {
         $search = '<data-t-state></data-t-state>';
 
-        if (!str_contains($html, $search)) {
-            return $html;
+        if (str_contains($html, $search)) {
+            $input = '<input type="hidden" name="t:state" value="' . e($token) . '">';
+
+            return str_replace($search, $input, $html);
         }
 
         $input = '<input type="hidden" name="t:state" value="' . e($token) . '">';
 
-        return str_replace($search, $input, $html);
+        if (preg_match('/(<[a-zA-Z][^>]*>)/', $html, $matches, PREG_OFFSET_CAPTURE)) {
+            $tag = $matches[1][0];
+            $position = $matches[1][1] + strlen($tag);
+
+            return substr($html, 0, $position) . $input . substr($html, $position);
+        }
+
+        return $html . $input;
     }
 
     /**

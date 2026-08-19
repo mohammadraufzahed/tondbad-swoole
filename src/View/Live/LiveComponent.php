@@ -70,7 +70,7 @@ abstract class LiveComponent extends Component
         $allowed = $this->publicSubclassProperties();
 
         foreach ($state as $key => $value) {
-            if (isset($allowed[$key]) && !is_null($value)) {
+            if (isset($allowed[$key])) {
                 $this->$key = $value;
             }
         }
@@ -108,9 +108,15 @@ abstract class LiveComponent extends Component
         $arguments = [];
 
         foreach ($method->getParameters() as $index => $parameter) {
-            $arguments[] = $params[$parameter->getName()]
-                ?? $params[$index]
-                ?? ($parameter->isOptional() ? $parameter->getDefaultValue() : null);
+            if (array_key_exists($parameter->getName(), $params)) {
+                $arguments[] = $params[$parameter->getName()];
+            } elseif (array_key_exists($index, $params)) {
+                $arguments[] = $params[$index];
+            } elseif ($parameter->isOptional()) {
+                $arguments[] = $parameter->getDefaultValue();
+            } else {
+                throw new \InvalidArgumentException("Missing required parameter '{$parameter->getName()}' for action [{$name}].");
+            }
         }
 
         $method->invokeArgs($this, $arguments);

@@ -84,7 +84,23 @@ final class Tokenizer
 
         $name = substr($remaining, 1);
 
-        return preg_match('/^[A-Za-z_]/', $name) === 1;
+        if (!preg_match('/^[A-Za-z_-]+/', $name, $matches)) {
+            return false;
+        }
+
+        $after = substr($name, strlen($matches[0]));
+        $next = $after[0] ?? '';
+
+        if ($next === '' || $next === '(' || ctype_space($next)) {
+            return true;
+        }
+
+        // Avoid treating e-mail addresses/mentions like foo@bar.com as directives.
+        if ($next === '.' && isset($after[1]) && preg_match('/[A-Za-z_-]/', $after[1])) {
+            return false;
+        }
+
+        return !preg_match('/[A-Za-z0-9_]/', $next);
     }
 
     private function scanComment(): void
@@ -142,6 +158,10 @@ final class Tokenizer
 
         $arguments = '';
 
+        while ($this->pos < $this->length && ctype_space($this->template[$this->pos])) {
+            ++$this->pos;
+        }
+
         if ($this->pos < $this->length && $this->template[$this->pos] === '(') {
             $arguments = $this->scanBalancedExpression();
         }
@@ -185,12 +205,12 @@ final class Tokenizer
             } elseif ($char === '"' || $char === "'") {
                 $inString = true;
                 $stringChar = $char;
-            } elseif ($char === '(') {
+            } elseif ($char === '(' || $char === '[' || $char === '{') {
                 ++$depth;
-            } elseif ($char === ')') {
+            } elseif ($char === ')' || $char === ']' || $char === '}') {
                 --$depth;
 
-                if ($depth === 0) {
+                if ($depth === 0 && $char === ')') {
                     ++$this->pos;
 
                     break;
@@ -293,8 +313,11 @@ final class Tokenizer
             }
 
             $value = '';
+            $hasValue = false;
 
             if ($i < $len && ($attrString[$i] === '=' || $attrString[$i] === ':' || $attrString[$i] === '-')) {
+                $hasValue = true;
+
                 if ($attrString[$i] === ':') {
                     $expression = true;
                 }
@@ -325,7 +348,7 @@ final class Tokenizer
                 }
             }
 
-            $attributes[$name] = ['type' => $expression ? 'expression' : 'literal', 'value' => $value];
+            $attributes[$name] = ['type' => $expression ? 'expression' : 'literal', 'value' => $hasValue ? $value : true];
         }
 
         return $attributes;
