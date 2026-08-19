@@ -18,6 +18,7 @@ use TondbadSwoole\Providers\Default\{
     QueueServiceProvider,
     RouteServiceProvider,
     ScheduleServiceProvider,
+    ViewServiceProvider,
 };
 
 return [
@@ -34,6 +35,7 @@ return [
     RouteServiceProvider::class,
     ScheduleServiceProvider::class,
     ConsoleServiceProvider::class,
+    ViewServiceProvider::class,
     HttpServiceProvider::class,
     GrpcServiceProvider::class,
 ];

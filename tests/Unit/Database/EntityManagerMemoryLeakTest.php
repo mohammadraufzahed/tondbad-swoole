@@ -40,7 +40,14 @@ it('does not leak managed entities across repeated find/flush/clear cycles', fun
     $em = em();
     $em->clear();
 
-    $baseline = memory_get_usage(true);
+    // Warm up one cycle so PHP's memory allocator stabilises before measuring.
+    $user = $em->find(User::class, 1);
+    $user->name = 'Warm up';
+    $em->flush();
+    $em->clear();
+
+    // Use non-real memory usage to avoid PHP allocator chunk-size noise.
+    $baseline = memory_get_usage();
 
     for ($i = 0; $i < 50; $i++) {
         $user = $em->find(User::class, 1);
@@ -51,5 +58,5 @@ it('does not leak managed entities across repeated find/flush/clear cycles', fun
 
     gc_collect_cycles();
 
-    expect(memory_get_usage(true))->toBeLessThan($baseline + 1024 * 1024);
+    expect(memory_get_usage())->toBeLessThan($baseline + 1024 * 1024);
 });

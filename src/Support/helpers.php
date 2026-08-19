@@ -165,3 +165,115 @@ if (!function_exists('signedRoute')) {
     }
 }
 
+if (!function_exists('base_path')) {
+    function base_path(string $path = ''): string
+    {
+        $base = app()?->basePath() ?? getcwd() ?: sys_get_temp_dir();
+
+        return $path === '' ? $base : $base . '/' . ltrim($path, '/');
+    }
+}
+
+if (!function_exists('view')) {
+    function view(string $view, array $data = []): \TondbadSwoole\View\View
+    {
+        $manager = app()?->container->make(\TondbadSwoole\View\ViewManager::class);
+
+        if ($manager === null) {
+            throw new RuntimeException('View manager not available.');
+        }
+
+        return new \TondbadSwoole\View\View($manager, $view, $data);
+    }
+}
+
+if (!function_exists('e')) {
+    function e(mixed $text): string
+    {
+        return htmlspecialchars((string) $text, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8');
+    }
+}
+
+if (!function_exists('csrf_token')) {
+    function csrf_token(): string
+    {
+        try {
+            $session = auth()?->session();
+
+            if ($session?->antiCsrf !== null) {
+                return $session->antiCsrf;
+            }
+        } catch (\Throwable) {
+        }
+
+        return bin2hex(random_bytes(16));
+    }
+}
+
+if (!function_exists('old')) {
+    function old(string $key, mixed $default = null): mixed
+    {
+        try {
+            $request = app()?->container->make(\TondbadSwoole\Contracts\ContextInterface::class)?->get('request');
+
+            if ($request instanceof \TondbadSwoole\Http\Request) {
+                return $request->input($key, $default);
+            }
+        } catch (\Throwable) {
+        }
+
+        return $_POST[$key] ?? $_GET[$key] ?? $default;
+    }
+}
+
+if (!function_exists('classNames')) {
+    function classNames(array $classes): string
+    {
+        $result = [];
+
+        foreach ($classes as $class => $active) {
+            if (is_int($class)) {
+                $class = $active;
+                $active = true;
+            }
+
+            if ($active) {
+                $result[] = (string) $class;
+            }
+        }
+
+        return implode(' ', $result);
+    }
+}
+
+if (!function_exists('attributeString')) {
+    function attributeString(array $attributes): string
+    {
+        $result = [];
+
+        foreach ($attributes as $key => $value) {
+            if (is_bool($value)) {
+                if ($value) {
+                    $result[] = e($key);
+                }
+
+                continue;
+            }
+
+            if ($value === null) {
+                continue;
+            }
+
+            if (is_array($value)) {
+                $value = $key === 'class' || $key === 'style'
+                    ? implode(' ', $value)
+                    : json_encode($value, JSON_THROW_ON_ERROR);
+            }
+
+            $result[] = e($key) . '="' . e($value) . '"';
+        }
+
+        return $result === [] ? '' : ' ' . implode(' ', $result);
+    }
+}
+

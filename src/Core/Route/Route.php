@@ -149,6 +149,16 @@ class Route implements RouteInterface
     }
 
     /**
+     * @param array<string, mixed> $data
+     */
+    public function view(string $path, string $view, array $data = [], array $middlewares = [], ?string $name = null): RouteDefinition
+    {
+        return $this->addRoute('GET', $path, function (HttpResponse $response) use ($view, $data): void {
+            $response->view($view, $data);
+        }, $middlewares, $name);
+    }
+
+    /**
      * @param callable(Route): void $callback
      * @param list<class-string> $middlewares
      */

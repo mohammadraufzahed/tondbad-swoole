@@ -63,6 +63,13 @@ class Response
             ->end($html);
     }
 
+    public function view(string $view, array $data = [], int $status = 200): void
+    {
+        $manager = \app()?->container->make(\TondbadSwoole\View\ViewManager::class);
+
+        $this->html($manager ? $manager->render($view, $data) : '', $status);
+    }
+
     public function text(string $text, int $status = 200): void
     {
         $this->status($status)
@@ -75,6 +82,19 @@ class Response
         $this->status($status)
             ->header('Content-Type', 'application/json')
             ->end(json_encode(['error' => $message], JSON_THROW_ON_ERROR));
+    }
+
+    public function file(string $path, string $contentType = 'application/octet-stream'): void
+    {
+        if (!is_file($path)) {
+            $this->status(404)->end('Not found');
+
+            return;
+        }
+
+        $this->status(200)
+            ->header('Content-Type', $contentType)
+            ->end((string) file_get_contents($path));
     }
 
     public function cookie(
